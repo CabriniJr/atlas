@@ -1,5 +1,16 @@
 # Atlas — Motor de Rotinas Pessoais
 
+> ⚠️ **DOCUMENTO OBSOLETO (2026-06-16).** Esta constituição monolítica foi
+> **decomposta** na estrutura modular sob [`docs/`](README.md). Use a versão
+> modular como fonte de verdade:
+> - Arquitetura geral → [`arquitetura/visao-geral.md`](arquitetura/visao-geral.md)
+> - Núcleo invariante → [`arquitetura/constituicao.md`](arquitetura/constituicao.md)
+> - Decisões (ADRs) → [`arquitetura/adr/`](arquitetura/adr/README.md)
+>
+> Este arquivo é mantido apenas como **lastro histórico** da v1.0. Não edite.
+
+---
+
 > Documento de **arquitetura e projeto**. Não contém código — é a "constituição"
 > do sistema, pensada para servir de entrada nas sessões de desenvolvimento
 > (Claude Code / superpowers skill).

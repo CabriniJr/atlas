@@ -1,0 +1,64 @@
+---
+titulo: Constituição — o núcleo invariante
+id: ARQ-CONSTITUICAO
+status: aprovado
+versao: 1.0
+dono: PO/PM
+revisado-por: Tech Lead
+atualizado-em: 2026-06-16
+---
+
+# Constituição — o núcleo invariante
+
+## Histórico de revisão
+| Versão | Data       | Autor     | Mudança | Aprovado por |
+|--------|------------|-----------|---------|--------------|
+| 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
+
+---
+
+> Este documento lista o que **não muda sem um ADR que o substitua**. É o contrato
+> mais forte do projeto. Qualquer agente que precise contrariar algo daqui **deve
+> abrir um ADR** e obter aceite do PO/PM antes de codificar.
+
+## Decisões travadas
+
+| # | Tema | Decisão | ADR |
+|---|---|---|---|
+| 1 | Interface | Bot do **Telegram** (long-poll, sem domínio), como adapter plugável. | — |
+| 2 | Motor de IA | **Claude Code local** na assinatura, dividido em **análise single-turn (2a)** e **agente (2b, só meta-loop)** — sem billing por token de API. | [0001](adr/ADR-0001-ia-em-dois-modos.md) |
+| 3 | Padrão de rotina | **Script-primeiro, agente só quando precisa** (ciclo de vida). | — |
+| 4 | Rotinas | **Pastas plugáveis** auto-descobertas; o repositório é o estado. | — |
+| 5 | Modos | **Operação** e **desenvolvimento** em sessões separadas; handoff por arquivo. | [0009](adr/ADR-0009-handoff-entre-modos.md) |
+| 6 | Hospedagem | **Notebook Linux**, systemd, sem sleep. | — |
+| 7 | Resumo diário | Rotina built-in, **única que sempre usa IA** (Sonnet, modo 2a). | [0001](adr/ADR-0001-ia-em-dois-modos.md) |
+| 8 | Criação de rotina | **Meta-loop:** descrição no Telegram → geração via Claude Code. | [0003](adr/ADR-0003-seguranca-meta-loop.md) |
+| 9 | Contrato do `collect` | Retorno **tipado** `CollectResult { data, store }`. | [0004](adr/ADR-0004-contrato-collect.md) |
+| 10 | Orçamento de token | **Reativo** (pós-chamada) + teto global pré-despacho. | [0005](adr/ADR-0005-orcamento-reativo.md) |
+| 11 | Segurança do meta-loop | Código gerado nasce **inativo**; ativação exige revisão humana. | [0003](adr/ADR-0003-seguranca-meta-loop.md) |
+
+## Invariantes de comportamento
+
+1. **A documentação é a fonte de verdade.** Código diverge → ADR ou correção.
+2. **Zero IA é o caminho padrão.** IA só na análise/geração genuína.
+3. **O motor é agnóstico.** Nenhum domínio vira código do core.
+4. **Nada de auto-execução de código gerado.** Meta-loop → revisão humana → ativa.
+5. **Segredos nunca no versionamento.**
+6. **Monousuário.** O bot só responde ao ID do dono.
+
+## Como alterar a constituição
+
+1. Abra um **ADR** propondo a mudança (contexto, alternativas, consequências).
+2. Status `proposto` → discussão com o PO/PM.
+3. Aceite do PO/PM → status `aceito`; o ADR atualiza esta tabela e marca o ADR
+   anterior (se houver) como `substituído por`.
+4. Só então o código pode mudar.
+
+## Itens em aberto (a decidir)
+
+Rastreados no [backlog](../roadmap/backlog.md) e na seção de pendências dos ADRs:
+- Teto de uso da assinatura Pro para rotinas pesadas (e se vale fallback).
+- Formato exato do sync do Librera no setup do dono.
+- Quais rotinas entram como built-in além de resumo diário e meta-loop.
+- Política de retenção/limpeza do histórico de runs.
+- Valor da janela de catch-up do resumo diário.
