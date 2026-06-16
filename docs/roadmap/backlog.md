@@ -33,7 +33,7 @@ atualizado-em: 2026-06-16
 | E1-05 | Invocador de IA: modo análise (2a) e agente (2b). No Pi: verificar `claude -p` (cliente) em **arm64** + login ativo + rede — modelos rodam na nuvem, não no Pi | proposto | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md), [ADR-0012](../arquitetura/adr/ADR-0012-empacotamento-docker.md) |
 | E1-06 | Agendador + catch-up de runs perdidos | proposto | [ADR-0006](../arquitetura/adr/ADR-0006-erro-e-resiliencia.md), [spec scheduler](../specs/scheduler.md) |
 | E1-07 | Harness de teste de rotina | proposto | [ADR-0007](../arquitetura/adr/ADR-0007-contrato-de-teste.md) |
-| E1-10 | Executor do ciclo de vida (`trigger→collect→gate→analyze→deliver`) + notificação no Telegram + gravação em `runs` | proposto | [ciclo-de-vida](../arquitetura/ciclo-de-vida-rotina.md), [spec executor](../specs/executor-e-notificacao.md) |
+| E1-10 | Executor do ciclo de vida (`trigger→collect→gate→analyze→deliver`) + notificação no Telegram + gravação em `runs` | **feito** (core; fases injetadas) — wiring de `/rodar` fica em E5-02 (precisa do carregador + invocador E1-05) | [ciclo-de-vida](../arquitetura/ciclo-de-vida-rotina.md), [spec executor](../specs/executor-e-notificacao.md) |
 | E1-11 | Barreira de entrada: registrar só com intenção explícita (reescreve `handler.py`) | proposto | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
 | E1-08 | Observabilidade: gravar `usage` em `runs` + `/uso` | proposto | [ADR-0010](../arquitetura/adr/ADR-0010-observabilidade-claude-p.md) |
 | E1-09 | Orçamento: teto global pré-despacho + disjuntor por rotina | proposto | [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md) |
