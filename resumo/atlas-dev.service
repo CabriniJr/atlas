@@ -1,0 +1,17 @@
+[Unit]
+Description=Atlas (bot dev) — motor de rotinas pessoais
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ajuste o caminho do projeto:
+WorkingDirectory=%h/atlas
+# Carrega segredos do .env (não versionado):
+EnvironmentFile=%h/atlas/.env
+ExecStart=%h/atlas/.venv/bin/python -m atlas
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

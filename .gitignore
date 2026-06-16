@@ -25,5 +25,9 @@ dist/
 build/
 *.egg-info/
 
+# Claude Code — local/efêmero (settings.json do projeto é versionado)
+.claude/settings.local.json
+.claude/worktrees/
+
 # Sistema
 .DS_Store

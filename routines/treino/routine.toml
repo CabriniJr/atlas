@@ -1,0 +1,9 @@
+# Rotina de exemplo — registro de treino físico (Camada 0, zero IA).
+# Demonstra o formato de config descoberto por atlas.routines (E1-01).
+nome = "treino"
+descricao = "Registra treinos físicos enviados por mensagem curta."
+triggers = ["treino", "academia", "perna", "peito", "costas"]
+modelo = "none"
+store = "activities"
+saida = "telegram"
+ativa = true
