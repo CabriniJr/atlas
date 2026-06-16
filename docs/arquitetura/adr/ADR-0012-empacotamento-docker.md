@@ -30,8 +30,11 @@ um host sempre ligado.
 
 **Limite físico (registrado para evitar mal-entendido):** um container roda
 enquanto a **máquina está ligada**. Não há como manter o bot no ar com o
-computador desligado. Para 24/7 real, a mesma imagem roda num mini-PC/VPS sempre
-ligado (§14, evolução futura).
+computador desligado. Para 24/7 real, a mesma imagem roda num host sempre ligado.
+
+**Host de produção escolhido: Raspberry Pi.** O PO/PM tem um Raspberry Pi que
+ficará sempre ligado — é o destino de produção do projeto. O empacotamento Docker
+existe justamente para essa migração sem fricção.
 
 ## Decisão
 - **Imagem Docker** (`Dockerfile`, base `python:3.12-slim`, usuário não-root)
@@ -44,6 +47,9 @@ ligado (§14, evolução futura).
 - **Segredos via `.env`** (env_file), nunca na imagem (reforçado por `.dockerignore`).
 - **Portabilidade:** a mesma imagem roda no notebook (dev) e num host sempre
   ligado (prod) sem alteração — complementa, não revoga, a opção systemd.
+- **ARM / Raspberry Pi:** a base `python:3.12-slim` é multi-arch (arm64/armv7); a
+  imagem builda **nativamente no Pi**, sem cross-build. Guia de migração em
+  [`../../../resumo/raspberry-pi.md`](../../../resumo/raspberry-pi.md).
 
 ## Alternativas consideradas
 | Alternativa | Prós | Contras | Por que não (como única) |
@@ -61,4 +67,11 @@ ligado (§14, evolução futura).
 
 ## Pendências
 - Imagem multi-stage / healthcheck (quando houver endpoint de saúde) — backlog.
-- Escolha do host always-on para prod 24/7 (mini-PC vs VPS) — decisão do PO/PM.
+- ~~Escolha do host always-on~~ → **resolvido: Raspberry Pi.**
+- **Esclarecimento importante:** os **modelos do Claude rodam na nuvem da
+  Anthropic**, nunca no host. O `claude -p` é apenas um **cliente leve** (Claude
+  Code/Node) que chama o modelo pela rede. Portanto o Pi **não** precisa de poder
+  de compute para "rodar modelo" — precisa só rodar o cliente. Requisitos reais a
+  verificar em E1-05: (1) Claude Code roda em **arm64**, (2) **login ativo** no
+  Pi, (3) **rede**. Footprint de RAM/CPU é modesto (é I/O de rede, não inferência
+  local).

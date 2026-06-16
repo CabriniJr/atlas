@@ -28,7 +28,7 @@ atualizado-em: 2026-06-16
 | E1-02 | Schema SQLite + camada de acesso | **feito** | [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E1-03 | Adapter Telegram (long-poll, `enviar`/`receber`, filtro de ID) | **feito (MVP)** | [seguranca](../arquitetura/seguranca.md) |
 | E1-04 | Roteador determinístico + micro-sintaxe + fallback Haiku | **parcial (MVP)** — handler de comandos + registro; falta conflito de triggers e fallback Haiku | [ADR-0008](../arquitetura/adr/ADR-0008-roteamento-e-extracao.md) |
-| E1-05 | Invocador de IA: modo análise (2a) e agente (2b) | proposto | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md) |
+| E1-05 | Invocador de IA: modo análise (2a) e agente (2b). No Pi: verificar `claude -p` (cliente) em **arm64** + login ativo + rede — modelos rodam na nuvem, não no Pi | proposto | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md), [ADR-0012](../arquitetura/adr/ADR-0012-empacotamento-docker.md) |
 | E1-06 | Agendador + catch-up de runs perdidos | proposto | [ADR-0006](../arquitetura/adr/ADR-0006-erro-e-resiliencia.md) |
 | E1-07 | Harness de teste de rotina | proposto | [ADR-0007](../arquitetura/adr/ADR-0007-contrato-de-teste.md) |
 | E1-08 | Observabilidade: gravar `usage` em `runs` + `/uso` | proposto | [ADR-0010](../arquitetura/adr/ADR-0010-observabilidade-claude-p.md) |

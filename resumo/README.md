@@ -81,10 +81,11 @@ O banco (SQLite) fica em `./data/` (volume), sobrevivendo a rebuilds.
 
 > ⚠️ **"Sempre ligado" tem um limite físico:** um container roda enquanto **a sua
 > máquina está ligada**. Com o computador **desligado**, o bot não roda — nada
-> local roda. Para 24/7 de verdade (mesmo com seu PC off), rode a **mesma imagem**
-> num mini-PC ou VPS sempre ligado: `git clone`, crie o `.env`, e
-> `./scripts/docker-run.sh` — sem mudar nada do código. É a evolução prevista na
-> [arquitetura](../docs/arquitetura/visao-geral.md#infraestrutura).
+> local roda. Para 24/7 de verdade, rode a **mesma imagem** num host sempre ligado.
+>
+> 🍓 **Indo para o Raspberry Pi?** É o destino de produção do projeto. Siga o guia
+> dedicado: **[raspberry-pi.md](raspberry-pi.md)** (instalar Docker no Pi, build
+> nativo ARM, boot automático e migração do banco).
 
 ## 6. (Alternativa) Rodar via systemd (sem Docker)
 
