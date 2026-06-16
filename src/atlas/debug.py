@@ -27,6 +27,7 @@ _TABELAS = [
     "activities",
     "ideas",
     "alarms",
+    "trackers",
     "goals",
     "goal_links",
     "books",

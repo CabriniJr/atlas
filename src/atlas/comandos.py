@@ -15,6 +15,7 @@ COMANDOS: list[tuple[str, str]] = [
     ("queue", "Queue a new routine request (autogen candidate)"),
     ("note", "Log a free-form note"),
     ("pool", "List / inspect / manage the idea pool"),
+    ("track", "Trackers: list / new / detail (e.g. 'weight: 82.3')"),
     ("routines", "List loaded routines"),
     ("run", "Run a routine now"),
     ("activate", "Activate a routine"),
@@ -41,6 +42,10 @@ def texto_ajuda() -> str:
         "  /pool <state>     filter (capturada|priorizada|gerada|ativada)\n"
         "  /pool <id>        item detail\n"
         "  /pool <id> prio <n> | edit <text> | done | archive | drop\n\n"
+        "📈 Trackers\n"
+        "  /track            list trackers\n"
+        "  /track new <name> [unit]   create (then log with '<name>: <value>')\n"
+        "  /track <name>     history; /track <name> rm to remove\n\n"
         "🧩 Routines\n"
         "  /routines         list loaded routines\n"
         "  /routine <name>   routine detail\n"

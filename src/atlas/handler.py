@@ -15,6 +15,7 @@ from atlas.controle import responder_controle
 from atlas.db import Database
 from atlas.debug import responder_debug
 from atlas.pool import responder_pool
+from atlas.trackers import registrar_por_sintaxe, responder_trackers
 
 # Palavras-chave → domínio (inferência barata, 0 IA). Versão completa: ADR-0008.
 _DOMINIOS = {
@@ -54,13 +55,23 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
     if resposta_alarme is not None:
         return resposta_alarme
 
-    # Pool commands (E6): /idea, /task, /routine, /pool.
+    # Pool commands (E6): /idea, /task, /queue, /pool.
     resposta_pool = responder_pool(texto, db, agora)
     if resposta_pool is not None:
         return resposta_pool
 
+    # Trackers (E5-04/05): /track ...
+    resposta_track = responder_trackers(texto, db, agora)
+    if resposta_track is not None:
+        return resposta_track
+
     if texto.startswith("/"):
         return "❓ unknown command. See /help"
+
+    # Texto livre: tenta micro-sintaxe de tracker (ex.: 'weight: 82.3'); senão loga.
+    resposta_sintaxe = registrar_por_sintaxe(texto, db, agora)
+    if resposta_sintaxe is not None:
+        return resposta_sintaxe
 
     return _registrar(texto, db, agora)
 

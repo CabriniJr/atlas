@@ -21,6 +21,7 @@ def test_schema_cria_as_tabelas_do_modelo_de_dados():
         "routine_state",
         "ideas",  # pool de ideias (ADR-0014)
         "alarms",  # alarmes/lembretes (E5-07)
+        "trackers",  # trackers (E5-04/05)
     }
 
 

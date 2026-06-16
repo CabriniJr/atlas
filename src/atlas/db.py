@@ -98,6 +98,21 @@ CREATE TABLE IF NOT EXISTS alarms (
     ativo           INTEGER NOT NULL DEFAULT 1,
     criado_em       TEXT    NOT NULL
 );
+
+-- Trackers (E5-04/05). Definição de dados; entradas vão para `activities`
+-- (rotina='tracking'). A micro-sintaxe (`sintaxe`) dispara o registro.
+CREATE TABLE IF NOT EXISTS trackers (
+    id        INTEGER PRIMARY KEY,
+    nome      TEXT    NOT NULL UNIQUE,
+    dominio   TEXT    NOT NULL DEFAULT 'geral',
+    tipo      TEXT    NOT NULL DEFAULT 'numero',  -- numero | texto
+    unidade   TEXT,
+    sintaxe   TEXT    NOT NULL,                   -- prefixo, ex.: 'weight:'
+    meta_id   INTEGER,
+    agregacao TEXT    NOT NULL DEFAULT 'ultimo',
+    ativo     INTEGER NOT NULL DEFAULT 1,
+    criado_em TEXT    NOT NULL
+);
 """
 
 
