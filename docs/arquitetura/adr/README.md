@@ -45,6 +45,7 @@ atualizado-em: 2026-06-16
 | [0008](ADR-0008-roteamento-e-extracao.md) | Roteamento e extração de parâmetros | aceito | Endurecimento C8 |
 | [0009](ADR-0009-handoff-entre-modos.md) | Handoff entre modos via `SPEC.md` | aceito | Endurecimento C9 |
 | [0010](ADR-0010-observabilidade-claude-p.md) | Observabilidade via `claude -p` JSON | aceito | Endurecimento C10 |
+| [0011](ADR-0011-ci-cd-versionamento.md) | Política de CI/CD e versionamento | aceito | Política de desenvolvimento |
 
 ## Lastro
 

@@ -44,6 +44,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 
 ### ⚙️ Processos — *como trabalhamos*
 - [`processos/fluxo-de-desenvolvimento.md`](processos/fluxo-de-desenvolvimento.md) — o fluxo background + curadoria.
+- [`processos/politica-de-desenvolvimento.md`](processos/politica-de-desenvolvimento.md) — commits, branches, PR, CI/CD, deploy.
 - [`processos/definicao-de-pronto.md`](processos/definicao-de-pronto.md) — DoR / DoD.
 - [`processos/revisao-e-curadoria.md`](processos/revisao-e-curadoria.md) — best-of-two na prática.
 

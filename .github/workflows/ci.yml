@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-lint:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validar mensagens de commit do PR
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch --quiet origin "${{ github.base_ref }}"
+          pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'
+          fail=0
+          while read -r sha; do
+            subject="$(git log -1 --format=%s "$sha")"
+            if ! printf '%s' "$subject" | grep -qP "$pattern"; then
+              echo "::error::Commit $sha não segue Conventional Commits: '$subject'"
+              fail=1
+            fi
+          done < <(git rev-list "$base"..HEAD)
+          [ "$fail" -eq 0 ] && echo "Todos os commits seguem Conventional Commits."
+          exit $fail
+
+  quality:
+    name: Lint + Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências (se houver projeto)
+        run: |
+          if [ -f pyproject.toml ]; then
+            python -m pip install --upgrade pip
+            pip install -e ".[dev]" || pip install -e . || true
+            pip install ruff pytest pytest-cov
+          else
+            echo "Sem pyproject.toml ainda — pulando instalação."
+          fi
+      - name: Lint (ruff)
+        run: |
+          if [ -f pyproject.toml ] && ls **/*.py >/dev/null 2>&1; then
+            ruff check .
+            ruff format --check .
+          else
+            echo "Sem código Python ainda — lint pulado."
+          fi
+      - name: Testes (pytest)
+        run: |
+          if [ -d tests ] || ls **/test_*.py >/dev/null 2>&1; then
+            pytest -q
+          else
+            echo "Sem testes ainda — pytest pulado (no-op verde)."
+          fi
+        env:
+          # A CI NUNCA chama claude -p real (P1). analyze é mockado (ADR-0007).
+          ATLAS_DISABLE_AI: "1"

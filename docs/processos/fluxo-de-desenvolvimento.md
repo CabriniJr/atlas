@@ -61,7 +61,9 @@ e valida contra a doc: **atende a dor? segue a arquitetura? está no escopo?**
 
 ### 5. Aceite (PO/PM)
 O Tech Lead leva ao PO/PM a solução curada e os trade-offs, em alto nível. O PO/PM
-certifica. Só então vira commit, com doc e ADRs atualizados junto.
+certifica. Só então a solução entra no fluxo de
+[branch → PR → CI → merge → release](politica-de-desenvolvimento.md), com doc e
+ADRs atualizados junto. A **curadoria é a revisão de código** (não há QA separado).
 
 ## Por que best-of-two
 Duas visões independentes da mesma tarefa expõem trade-offs que uma só esconde. A

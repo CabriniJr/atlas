@@ -36,6 +36,7 @@ atualizado-em: 2026-06-16
 | 9 | Contrato do `collect` | Retorno **tipado** `CollectResult { data, store }`. | [0004](adr/ADR-0004-contrato-collect.md) |
 | 10 | Orçamento de token | **Reativo** (pós-chamada) + teto global pré-despacho. | [0005](adr/ADR-0005-orcamento-reativo.md) |
 | 11 | Segurança do meta-loop | Código gerado nasce **inativo**; ativação exige revisão humana. | [0003](adr/ADR-0003-seguranca-meta-loop.md) |
+| 12 | CI/CD e versionamento | **Híbrido** (GitHub p/ PR+CI, deploy local pull), **trunk-based + tags**, **Conventional Commits + SemVer auto**, sem QA. | [0011](adr/ADR-0011-ci-cd-versionamento.md) |
 
 ## Invariantes de comportamento
 

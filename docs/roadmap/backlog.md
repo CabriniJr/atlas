@@ -50,11 +50,16 @@ atualizado-em: 2026-06-16
 | E3-03 | Rotina leitura (Librera; depende do formato de sync) | bloqueado | [constituicao](../arquitetura/constituicao.md) (em aberto) |
 | E3-04 | Sistema de metas + `goal_links` + checkup semanal | proposto | [modelo-de-dados](../arquitetura/modelo-de-dados.md) |
 
-## Épico E4 — Infra (transversal)
+## Épico E4 — Infra e CI/CD (transversal)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
 | E4-01 | Serviço systemd, sem sleep, lid switch ignorado | proposto | [visao-geral](../arquitetura/visao-geral.md) |
 | E4-02 | Gestão de segredos fora do versionamento | proposto | [seguranca](../arquitetura/seguranca.md) |
+| E4-03 | Setup GitHub: criar repo, remote, `gh`, rename `master`→`main`, branch protection | proposto | [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md) |
+| E4-04 | Units systemd `atlas-dev` (main) e `atlas-prod` (tag) | proposto | [politica-de-desenvolvimento](../processos/politica-de-desenvolvimento.md) |
+| E4-05 | Poller de deploy (timer systemd) + ativar `scripts/deploy.sh` | proposto | [politica-de-desenvolvimento](../processos/politica-de-desenvolvimento.md) |
+| E4-06 | Ativar release automation (release-please) + versão inicial | proposto | [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md) |
+| E4-07 | Configurar `pyproject.toml` (ruff, pytest, deps) p/ a CI sair do no-op | proposto | [ci.yml](../../.github/workflows/ci.yml) |
 
 ## Dívida de documentação
 | ID | Item | Estado |

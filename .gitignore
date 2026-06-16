@@ -1,0 +1,29 @@
+# Dados e segredos — NUNCA versionados (ver docs/arquitetura/seguranca.md)
+*.sqlite
+*.sqlite3
+*.db
+.env
+.env.*
+secrets/
+*.secret
+
+# Estado de runtime das rotinas
+routines/**/state/
+runs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Sistema
+.DS_Store

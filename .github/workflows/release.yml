@@ -1,0 +1,24 @@
+name: Release
+
+# Versionamento SemVer automático a partir de Conventional Commits.
+# Ao mergear em main, o release-please abre/atualiza uma "release PR";
+# ao mergear ESSA PR, cria a tag vX.Y.Z + CHANGELOG + GitHub Release.
+# A tag é o gatilho do deploy em prod (CD local pull — ver política de dev).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          release-type: python
+          # 'package-name' e versão inicial são definidos quando o projeto Python
+          # existir (M1). Até lá, o workflow apenas acompanha os commits.

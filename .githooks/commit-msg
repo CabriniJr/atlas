@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Valida Conventional Commits localmente antes de criar o commit.
+# Ative com:  git config core.hooksPath .githooks
+set -euo pipefail
+
+msg_file="$1"
+subject="$(head -n1 "$msg_file")"
+
+# Permite merges e commits de revert automáticos
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'
+if ! printf '%s' "$subject" | grep -qP "$pattern"; then
+  echo "✗ Mensagem fora do padrão Conventional Commits:" >&2
+  echo "  '$subject'" >&2
+  echo "  Use: tipo(escopo): assunto   (feat, fix, docs, refactor, test, chore, ci, build, perf)" >&2
+  exit 1
+fi
+
+if [ "${#subject}" -gt 72 ]; then
+  echo "✗ Assunto com ${#subject} chars (>72). Encurte." >&2
+  exit 1
+fi
