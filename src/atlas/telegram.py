@@ -42,6 +42,11 @@ class TelegramAdapter:
         ).encode("utf-8")
         self._transport(self._url("sendMessage"), dados)
 
+    def registrar_comandos(self, comandos: list[dict[str, str]]) -> None:
+        """Registra o menu de comandos do bot (``setMyCommands``)."""
+        dados = urllib.parse.urlencode({"commands": json.dumps(comandos)}).encode("utf-8")
+        self._transport(self._url("setMyCommands"), dados)
+
     def receber(self) -> list[dict]:
         """Long-poll de novas mensagens. Devolve a lista crua de updates."""
         url = (

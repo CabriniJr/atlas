@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from atlas.comandos import para_telegram
 from atlas.config import Config
 from atlas.db import Database
 from atlas.handler import responder
@@ -68,6 +69,12 @@ def run(config: Config | None = None) -> None:
     config = config or Config.from_env()
     db = Database(config.db_path)
     adapter = TelegramAdapter(config.telegram_token, poll_timeout=config.poll_timeout)
+
+    # Registra o menu de comandos do Telegram (best-effort; não derruba o boot).
+    try:
+        adapter.registrar_comandos(para_telegram())
+    except Exception:  # noqa: BLE001 — sem rede/erro de API não impede operar
+        _log.warning("Não foi possível registrar os comandos no Telegram (segue mesmo assim).")
 
     _log.info("Atlas no ar. Atendendo apenas user_id=%s. Ctrl+C para sair.", config.allowed_user_id)
     while True:

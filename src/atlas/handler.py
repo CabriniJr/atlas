@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from atlas.comandos import texto_ajuda
 from atlas.db import Database
 from atlas.pool import responder_pool
 
@@ -19,14 +20,6 @@ _DOMINIOS = {
     "leitura": ("li ", "página", "pagina", "livro", "capítulo", "capitulo"),
 }
 
-_AJUDA = (
-    "🧭 *Atlas*\n"
-    "Mande uma mensagem curta para registrar (ex.: `treino de perna`).\n\n"
-    "Comandos:\n"
-    "• /status — registros de hoje\n"
-    "• /ajuda — esta mensagem"
-)
-
 
 def responder(texto: str, db: Database, agora: datetime) -> str:
     """Resolve uma mensagem e devolve a resposta (sempre Camada 0)."""
@@ -34,8 +27,8 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
 
     if texto in ("/start", "/ajuda", "/help"):
         if texto == "/start":
-            return "👋 Bem-vindo ao *Atlas*.\n\n" + _AJUDA
-        return _AJUDA
+            return "👋 Bem-vindo ao *Atlas*.\n\n" + texto_ajuda()
+        return texto_ajuda()
 
     if texto == "/status":
         return _status(db, agora)

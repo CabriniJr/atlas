@@ -31,6 +31,12 @@ atualizado-em: 2026-06-16
 > MVP amadurecer, voltamos ao fluxo branch→PR→CI descrito abaixo (que permanece a
 > regra-alvo). O best-of-two/curadoria também fica **opcional** nesta fase.
 
+> **Testes no MVP:** TDD estrito relaxado — privilegiar **velocidade de
+> desenvolvimento**, com testes escritos **em lote** por mudança/adição (cobrindo o
+> essencial do comportamento) em vez de teste-a-teste antes de cada linha. A suíte
+> fica verde antes de commitar; cobertura exaustiva volta a ser meta pós-MVP.
+> Após commitar, **atualizar a instância** (`scripts/atlasctl.sh atualizar`).
+
 ## Modelo: híbrido + trunk-based
 
 - **GitHub** hospeda o repositório, os **PRs** e a **CI** (testes/checks).
