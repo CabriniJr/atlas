@@ -30,7 +30,7 @@ atualizado-em: 2026-06-16
 | 3 | Padrão de rotina | **Script-primeiro, agente só quando precisa** (ciclo de vida). | — |
 | 4 | Rotinas | **Pastas plugáveis** auto-descobertas; o repositório é o estado. | — |
 | 5 | Modos | **Operação** e **desenvolvimento** em sessões separadas; handoff por arquivo. | [0009](adr/ADR-0009-handoff-entre-modos.md) |
-| 6 | Hospedagem | **Notebook Linux**, systemd, sem sleep. | — |
+| 6 | Hospedagem | **Notebook Linux**, sempre ligado. Empacotamento preferido **Docker** (`restart: always`); systemd permanece válido. Mesma imagem migra para host always-on. | [0012](adr/ADR-0012-empacotamento-docker.md) |
 | 7 | Resumo diário | Rotina built-in, **única que sempre usa IA** (Sonnet, modo 2a). | [0001](adr/ADR-0001-ia-em-dois-modos.md) |
 | 8 | Criação de rotina | **Meta-loop:** descrição no Telegram → geração via Claude Code. | [0003](adr/ADR-0003-seguranca-meta-loop.md) |
 | 9 | Contrato do `collect` | Retorno **tipado** `CollectResult { data, store }`. | [0004](adr/ADR-0004-contrato-collect.md) |

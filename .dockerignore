@@ -1,0 +1,29 @@
+# Mantém a imagem pequena e sem segredos/dados.
+.git
+.github
+.claude
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+dist
+build
+*.egg-info
+
+# Dados e segredos NUNCA entram na imagem
+.env
+.env.*
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Coisas que não precisam rodar dentro do container
+tests
+docs
+resumo

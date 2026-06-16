@@ -53,6 +53,7 @@ atualizado-em: 2026-06-16
 ## Épico E4 — Infra e CI/CD (transversal)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
+| E4-00 | Empacotamento Docker (imagem + compose `restart: always` + script) | **feito** | [ADR-0012](../arquitetura/adr/ADR-0012-empacotamento-docker.md) |
 | E4-01 | Serviço systemd, sem sleep, lid switch ignorado | proposto | [visao-geral](../arquitetura/visao-geral.md) |
 | E4-02 | Gestão de segredos fora do versionamento | proposto | [seguranca](../arquitetura/seguranca.md) |
 | E4-03 | Setup GitHub: criar repo, remote, `gh`, rename `master`→`main`, branch protection | proposto | [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md) |

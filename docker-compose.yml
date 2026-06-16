@@ -1,0 +1,17 @@
+# Atlas — orquestração do bot. `restart: always` + Docker iniciando no boot
+# fazem o bot voltar sozinho sempre que a máquina liga.
+services:
+  atlas:
+    build: .
+    image: atlas:latest
+    container_name: atlas
+    # Segredos vêm do .env (token + seu ID). NÃO versionado.
+    env_file: .env
+    environment:
+      ATLAS_DB_PATH: /data/atlas.sqlite
+    # Persiste o SQLite fora do container (sobrevive a rebuild).
+    volumes:
+      - ./data:/data
+    restart: always
+    # Sem portas: long-poll é saída-pra-fora; não precisa de inbound.
+    stop_grace_period: 10s

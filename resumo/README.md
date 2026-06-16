@@ -54,7 +54,39 @@ Você verá `Atlas no ar. Atendendo apenas user_id=...`. Agora, no Telegram:
 
 Pare com `Ctrl+C`.
 
-## 5. (Opcional) Rodar sempre ligado via systemd
+## 5. (Recomendado) Rodar sempre ligado via Docker
+
+Com Docker, o bot reinicia sozinho após reboots e fica fácil de migrar depois.
+
+```bash
+cp resumo/.env.example .env     # preencha token + seu ID
+./scripts/docker-run.sh         # build + sobe em background (restart: always)
+```
+
+Comandos úteis:
+
+```bash
+docker compose logs -f atlas    # ver logs ao vivo
+docker compose restart atlas    # reiniciar
+docker compose down             # parar
+```
+
+Para o container voltar a cada boot da máquina, habilite o Docker no boot:
+
+```bash
+sudo systemctl enable --now docker
+```
+
+O banco (SQLite) fica em `./data/` (volume), sobrevivendo a rebuilds.
+
+> ⚠️ **"Sempre ligado" tem um limite físico:** um container roda enquanto **a sua
+> máquina está ligada**. Com o computador **desligado**, o bot não roda — nada
+> local roda. Para 24/7 de verdade (mesmo com seu PC off), rode a **mesma imagem**
+> num mini-PC ou VPS sempre ligado: `git clone`, crie o `.env`, e
+> `./scripts/docker-run.sh` — sem mudar nada do código. É a evolução prevista na
+> [arquitetura](../docs/arquitetura/visao-geral.md#infraestrutura).
+
+## 6. (Alternativa) Rodar via systemd (sem Docker)
 
 Para o bot subir sozinho e reiniciar (notebook sempre ligado):
 

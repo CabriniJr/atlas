@@ -46,6 +46,7 @@ atualizado-em: 2026-06-16
 | [0009](ADR-0009-handoff-entre-modos.md) | Handoff entre modos via `SPEC.md` | aceito | Endurecimento C9 |
 | [0010](ADR-0010-observabilidade-claude-p.md) | Observabilidade via `claude -p` JSON | aceito | Endurecimento C10 |
 | [0011](ADR-0011-ci-cd-versionamento.md) | Política de CI/CD e versionamento | aceito | Política de desenvolvimento |
+| [0012](ADR-0012-empacotamento-docker.md) | Empacotamento e deploy via Docker | aceito | Sempre-ligado |
 
 ## Lastro
 
