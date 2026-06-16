@@ -7,14 +7,19 @@ foca no registro rápido e em /status.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 from atlas.comandos import para_telegram
 from atlas.config import Config
 from atlas.db import Database
+from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
+from atlas.routines import Rotina, carregar_rotinas
+from atlas.scheduler import catch_up, tick
 from atlas.telegram import TelegramAdapter
 
 _log = logging.getLogger("atlas")
@@ -63,6 +68,21 @@ def _normalizar(update_cru: dict) -> Update | None:
     )
 
 
+def montar_disparo(db: Database, adapter: Adapter, chat_id: int) -> Callable[[Rotina], object]:
+    """Cria o callback que o scheduler usa para disparar uma rotina.
+
+    Embrulha o [executor](executor-e-notificacao): roda o ciclo de vida com
+    origem ``agenda`` e notifica o dono pelo Telegram. (Sem invocador de IA por
+    enquanto — rotinas com modelo só confirmam; análise real vem com E1-05.)
+    """
+
+    def disparar(rotina: Rotina) -> object:
+        ctx = ContextoExecucao(agora=datetime.now(), rotina=rotina, origem="agenda")
+        return executar(ctx, db, lambda msg: adapter.enviar(chat_id, msg))
+
+    return disparar
+
+
 def run(config: Config | None = None) -> None:
     """Inicia o loop de operação do bot (bloqueante)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -76,13 +96,33 @@ def run(config: Config | None = None) -> None:
     except Exception:  # noqa: BLE001 — sem rede/erro de API não impede operar
         _log.warning("Não foi possível registrar os comandos no Telegram (segue mesmo assim).")
 
-    _log.info("Atlas no ar. Atendendo apenas user_id=%s. Ctrl+C para sair.", config.allowed_user_id)
+    # Carrega rotinas e prepara o agendador.
+    carga = carregar_rotinas(Path(config.routines_dir))
+    for erro in carga.erros:
+        _log.warning("Rotina ignorada (%s): %s", erro.pasta, erro.mensagem)
+    disparar = montar_disparo(db, adapter, config.allowed_user_id)
+
+    # Catch-up dos disparos perdidos enquanto esteve fora do ar (ADR-0006).
+    try:
+        recuperados = catch_up(datetime.now(), carga.rotinas, db, disparar)
+        if recuperados:
+            _log.info("Catch-up: %d rotina(s) recuperada(s) no boot.", len(recuperados))
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha no catch-up de boot; seguindo.")
+
+    _log.info(
+        "Atlas no ar. user_id=%s · %d rotina(s) ativa(s). Ctrl+C para sair.",
+        config.allowed_user_id,
+        len(carga.ativas),
+    )
     while True:
         try:
             for update_cru in adapter.receber():
                 upd = _normalizar(update_cru)
                 if upd is not None:
                     processar_update(upd, config, db, adapter)
+            # Após cada janela de long-poll, verifica o que venceu na agenda.
+            tick(datetime.now(), carga.rotinas, db, disparar)
         except KeyboardInterrupt:  # noqa: PERF203
             _log.info("Encerrando.")
             break

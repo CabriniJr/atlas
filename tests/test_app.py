@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from atlas.app import Update, processar_update
+from atlas.app import Update, montar_disparo, processar_update
 from atlas.config import Config
 from atlas.db import Database
+from atlas.routines import Rotina
+from atlas.scheduler import tick
 
 
 class _FakeAdapter:
@@ -18,6 +20,26 @@ class _FakeAdapter:
 
 
 _CFG = Config(telegram_token="x", allowed_user_id=42)
+
+
+def test_disparo_agendado_executa_e_notifica_o_dono():
+    db = Database(":memory:")
+    adapter = _FakeAdapter()
+    agora = datetime(2026, 6, 16, 21, 0)
+    rotina = Rotina(nome="ping", descricao="d", agenda="@every 1m", modelo="none")
+    # último run 70s atrás → vencido
+    db.connection.execute(
+        "INSERT INTO routine_state (rotina, chave, valor, atualizado_em) VALUES (?,?,?,?)",
+        ("ping", "ultimo_run", (agora - timedelta(seconds=70)).isoformat(), agora.isoformat()),
+    )
+    db.connection.commit()
+
+    disparar = montar_disparo(db, adapter, chat_id=42)
+    resultados = tick(agora, [rotina], db, disparar)
+
+    assert len(resultados) == 1
+    assert adapter.enviados and adapter.enviados[0][0] == 42  # notificou o dono
+    assert db.connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
 
 
 def test_dono_e_atendido_e_atividade_registrada():
