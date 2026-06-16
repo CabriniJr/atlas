@@ -43,6 +43,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 - [`agentes/revisor-curador.md`](agentes/revisor-curador.md) — critérios de curadoria.
 
 ### ⚙️ Processos — *como trabalhamos*
+- [`processos/ciclo-ideias-para-implementacao.md`](processos/ciclo-ideias-para-implementacao.md) — **LER PRIMEIRO:** o fluxo padrão: ideia → doc → implementação.
 - [`processos/fluxo-de-desenvolvimento.md`](processos/fluxo-de-desenvolvimento.md) — o fluxo background + curadoria.
 - [`processos/politica-de-desenvolvimento.md`](processos/politica-de-desenvolvimento.md) — commits, branches, PR, CI/CD, deploy.
 - [`processos/definicao-de-pronto.md`](processos/definicao-de-pronto.md) — DoR / DoD.
