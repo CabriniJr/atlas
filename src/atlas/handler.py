@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from atlas.comandos import texto_ajuda
+from atlas.comandos import texto_ajuda, texto_boas_vindas
 from atlas.db import Database
 from atlas.pool import responder_pool
 
@@ -27,7 +27,7 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
 
     if texto in ("/start", "/ajuda", "/help"):
         if texto == "/start":
-            return "👋 Bem-vindo ao *Atlas*.\n\n" + texto_ajuda()
+            return texto_boas_vindas()
         return texto_ajuda()
 
     if texto == "/status":

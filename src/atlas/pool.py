@@ -194,7 +194,7 @@ def _fmt_lista(itens: list[dict]) -> str:
     if not itens:
         return "📭 Pool vazio. Capture com /ideia, /tarefa ou /rotina_nova."
     linhas = [f"#{i['id']} [p{i['prioridade']}] {i['tipo']}: {i['titulo']}" for i in itens]
-    return "🗂 *Pool de ideias*\n" + "\n".join(linhas)
+    return "🗂 Pool de ideias\n" + "\n".join(linhas)
 
 
 def _fmt_detalhe(row: dict) -> str:

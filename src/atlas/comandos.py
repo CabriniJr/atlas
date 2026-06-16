@@ -20,9 +20,34 @@ COMANDOS: list[tuple[str, str]] = [
 
 
 def texto_ajuda() -> str:
-    """Renderiza o ``/ajuda`` a partir do registro."""
-    linhas = [f"• /{cmd} — {desc}" for cmd, desc in COMANDOS]
-    return "🧭 *Atlas* — comandos:\n" + "\n".join(linhas)
+    """Renderiza o ``/ajuda`` (texto puro, agrupado por tema)."""
+    return (
+        "🧭 Atlas — o que dá pra fazer:\n\n"
+        "💡 Pool de ideias\n"
+        "  /ideia <texto>    — captura uma ideia\n"
+        "  /tarefa <texto>   — captura uma tarefa\n"
+        "  /licao <texto>    — captura uma lição de casa\n"
+        "  /rotina_nova <txt>— pede uma rotina nova\n"
+        "  /ideias           — lista o pool\n"
+        "  /ideia <id>       — detalhe; + prio <n> | editar <txt> | feito | arquivar | remover\n\n"
+        "📝 Registro\n"
+        "  /reg <texto>      — registra uma nota livre\n\n"
+        "📊 Sistema\n"
+        "  /status           — resumo do dia\n"
+        "  /ajuda            — esta mensagem"
+    )
+
+
+def texto_boas_vindas() -> str:
+    """Mensagem de /start."""
+    return (
+        "👋 Bem-vindo ao Atlas — seu motor de rotinas pessoais.\n\n"
+        "Capture ideias e tarefas pelo chat e eu guardo tudo. Ex.:\n"
+        "  /ideia comprar uma webcam\n"
+        "  /tarefa revisar o relatório\n"
+        "  /ideias  (pra ver a lista)\n\n"
+        "Digite /ajuda para ver todos os comandos."
+    )
 
 
 def para_telegram() -> list[dict[str, str]]:

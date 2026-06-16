@@ -7,9 +7,12 @@ domínio, IP público nem webhook: o notebook puxa as mensagens de dentro pra fo
 from __future__ import annotations
 
 import json
+import logging
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+
+_log = logging.getLogger(__name__)
 
 _API = "https://api.telegram.org/bot{token}/{metodo}"
 
@@ -36,11 +39,16 @@ class TelegramAdapter:
         return _API.format(token=self._token, metodo=metodo)
 
     def enviar(self, chat_id: int, texto: str) -> None:
-        """Envia uma mensagem (Markdown)."""
-        dados = urllib.parse.urlencode(
-            {"chat_id": chat_id, "text": texto, "parse_mode": "Markdown"}
-        ).encode("utf-8")
-        self._transport(self._url("sendMessage"), dados)
+        """Envia uma mensagem em **texto puro**.
+
+        Sem ``parse_mode``: assim caracteres como ``_``, ``*`` e ``<id>`` (comuns
+        nas nossas respostas e nomes de comando) não quebram a formatação e a
+        mensagem nunca é rejeitada (HTTP 400) pela API.
+        """
+        dados = urllib.parse.urlencode({"chat_id": chat_id, "text": texto}).encode("utf-8")
+        resposta = self._transport(self._url("sendMessage"), dados)
+        if isinstance(resposta, dict) and resposta.get("ok") is False:
+            _log.warning("Telegram recusou sendMessage: %s", resposta.get("description"))
 
     def registrar_comandos(self, comandos: list[dict[str, str]]) -> None:
         """Registra o menu de comandos do bot (``setMyCommands``)."""
