@@ -66,9 +66,9 @@ atualizado-em: 2026-06-16
 
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E6-01 | Tabela `ideas` + migração idempotente de schema | **em-andamento** | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec pool](../specs/pool-de-ideias.md) |
-| E6-02 | Captura via Telegram (`/ideia`, `/tarefa`/`/licao`, `/rotina_nova`) | **em-andamento** | [spec pool](../specs/pool-de-ideias.md) |
-| E6-03 | CRUD/priorização (`/ideias`, `/ideia <id>`, `prio`, `editar`, `feito`, `arquivar`, `remover`) | **em-andamento** | [spec pool](../specs/pool-de-ideias.md) |
+| E6-01 | Tabela `ideas` + migração idempotente de schema | **feito** | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec pool](../specs/pool-de-ideias.md) |
+| E6-02 | Captura via Telegram (`/ideia`, `/tarefa`/`/licao`, `/rotina_nova`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
+| E6-03 | CRUD/priorização (`/ideias`, `/ideia <id>`, `prio`, `editar`, `feito`, `arquivar`, `remover`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
 | E6-04 | Laço de desenvolvimento: agente livre + item `rotina` → dispara meta-loop (gera inativo) + notifica | bloqueado (depende de E1-10 + E2) | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec meta-loop](../specs/meta-loop-chat.md) |
 
 ## Épico E3 — Tracking e metas (M3)
