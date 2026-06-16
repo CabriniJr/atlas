@@ -15,6 +15,7 @@ from typing import Protocol
 
 from atlas.comandos import para_telegram
 from atlas.config import Config
+from atlas.controle import aplicar_overrides
 from atlas.db import Database
 from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
@@ -98,6 +99,7 @@ def run(config: Config | None = None) -> None:
 
     # Carrega rotinas e prepara o agendador.
     carga = carregar_rotinas(Path(config.routines_dir))
+    aplicar_overrides(db, carga.rotinas)  # ativação salva no DB sobrepõe o default (E5-02)
     for erro in carga.erros:
         _log.warning("Rotina ignorada (%s): %s", erro.pasta, erro.mensagem)
     disparar = montar_disparo(db, adapter, config.allowed_user_id)

@@ -12,9 +12,13 @@ COMANDOS: list[tuple[str, str]] = [
     ("start", "Welcome & quick start"),
     ("idea", "Capture an idea"),
     ("task", "Capture a task / homework"),
-    ("routine", "Queue a new routine (autogen candidate)"),
+    ("queue", "Queue a new routine request (autogen candidate)"),
     ("note", "Log a free-form note"),
     ("pool", "List / inspect / manage the idea pool"),
+    ("routines", "List loaded routines"),
+    ("run", "Run a routine now"),
+    ("activate", "Activate a routine"),
+    ("deactivate", "Deactivate a routine"),
     ("status", "Daily summary"),
     ("debug", "Diagnostics & system info (try /debug help)"),
     ("help", "Show available commands"),
@@ -28,13 +32,18 @@ def texto_ajuda() -> str:
         "💡 Capture\n"
         "  /idea <text>      capture an idea\n"
         "  /task <text>      capture a task / homework\n"
-        "  /routine <text>   queue a new routine (autogen candidate)\n"
+        "  /queue <text>     queue a new routine request (autogen candidate)\n"
         "  /note <text>      log a free-form note\n\n"
         "🗂 Pool\n"
         "  /pool             list open items (by priority)\n"
         "  /pool <state>     filter (capturada|priorizada|gerada|ativada)\n"
         "  /pool <id>        item detail\n"
         "  /pool <id> prio <n> | edit <text> | done | archive | drop\n\n"
+        "🧩 Routines\n"
+        "  /routines         list loaded routines\n"
+        "  /routine <name>   routine detail\n"
+        "  /run <name>       run a routine now\n"
+        "  /activate <name> | /deactivate <name>\n\n"
         "📊 System\n"
         "  /status           daily summary\n"
         "  /debug            diagnostics (see /debug help)\n"

@@ -53,7 +53,7 @@ atualizado-em: 2026-06-16
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
 | E5-01 | Comandos de listagem/inspeção: `/rotinas`, `/rotina <nome>`, `/uso`, `/status` (evoluir), `/ajuda` dinâmico | **parcial** — registro único de comandos (inglês), `/help` dinâmico + `setMyCommands`, `/status` evoluído, **sessão `/debug`** (status/runs/routines/db/env); falta `/rotinas`/`/uso` | [spec interface](../specs/interface-config-chat.md) |
-| E5-02 | Ciclo de vida por chat: `/ativar`, `/desativar`, `/rodar <nome>` | proposto | [spec interface](../specs/interface-config-chat.md), [spec executor](../specs/executor-e-notificacao.md) |
+| E5-02 | Ciclo de vida por chat: `/activate`, `/deactivate`, `/run <name>` (+ `/routines`, `/routine <name>`) | **feito** — ativação via override no DB (persiste no volume; agendamento aplica no restart) | [spec interface](../specs/interface-config-chat.md), [spec executor](../specs/executor-e-notificacao.md) |
 | E5-03 | Edição de config interativa (`/rotina <nome> set <campo> <valor>`) com validação | proposto | [spec interface](../specs/interface-config-chat.md) |
 | E5-04 | Tabela `trackers` + rotina genérica `tracking` (aplica em runtime) | proposto | [spec trackers](../specs/trackers-via-chat.md), [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E5-05 | Wizard `/tracker novo` + `/trackers` + `/tracker <nome>` (ver/editar/remover) | proposto | [spec trackers](../specs/trackers-via-chat.md) |

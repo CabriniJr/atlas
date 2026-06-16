@@ -18,7 +18,7 @@ from atlas.db import Database
 _CAPTURA_CMD = {
     "/idea": "ideia",
     "/task": "tarefa",
-    "/routine": "rotina",
+    "/queue": "rotina",
 }
 
 # Operações de item e a função correspondente (preenchidas após defini-las).

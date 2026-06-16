@@ -35,7 +35,7 @@ def test_idea_captura_e_confirma():
 def test_task_e_routine_setam_tipo():
     db = _db()
     responder("/task implementar login", db, _AGORA)
-    responder("/routine backup diario", db, _AGORA)
+    responder("/queue backup diario", db, _AGORA)
     tipos = [r[0] for r in db.connection.execute("SELECT tipo FROM ideas ORDER BY id").fetchall()]
     assert tipos == ["tarefa", "rotina"]
 

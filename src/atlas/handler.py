@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from atlas.comandos import texto_ajuda, texto_boas_vindas
+from atlas.controle import responder_controle
 from atlas.db import Database
 from atlas.debug import responder_debug
 from atlas.pool import responder_pool
@@ -41,6 +42,11 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
     resposta_debug = responder_debug(texto, db, agora)
     if resposta_debug is not None:
         return resposta_debug
+
+    # Routine control (E5-02): /routines, /routine, /run, /activate, /deactivate.
+    resposta_ctrl = responder_controle(texto, db, agora)
+    if resposta_ctrl is not None:
+        return resposta_ctrl
 
     # Pool commands (E6): /idea, /task, /routine, /pool.
     resposta_pool = responder_pool(texto, db, agora)
