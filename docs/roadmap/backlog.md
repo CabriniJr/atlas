@@ -25,7 +25,7 @@ atualizado-em: 2026-06-16
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
 | E1-01 | Auto-descoberta e carga de rotinas a partir de `routines/` | proposto | [ciclo-de-vida](../arquitetura/ciclo-de-vida-rotina.md) |
-| E1-02 | Schema SQLite + camada de acesso | proposto | [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
+| E1-02 | Schema SQLite + camada de acesso | **feito** | [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E1-03 | Adapter Telegram (long-poll, `enviar`/`receber`, filtro de ID) | proposto | [seguranca](../arquitetura/seguranca.md) |
 | E1-04 | Roteador determinístico + micro-sintaxe + fallback Haiku | proposto | [ADR-0008](../arquitetura/adr/ADR-0008-roteamento-e-extracao.md) |
 | E1-05 | Invocador de IA: modo análise (2a) e agente (2b) | proposto | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md) |
