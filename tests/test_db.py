@@ -10,7 +10,7 @@ def _tables(db: Database) -> set[str]:
     return {r[0] for r in rows}
 
 
-def test_schema_cria_as_seis_tabelas_do_adr0002():
+def test_schema_cria_as_tabelas_do_modelo_de_dados():
     db = Database(":memory:")
     assert _tables(db) == {
         "activities",
@@ -19,6 +19,7 @@ def test_schema_cria_as_seis_tabelas_do_adr0002():
         "books",
         "runs",
         "routine_state",
+        "ideas",  # pool de ideias (ADR-0014)
     }
 
 

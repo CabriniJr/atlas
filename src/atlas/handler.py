@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from atlas.db import Database
+from atlas.pool import responder_pool
 
 # Palavras-chave → domínio (inferência barata, 0 IA). Versão completa: ADR-0008.
 _DOMINIOS = {
@@ -38,6 +39,11 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
 
     if texto == "/status":
         return _status(db, agora)
+
+    # Comandos do pool de ideias (E6): /ideia(s), /tarefa, /licao, /rotina_nova.
+    resposta_pool = responder_pool(texto, db, agora)
+    if resposta_pool is not None:
+        return resposta_pool
 
     if texto.startswith("/"):
         return "Comando desconhecido. Veja /ajuda."

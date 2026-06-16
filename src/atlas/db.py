@@ -15,7 +15,7 @@ from typing import Any
 _JSON_COLUMNS = {"dados_json", "valor"}
 
 SCHEMA = """
-CREATE TABLE activities (
+CREATE TABLE IF NOT EXISTS activities (
     id         INTEGER PRIMARY KEY,
     ts         TEXT    NOT NULL,
     dominio    TEXT    NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE activities (
     dados_json TEXT
 );
 
-CREATE TABLE goals (
+CREATE TABLE IF NOT EXISTS goals (
     id        INTEGER PRIMARY KEY,
     titulo    TEXT    NOT NULL,
     categoria TEXT,
@@ -36,14 +36,14 @@ CREATE TABLE goals (
     status    TEXT    NOT NULL DEFAULT 'ativa'
 );
 
-CREATE TABLE goal_links (
+CREATE TABLE IF NOT EXISTS goal_links (
     id           INTEGER PRIMARY KEY,
     activity_id  INTEGER NOT NULL REFERENCES activities(id),
     goal_id      INTEGER NOT NULL REFERENCES goals(id),
     contribuicao REAL    NOT NULL DEFAULT 0
 );
 
-CREATE TABLE books (
+CREATE TABLE IF NOT EXISTS books (
     id             INTEGER PRIMARY KEY,
     titulo         TEXT    NOT NULL,
     pagina_atual   INTEGER NOT NULL DEFAULT 0,
@@ -52,7 +52,7 @@ CREATE TABLE books (
     ultimo_visto_ts TEXT
 );
 
-CREATE TABLE runs (
+CREATE TABLE IF NOT EXISTS runs (
     id           INTEGER PRIMARY KEY,
     rotina       TEXT    NOT NULL,
     iniciado_em  TEXT    NOT NULL,
@@ -66,12 +66,26 @@ CREATE TABLE runs (
     ref_saida    TEXT
 );
 
-CREATE TABLE routine_state (
+CREATE TABLE IF NOT EXISTS routine_state (
     rotina        TEXT NOT NULL,
     chave         TEXT NOT NULL,
     valor         TEXT,
     atualizado_em TEXT NOT NULL,
     PRIMARY KEY (rotina, chave)
+);
+
+-- Pool de ideias/desenvolvimento (ADR-0014). Captura de ideias/tarefas/lições.
+CREATE TABLE IF NOT EXISTS ideas (
+    id            INTEGER PRIMARY KEY,
+    tipo          TEXT    NOT NULL DEFAULT 'ideia',
+    titulo        TEXT    NOT NULL,
+    corpo         TEXT,
+    prioridade    INTEGER NOT NULL DEFAULT 100,
+    estado        TEXT    NOT NULL DEFAULT 'capturada',
+    rotina_alvo   TEXT,
+    erro          TEXT,
+    criado_em     TEXT    NOT NULL,
+    atualizado_em TEXT    NOT NULL
 );
 """
 
@@ -86,12 +100,12 @@ class Database:
         self._init_schema()
 
     def _init_schema(self) -> None:
-        existing = self.connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchone()
-        if existing is None:
-            self.connection.executescript(SCHEMA)
-            self.connection.commit()
+        # Idempotente (migração mínima): todas as tabelas usam
+        # ``CREATE TABLE IF NOT EXISTS``, então rodar o schema num banco já
+        # existente apenas cria o que falta (ex.: a tabela ``ideas``) sem
+        # tocar nos dados. Ver ADR-0014 / modelo-de-dados (migração de schema).
+        self.connection.executescript(SCHEMA)
+        self.connection.commit()
 
     def insert(self, table: str, **fields: Any) -> int:
         """Insere uma linha e devolve o id gerado. Serializa colunas JSON."""
