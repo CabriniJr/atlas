@@ -11,6 +11,7 @@ from datetime import datetime
 
 from atlas.comandos import texto_ajuda, texto_boas_vindas
 from atlas.db import Database
+from atlas.debug import responder_debug
 from atlas.pool import responder_pool
 
 # Palavras-chave → domínio (inferência barata, 0 IA). Versão completa: ADR-0008.
@@ -33,15 +34,37 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
     if texto == "/status":
         return _status(db, agora)
 
-    # Comandos do pool de ideias (E6): /ideia(s), /tarefa, /licao, /rotina_nova.
+    if texto == "/note" or texto.startswith("/note "):
+        return _nota_livre(texto, db, agora)
+
+    # Debug session (diagnostics CLI over Telegram).
+    resposta_debug = responder_debug(texto, db, agora)
+    if resposta_debug is not None:
+        return resposta_debug
+
+    # Pool commands (E6): /idea, /task, /routine, /pool.
     resposta_pool = responder_pool(texto, db, agora)
     if resposta_pool is not None:
         return resposta_pool
 
     if texto.startswith("/"):
-        return "Comando desconhecido. Veja /ajuda."
+        return "❓ unknown command. See /help"
 
     return _registrar(texto, db, agora)
+
+
+def _nota_livre(texto: str, db: Database, agora: datetime) -> str:
+    corpo = texto[len("/note") :].strip()
+    if not corpo:
+        return "Usage: /note <text>"
+    db.insert(
+        "activities",
+        ts=agora.isoformat(),
+        dominio="geral",
+        rotina="note",
+        texto_cru=corpo,
+    )
+    return "📝 note logged"
 
 
 def _registrar(texto: str, db: Database, agora: datetime) -> str:
@@ -53,7 +76,7 @@ def _registrar(texto: str, db: Database, agora: datetime) -> str:
         rotina="log",
         texto_cru=texto,
     )
-    return f"✓ registrado ({dominio})"
+    return f"✓ logged ({dominio})"
 
 
 def _status(db: Database, agora: datetime) -> str:
@@ -61,7 +84,10 @@ def _status(db: Database, agora: datetime) -> str:
     total = db.connection.execute(
         "SELECT COUNT(*) AS n FROM activities WHERE ts >= ?", (inicio_do_dia,)
     ).fetchone()["n"]
-    return f"📊 Hoje: {total} registro(s)."
+    abertas = db.connection.execute(
+        "SELECT COUNT(*) AS n FROM ideas WHERE estado NOT IN ('descartada','arquivada')"
+    ).fetchone()["n"]
+    return f"📊 Today: {total} activity record(s) · pool: {abertas} open\nSee /pool or /debug."
 
 
 def _inferir_dominio(texto: str) -> str:

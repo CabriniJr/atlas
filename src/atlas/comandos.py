@@ -1,55 +1,59 @@
-"""Registro único dos comandos do bot (fonte de verdade — E5-01).
+"""Command registry — single source of truth (E5-01).
 
-Uma só lista alimenta o ``/ajuda`` dinâmico **e** o menu do Telegram
-(``setMyCommands``). Adicionar um comando = adicionar uma entrada aqui.
+One list feeds the dynamic ``/help`` AND the Telegram command menu
+(``setMyCommands``). Add a command = add an entry here. Terms are kept in
+English/technical to match the engine's vocabulary.
 """
 
 from __future__ import annotations
 
-# (comando_sem_barra, descrição curta). A ordem é a ordem exibida.
+# (command_without_slash, short description). Order = display order.
 COMANDOS: list[tuple[str, str]] = [
-    ("status", "Resumo do dia"),
-    ("ideia", "Captura uma ideia · /ideia <id> p/ ver e gerenciar"),
-    ("ideias", "Lista o pool de ideias"),
-    ("tarefa", "Captura uma tarefa"),
-    ("licao", "Captura uma lição de casa"),
-    ("rotina_nova", "Registra pedido de rotina nova"),
-    ("reg", "Registra uma nota livre"),
-    ("ajuda", "Mostra os comandos disponíveis"),
+    ("start", "Welcome & quick start"),
+    ("idea", "Capture an idea"),
+    ("task", "Capture a task / homework"),
+    ("routine", "Queue a new routine (autogen candidate)"),
+    ("note", "Log a free-form note"),
+    ("pool", "List / inspect / manage the idea pool"),
+    ("status", "Daily summary"),
+    ("debug", "Diagnostics & system info (try /debug help)"),
+    ("help", "Show available commands"),
 ]
 
 
 def texto_ajuda() -> str:
-    """Renderiza o ``/ajuda`` (texto puro, agrupado por tema)."""
+    """Render ``/help`` (plain text, grouped by area)."""
     return (
-        "🧭 Atlas — o que dá pra fazer:\n\n"
-        "💡 Pool de ideias\n"
-        "  /ideia <texto>    — captura uma ideia\n"
-        "  /tarefa <texto>   — captura uma tarefa\n"
-        "  /licao <texto>    — captura uma lição de casa\n"
-        "  /rotina_nova <txt>— pede uma rotina nova\n"
-        "  /ideias           — lista o pool\n"
-        "  /ideia <id>       — detalhe; + prio <n> | editar <txt> | feito | arquivar | remover\n\n"
-        "📝 Registro\n"
-        "  /reg <texto>      — registra uma nota livre\n\n"
-        "📊 Sistema\n"
-        "  /status           — resumo do dia\n"
-        "  /ajuda            — esta mensagem"
+        "🧭 Atlas — command reference\n\n"
+        "💡 Capture\n"
+        "  /idea <text>      capture an idea\n"
+        "  /task <text>      capture a task / homework\n"
+        "  /routine <text>   queue a new routine (autogen candidate)\n"
+        "  /note <text>      log a free-form note\n\n"
+        "🗂 Pool\n"
+        "  /pool             list open items (by priority)\n"
+        "  /pool <state>     filter (capturada|priorizada|gerada|ativada)\n"
+        "  /pool <id>        item detail\n"
+        "  /pool <id> prio <n> | edit <text> | done | archive | drop\n\n"
+        "📊 System\n"
+        "  /status           daily summary\n"
+        "  /debug            diagnostics (see /debug help)\n"
+        "  /help             this message"
     )
 
 
 def texto_boas_vindas() -> str:
-    """Mensagem de /start."""
+    """``/start`` message."""
     return (
-        "👋 Bem-vindo ao Atlas — seu motor de rotinas pessoais.\n\n"
-        "Capture ideias e tarefas pelo chat e eu guardo tudo. Ex.:\n"
-        "  /ideia comprar uma webcam\n"
-        "  /tarefa revisar o relatório\n"
-        "  /ideias  (pra ver a lista)\n\n"
-        "Digite /ajuda para ver todos os comandos."
+        "👋 Welcome to Atlas — your personal routine engine.\n\n"
+        "Capture things straight from chat and I'll store them:\n"
+        "  /idea buy a webcam\n"
+        "  /task review the report\n"
+        "  /pool   → see your list\n\n"
+        "Type /help for the full command list, or /debug for system info."
     )
 
 
 def para_telegram() -> list[dict[str, str]]:
-    """Formato do ``setMyCommands`` (command sem barra + description)."""
+    """``setMyCommands`` format (command without slash + description)."""
     return [{"command": cmd, "description": desc} for cmd, desc in COMANDOS]

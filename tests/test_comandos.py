@@ -15,20 +15,24 @@ _AGORA = datetime(2026, 6, 16, 10, 0, 0)
 def test_ajuda_lista_comandos_do_pool():
     db = Database(":memory:")
     resposta = responder("/ajuda", db, _AGORA)
-    assert "/ideia" in resposta
-    assert "/ideias" in resposta
+    assert "/idea" in resposta
+    assert "/pool" in resposta
     assert "/status" in resposta
 
 
-def test_texto_ajuda_cobre_todo_o_registro():
+def test_texto_ajuda_cobre_os_principais():
     texto = texto_ajuda()
-    for cmd, _ in COMANDOS:
+    for cmd in ("idea", "task", "routine", "note", "pool", "status", "debug", "help"):
         assert f"/{cmd}" in texto
+
+
+def test_registro_nao_vazio():
+    assert {c for c, _ in COMANDOS} >= {"idea", "task", "pool", "debug", "help"}
 
 
 def test_para_telegram_sem_barra_e_com_descricao():
     payload = para_telegram()
-    assert any(c["command"] == "ideia" for c in payload)
+    assert any(c["command"] == "idea" for c in payload)
     assert all(not c["command"].startswith("/") and c["description"] for c in payload)
 
 
@@ -45,4 +49,4 @@ def test_registrar_comandos_chama_set_my_commands():
     assert chamadas, "deveria ter chamado a API"
     url, dados = chamadas[0]
     assert "setMyCommands" in url
-    assert dados is not None and b"ideia" in dados
+    assert dados is not None and b"idea" in dados

@@ -15,7 +15,7 @@ def _db() -> Database:
 def test_ajuda_lista_comandos():
     resposta = responder("/ajuda", _db(), datetime(2026, 6, 16, 10, 0))
     assert "/status" in resposta
-    assert "/ajuda" in resposta
+    assert "/help" in resposta
 
 
 def test_start_da_boas_vindas():
