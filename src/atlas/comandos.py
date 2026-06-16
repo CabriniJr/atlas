@@ -19,6 +19,8 @@ COMANDOS: list[tuple[str, str]] = [
     ("run", "Run a routine now"),
     ("activate", "Activate a routine"),
     ("deactivate", "Deactivate a routine"),
+    ("alarm", "Set a reminder (/alarm HH:MM <msg>)"),
+    ("alarms", "List active alarms"),
     ("status", "Daily summary"),
     ("debug", "Diagnostics & system info (try /debug help)"),
     ("help", "Show available commands"),
@@ -44,6 +46,10 @@ def texto_ajuda() -> str:
         "  /routine <name>   routine detail\n"
         "  /run <name>       run a routine now\n"
         "  /activate <name> | /deactivate <name>\n\n"
+        "⏰ Alarms\n"
+        "  /alarm HH:MM <msg>   set a reminder (add @once for one-shot)\n"
+        "  /alarms              list active alarms\n"
+        "  /alarm <id> remove   remove an alarm\n\n"
         "📊 System\n"
         "  /status           daily summary\n"
         "  /debug            diagnostics (see /debug help)\n"

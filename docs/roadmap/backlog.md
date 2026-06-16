@@ -58,7 +58,7 @@ atualizado-em: 2026-06-16
 | E5-04 | Tabela `trackers` + rotina genérica `tracking` (aplica em runtime) | proposto | [spec trackers](../specs/trackers-via-chat.md), [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E5-05 | Wizard `/tracker novo` + `/trackers` + `/tracker <nome>` (ver/editar/remover) | proposto | [spec trackers](../specs/trackers-via-chat.md) |
 | E5-06 | `/reg` (nota livre, com domínio opcional) | proposto | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
-| E5-07 | Alarmes/lembretes: tabela `alarms` + rotina `alarme` + comandos `/alarme`/`/alarmes` | proposto | [spec alarmes](../specs/alarmes.md), [spec scheduler](../specs/scheduler.md) |
+| E5-07 | Alarmes/lembretes: tabela `alarms` + `tick_alarmes` no loop + `/alarm`/`/alarms` | **feito** — diário/uma-vez, dispara e notifica o dono; persiste no volume | [spec alarmes](../specs/alarmes.md), [spec scheduler](../specs/scheduler.md) |
 
 ## Épico E6 — Pool de ideias e autoimplementação (PRIORIDADE MÁXIMA)
 > Capturar ideias/tarefas/lições pelo Telegram e alimentar a geração automática de

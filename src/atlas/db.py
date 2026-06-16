@@ -87,6 +87,17 @@ CREATE TABLE IF NOT EXISTS ideas (
     criado_em     TEXT    NOT NULL,
     atualizado_em TEXT    NOT NULL
 );
+
+-- Alarmes/lembretes (E5-07). Disparados pelo loop e notificados no Telegram.
+CREATE TABLE IF NOT EXISTS alarms (
+    id              INTEGER PRIMARY KEY,
+    horario         TEXT    NOT NULL,             -- HH:MM (hora local)
+    mensagem        TEXT    NOT NULL,
+    recorrencia     TEXT    NOT NULL DEFAULT 'diario',  -- diario | uma_vez
+    proximo_disparo TEXT    NOT NULL,
+    ativo           INTEGER NOT NULL DEFAULT 1,
+    criado_em       TEXT    NOT NULL
+);
 """
 
 

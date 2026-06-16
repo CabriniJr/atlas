@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+from atlas.alarmes import tick_alarmes
 from atlas.comandos import para_telegram
 from atlas.config import Config
 from atlas.controle import aplicar_overrides
@@ -123,8 +124,10 @@ def run(config: Config | None = None) -> None:
                 upd = _normalizar(update_cru)
                 if upd is not None:
                     processar_update(upd, config, db, adapter)
-            # Após cada janela de long-poll, verifica o que venceu na agenda.
-            tick(datetime.now(), carga.rotinas, db, disparar)
+            # Após cada janela de long-poll, verifica agenda e alarmes.
+            agora = datetime.now()
+            tick(agora, carga.rotinas, db, disparar)
+            tick_alarmes(agora, db, lambda msg: adapter.enviar(config.allowed_user_id, msg))
         except KeyboardInterrupt:  # noqa: PERF203
             _log.info("Encerrando.")
             break

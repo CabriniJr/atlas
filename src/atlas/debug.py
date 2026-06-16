@@ -23,7 +23,16 @@ from atlas.routines import carregar_rotinas
 # Marca aproximada de início do processo (import no boot).
 _INICIO = time.time()
 
-_TABELAS = ["activities", "ideas", "goals", "goal_links", "books", "runs", "routine_state"]
+_TABELAS = [
+    "activities",
+    "ideas",
+    "alarms",
+    "goals",
+    "goal_links",
+    "books",
+    "runs",
+    "routine_state",
+]
 
 
 def responder_debug(texto: str, db: Database, agora: datetime) -> str | None:
