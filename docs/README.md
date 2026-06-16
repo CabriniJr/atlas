@@ -49,6 +49,17 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 - [`processos/definicao-de-pronto.md`](processos/definicao-de-pronto.md) — DoR / DoD.
 - [`processos/revisao-e-curadoria.md`](processos/revisao-e-curadoria.md) — best-of-two na prática.
 
+### 📝 Specs — *como cada feature funciona em detalhe*
+Specs detalhadas que guiam a implementação (requisitos, fluxo, dados, erros, testes).
+- [`specs/barreira-entrada.md`](specs/barreira-entrada.md) — registro só com intenção (item 0).
+- [`specs/executor-e-notificacao.md`](specs/executor-e-notificacao.md) — ciclo de vida + notificação (item 1).
+- [`specs/scheduler.md`](specs/scheduler.md) — agendador + catch-up (item 2).
+- [`specs/meta-loop-chat.md`](specs/meta-loop-chat.md) — criar rotinas conversando (item 3).
+- [`specs/interface-config-chat.md`](specs/interface-config-chat.md) — comandos de config (item 4).
+- [`specs/trackers-via-chat.md`](specs/trackers-via-chat.md) — trackers pelo chat (item 5).
+- [`specs/pool-de-ideias.md`](specs/pool-de-ideias.md) — captura de ideias/lições + autoimplementação (prioridade máxima).
+- [`specs/alarmes.md`](specs/alarmes.md) — alarmes e lembretes pelo chat.
+
 ### 📖 Apoio
 - [`glossario.md`](glossario.md) — vocabulário do projeto.
 - [`superpowers/specs/`](superpowers/specs/) — specs de design (lastro histórico das decisões).

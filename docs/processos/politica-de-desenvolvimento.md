@@ -22,6 +22,15 @@ atualizado-em: 2026-06-16
 > best-of-two); aqui tratamos de **commits, branches, PR, pipeline e deploy**.
 > Decisão de base: [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md).
 
+## ⚡ Exceção MVP — branch única (economia de tokens)
+
+> **Diretriz do PO/PM (2026-06-16):** enquanto estamos no **MVP**, o
+> desenvolvimento segue numa **única branch** (sem `feat/<slug>` por tarefa, sem
+> PR por história) para economizar tokens e overhead. Commits continuam em
+> **Conventional Commits** para preservar o histórico e o SemVer futuro. Quando o
+> MVP amadurecer, voltamos ao fluxo branch→PR→CI descrito abaixo (que permanece a
+> regra-alvo). O best-of-two/curadoria também fica **opcional** nesta fase.
+
 ## Modelo: híbrido + trunk-based
 
 - **GitHub** hospeda o repositório, os **PRs** e a **CI** (testes/checks).

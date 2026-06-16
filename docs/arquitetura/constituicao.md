@@ -14,6 +14,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
+| 1.1    | 2026-06-16 | Tech Lead | Decisões #13 (barreira de entrada) e #14 (pool de desenvolvimento) | PO/PM |
 
 ---
 
@@ -37,6 +38,8 @@ atualizado-em: 2026-06-16
 | 10 | Orçamento de token | **Reativo** (pós-chamada) + teto global pré-despacho. | [0005](adr/ADR-0005-orcamento-reativo.md) |
 | 11 | Segurança do meta-loop | Código gerado nasce **inativo**; ativação exige revisão humana. | [0003](adr/ADR-0003-seguranca-meta-loop.md) |
 | 12 | CI/CD e versionamento | **Híbrido** (GitHub p/ PR+CI, deploy local pull), **trunk-based + tags**, **Conventional Commits + SemVer auto**, sem QA. | [0011](adr/ADR-0011-ci-cd-versionamento.md) |
+| 13 | Barreira de entrada | Atividade só é registrada com **intenção explícita** (trigger declarado, micro-sintaxe de tracker ou `/reg`); não-match vira ajuda, **não** registro. | [0013](adr/ADR-0013-barreira-de-entrada.md) |
+| 14 | Pool de desenvolvimento | O pool prioriza itens e **auto-gera** rotinas (meta-loop); a **ativação é sempre humana** — reforça #4 e #11, não os revoga. | [0014](adr/ADR-0014-pool-de-ideias-desenvolvimento.md) |
 
 ## Invariantes de comportamento
 

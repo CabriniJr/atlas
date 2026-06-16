@@ -22,6 +22,21 @@ atualizado-em: 2026-06-16
 > trackers e schedule pelo chat. Cada item vira tarefa de backlog + (quando muda
 > arquitetura) ADR. Ordem sugerida abaixo.
 
+> **Status de formalização (2026-06-16):** itens **0–5** formalizados. Itens maiores
+> (agnosticismo de provider, app autônomo, loja, Rust) ficam como **direção futura**
+> no [backlog](backlog.md). Pool de ideias = épico **E6** (prioridade máxima).
+>
+> | Item | Documento(s) |
+> |---|---|
+> | 0 — barreira | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md) · [spec](../specs/barreira-entrada.md) |
+> | 1 — executor + notificação | [spec](../specs/executor-e-notificacao.md) |
+> | 2 — scheduler | [spec](../specs/scheduler.md) |
+> | 3 — meta-loop por chat | [spec](../specs/meta-loop-chat.md) |
+> | 4 — comandos de config | [spec](../specs/interface-config-chat.md) |
+> | 5 — trackers por chat | [spec](../specs/trackers-via-chat.md) |
+> | + pool de ideias | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md) · [spec](../specs/pool-de-ideias.md) |
+> | + alarmes | [spec](../specs/alarmes.md) |
+
 ## 0. Bug atual a corrigir primeiro — "registra tudo"
 Hoje **qualquer** mensagem livre vira atividade (handler MVP). Precisa de uma
 **barreira de entrada**: só registrar quando houver intenção clara.

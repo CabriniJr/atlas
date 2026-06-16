@@ -14,6 +14,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança                              | Aprovado por |
 |--------|------------|-----------|--------------------------------------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação + 10 ADRs de endurecimento   | PO/PM        |
+| 1.1    | 2026-06-16 | Tech Lead | ADR-0013 (barreira) e ADR-0014 (pool) — aceitos | PO/PM |
 
 ---
 
@@ -47,6 +48,8 @@ atualizado-em: 2026-06-16
 | [0010](ADR-0010-observabilidade-claude-p.md) | Observabilidade via `claude -p` JSON | aceito | Endurecimento C10 |
 | [0011](ADR-0011-ci-cd-versionamento.md) | Política de CI/CD e versionamento | aceito | Política de desenvolvimento |
 | [0012](ADR-0012-empacotamento-docker.md) | Empacotamento e deploy via Docker | aceito | Sempre-ligado |
+| [0013](ADR-0013-barreira-de-entrada.md) | Barreira de entrada (registro só com intenção) | aceito | Lição de casa (item 0) |
+| [0014](ADR-0014-pool-de-ideias-desenvolvimento.md) | Pool de ideias → desenvolvimento (autoimplementação, ativação humana) | aceito | Lição de casa (pool, prioridade máxima) |
 
 ## Lastro
 
