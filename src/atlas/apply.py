@@ -7,7 +7,12 @@ API — não conhece domínio nem escreve no store direto (ADR-0015/ADR-0017).
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import sys
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 
 import yaml
@@ -95,3 +100,63 @@ def apply_manifests(
         except Exception as exc:  # noqa: BLE001 — resiliência por objeto
             res.falhas.append((ref, str(exc)))
     return res
+
+
+_DEFAULT_URL = os.environ.get("ATLAS_API_URL", "http://127.0.0.1:8080")
+
+
+def send_http(method: str, url: str, body: bytes, headers: dict[str, str]) -> bytes:
+    """Realiza a chamada HTTP real. Erros viram mensagens claras (ADR-0006)."""
+    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise RuntimeError(
+                "401 não autorizado — verifique --token / ATLAS_API_TOKEN"
+            ) from exc
+        raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"falha ao conectar em {url}: {exc.reason}") from exc
+
+
+def cli_apply(argv: list[str]) -> int:
+    """Subcomando ``atlas apply -f <arquivo>``. Retorna o código de saída."""
+    p = argparse.ArgumentParser(prog="atlas apply")
+    p.add_argument("-f", "--file", required=True, help="manifesto YAML")
+    p.add_argument("--api-url", default=_DEFAULT_URL, help="URL base da API")
+    p.add_argument(
+        "--token",
+        default=os.environ.get("ATLAS_API_TOKEN"),
+        help="Bearer token (ou ATLAS_API_TOKEN)",
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="valida e mostra, sem aplicar"
+    )
+    args = p.parse_args(argv)
+
+    try:
+        with open(args.file, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError as exc:
+        print(f"✗ não foi possível ler {args.file}: {exc}", file=sys.stderr)
+        return 1
+
+    try:
+        manifests = parse_manifests(text)
+    except ManifestoInvalido as exc:
+        print(f"✗ manifesto inválido: {exc}", file=sys.stderr)
+        return 1
+
+    res = apply_manifests(
+        manifests, args.api_url, args.token, dry_run=args.dry_run
+    )
+
+    prefixo = "[dry-run] " if args.dry_run else ""
+    for ref in res.aplicados:
+        print(f"{prefixo}✓ {ref}")
+    for ref, erro in res.falhas:
+        print(f"✗ {ref}: {erro}", file=sys.stderr)
+
+    return 0 if res.ok else 1

@@ -123,3 +123,22 @@ def test_apply_falha_parcial_continua_e_marca_nao_ok():
     assert res.ok is False
     assert res.aplicados == ["Tracker/peso"]
     assert res.falhas == [("Goal/peso-alvo", "HTTP 500")]
+
+
+from atlas.apply import cli_apply
+
+
+def test_cli_apply_dry_run_le_arquivo(tmp_path, capsys):
+    arq = tmp_path / "m.yaml"
+    arq.write_text(
+        "kind: Tracker\nname: peso\nlabels:\n  grupo: academia\nspec:\n  unit: kg\n"
+    )
+    rc = cli_apply(["-f", str(arq), "--api-url", "http://api", "--dry-run"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Tracker/peso" in out
+
+
+def test_cli_apply_arquivo_inexistente_retorna_erro(tmp_path):
+    rc = cli_apply(["-f", str(tmp_path / "nao-existe.yaml"), "--dry-run"])
+    assert rc != 0
