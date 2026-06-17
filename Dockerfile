@@ -13,6 +13,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# git + CA certs: necessários para a rotina repo-sync clonar/pull de repositórios.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Credencial para repos privados: o git lê de um arquivo montado em runtime
+# (secrets/git-credentials no host → /run/secrets/git-credentials, read-only).
+# Formato do arquivo: https://<usuario>:<TOKEN>@github.com
+# Sem o arquivo montado, só repos públicos funcionam.
+RUN git config --system credential.helper 'store --file=/run/secrets/git-credentials'
+
 # Instala dependências primeiro (cache de camada). O projeto não tem deps
 # externas hoje, mas isto mantém o build rápido quando tiver.
 COPY pyproject.toml ./

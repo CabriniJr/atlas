@@ -1,42 +1,45 @@
-# Unidade systemd para o Atlas (bot + API HTTP) como container Podman rootless.
+# Unidade systemd (user) para o Atlas rodando NATIVO no host.
 #
-# Instalação (usuário):
-#   mkdir -p ~/.config/systemd/user
-#   cp scripts/atlas.service ~/.config/systemd/user/atlas.service
+# Por que nativo (e não container): o bot usa as credenciais git do próprio
+# usuário (credential.helper apontando para secrets/git-credentials), então a
+# rotina repo-sync clona repositórios privados sem montar segredos num container.
+#
+# Pré-requisitos (uma vez):
+#   python3 -m venv ~/atlas/.venv
+#   ~/atlas/.venv/bin/pip install -e ~/atlas
+#   git config --global credential.helper "store --file=$HOME/atlas/secrets/git-credentials"
+#   loginctl enable-linger $USER        # serviço sobrevive a logout/reboot
+#
+# Instalação:
+#   cp ~/atlas/scripts/atlas.service ~/.config/systemd/user/atlas.service
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now atlas
 #
-# Atualização de código:
-#   bash scripts/atlasctl.sh atualizar   # rebuild + recria container
-#   systemctl --user restart atlas       # reinicia a unidade
-#
-# Logs:
-#   journalctl --user -u atlas -f
+# Operação:
+#   systemctl --user restart atlas      # após mudar código (install -e reflete o src)
+#   systemctl --user status atlas
+#   journalctl --user -u atlas -f       # logs ao vivo
 
 [Unit]
-Description=Atlas — motor de rotinas pessoais (Podman)
+Description=Atlas — motor de rotinas pessoais (host nativo)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=forking
-# Garante que o container seja removido antes de criar um novo
-ExecStartPre=-/usr/bin/podman rm -f atlas
-
-ExecStart=/usr/bin/podman run -d \
-  --name atlas \
-  --restart=no \
-  --env-file %h/atlas/.env \
-  -p 8080:8080 \
-  -v atlas-data:/data:Z \
-  atlas:latest
-
-ExecStop=/usr/bin/podman stop atlas
-ExecStopPost=-/usr/bin/podman rm -f atlas
-
-Restart=on-failure
-RestartSec=10
-TimeoutStartSec=30
+Type=simple
+WorkingDirectory=%h/atlas
+# Segredos (TELEGRAM_TOKEN, ATLAS_ALLOWED_USER_ID, ATLAS_API_TOKEN) vêm do .env.
+EnvironmentFile=%h/atlas/.env
+Environment=ATLAS_DB_PATH=%h/atlas/data/atlas.sqlite
+Environment=ATLAS_ROUTINES_DIR=%h/atlas/routines
+Environment=ATLAS_DOCS_DIR=%h/atlas/docs
+Environment=ATLAS_API_PORT=8080
+# inclui ~/.local/bin p/ achar o binário 'claude' (IA) instalado pelo usuário
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
+ExecStart=%h/atlas/.venv/bin/python -m atlas
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
 
 [Install]
 WantedBy=default.target
