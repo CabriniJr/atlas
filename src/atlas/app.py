@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Protocol
 
 import atlas.rotinas.checkin  # noqa: F401 — registra collect de check-in
+import atlas.rotinas.checkup_semanal  # noqa: F401 — registra collect de checkup semanal
+import atlas.rotinas.estudos  # noqa: F401 — registra collect de estudos
 import atlas.rotinas.resumo_diario  # noqa: F401 — registra collect no registry
 import atlas.rotinas.treino  # noqa: F401 — registra collect de treino
 from atlas.alarmes import tick_alarmes

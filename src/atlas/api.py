@@ -992,7 +992,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 _CMD_VERBS = [
     "/list", "/get", "/describe", "/apply", "/delete", "/resources",
-    "/docs", "/snip", "/help",
+    "/docs", "/snip", "/help", "/uso",
     "/ls", "/r", "/cat", "/d", "/a", "/rm",
 ]
 _VERBS_KIND = {"/list", "/get", "/describe", "/apply", "/delete", "/ls", "/r", "/cat", "/d", "/a", "/rm"}
@@ -1016,6 +1016,18 @@ def _cmd_router(text: str, store: ResourceStore) -> str:
     docs = responder_docs(text, agora, store=store)
     if docs is not None:
         return docs
+
+    from atlas.db import Database as _DB
+    from atlas.uso import responder_uso
+    _db_path = __import__("os").environ.get("ATLAS_DB_PATH", "atlas.sqlite")
+    try:
+        _db = _DB(_db_path)
+        uso = responder_uso(text, _db, agora)
+        if uso is not None:
+            return uso
+    except Exception:  # noqa: BLE001
+        pass
+
     verbos = responder_verbos(text, store, agora)
     if verbos is not None:
         return verbos

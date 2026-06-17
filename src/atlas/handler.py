@@ -25,6 +25,7 @@ from atlas.metas import responder_metas
 from atlas.pool import responder_pool
 from atlas.timer import responder_timer
 from atlas.trackers import registrar_por_sintaxe, responder_trackers
+from atlas.uso import responder_uso
 from atlas.verbos import responder_verbos
 
 _AJUDA_BARREIRA = (
@@ -64,6 +65,10 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
 
     if texto == "/status":
         return _status(db, agora)
+
+    resposta_uso = responder_uso(texto, db, agora)
+    if resposta_uso is not None:
+        return resposta_uso
 
     if texto == "/note" or texto.startswith("/note "):
         return _nota_livre(texto, db, agora)

@@ -1,0 +1,6 @@
+nome = "checkup-semanal"
+descricao = "Checkup semanal de metas: recalcula progresso de todos os Goals ativos."
+agenda = "0 10 * * 1"
+modelo = "none"
+saida = "telegram"
+ativa = true

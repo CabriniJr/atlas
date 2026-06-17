@@ -50,6 +50,7 @@ COMANDOS: list[tuple[str, str]] = [
     ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Routine|Doc)"),
     # --- system ---
     ("status", "Daily summary"),
+    ("uso", "Routine run history: /uso [<n>]"),
     ("debug", "Diagnostics: /debug [status|runs|routines|db|env]"),
     ("help", "Show this help"),
 ]
@@ -142,8 +143,10 @@ def texto_ajuda() -> str:
 
         "📊  Sistema\n"
         "  /status                              resumo de hoje\n"
+        "  /uso                                 histórico de execuções (últimos 30 dias)\n"
+        "  /uso 10                              últimas 10 execuções\n"
         "  /debug                               diagnóstico (db, runs, env)\n"
-        "  /debug runs 10                       últimas 10 execuções\n"
+        "  /debug runs 10                       últimas 10 execuções (detalhe)\n"
         "  /help                                esta mensagem\n\n"
 
         "Kinds ativos: Idea · Task · RoutineRequest · Tracker · Alarm ·\n"
