@@ -1,0 +1,8 @@
+nome        = "check-treino"
+descricao   = "Coleta diária de treino físico — pergunta trackers e metas do grupo 'treino'."
+label       = "treino"
+coletar     = "coletar-por-label"
+agenda      = "0 20 * * 1,2,4"   # seg, ter, qui às 20h
+modelo      = "none"
+saida       = "telegram"
+ativa       = false               # ative com: /ativar check-treino

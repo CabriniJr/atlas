@@ -43,6 +43,8 @@ class Rotina:
     store: str | None = None
     saida: str | None = None
     ativa: bool = True
+    label: str | None = None   # grupo de recursos para coletar-por-label
+    coletar: str | None = None  # nome do collect no registry; default = nome da rotina
 
     # Presença de arquivos opcionais na pasta
     tem_collect: bool = False
@@ -149,6 +151,8 @@ def _carregar_uma(pasta: Path, toml_path: Path) -> Rotina:
         store=dados.get("store"),
         saida=dados.get("saida"),
         ativa=dados.get("ativa", True),
+        label=dados.get("label"),
+        coletar=dados.get("coletar"),
         tem_collect=any(pasta.glob("collect.*")),
         tem_prompt=any(pasta.glob("prompt.*")),
     )
