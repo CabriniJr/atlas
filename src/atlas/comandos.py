@@ -12,89 +12,166 @@ COMANDOS: list[tuple[str, str]] = [
     ("start", "Welcome & quick start"),
     # --- kubectl-like verbs (E0-03) --
     ("resources", "List all kinds in the store"),
-    ("list", "List objects of a kind: /list <Kind>"),
+    ("list", "List objects: /list <Kind> [-l key=val]"),
     ("get", "Get an object: /get <Kind> <name>"),
     ("describe", "Full detail: /describe <Kind> <name>"),
-    ("apply", "Create/update: /apply <Kind> <name> [k=v …]"),
+    ("apply", "Create/update: /apply <Kind> <name> [labels.k=v spec.k=v]"),
     ("delete", "Delete: /delete <Kind> <name>"),
     # --- capture --
-    ("idea", "Capture an idea"),
-    ("task", "Capture a task / homework"),
-    ("queue", "Queue a new routine request (autogen candidate)"),
-    ("reg", "Log a free-form note: /reg <text> or /reg #<domain> <text>"),
-    ("note", "Log a note (legacy alias for /reg)"),
-    ("pool", "List / inspect / manage the idea pool"),
-    ("track", "Trackers: list / new / detail (e.g. 'weight: 82.3')"),
+    ("idea", "Capture an idea → Kind Idea"),
+    ("task", "Capture a task → Kind Task"),
+    ("queue", "Queue a routine request → Kind RoutineRequest"),
+    ("reg", "Log a free note: /reg [#domain] <text>"),
+    ("note", "Alias for /reg"),
+    ("pool", "Manage idea pool: /pool [<id> prio|edit|done|archive|drop]"),
+    # --- trackers ---
+    ("track", "Trackers: list / new / detail / rm"),
+    # --- goals ---
+    ("goal", "Goals: /goal set|status|check|done <name>"),
+    ("goals", "List all goals"),
+    # --- timers ---
+    ("timer", "Stopwatch: /timer start|finish|status <name>"),
+    ("timers", "List running timers"),
+    # --- alarms ---
+    ("alarm", "Set reminder: /alarm HH:MM <msg> [@once]"),
+    ("alarms", "List active alarms"),
+    # --- routines ---
     ("routines", "List loaded routines"),
-    ("run", "Run a routine now"),
+    ("routine", "Routine detail / set field: /routine <name> [set agenda <cron>]"),
+    ("run", "Run a routine now: /run <name>"),
     ("activate", "Activate a routine"),
     ("deactivate", "Deactivate a routine"),
-    ("alarm", "Set a reminder (/alarm HH:MM <msg>)"),
-    ("alarms", "List active alarms"),
-    ("timer", "Stopwatch: /timer start|finish|status <name>"),
-    ("timers", "List active timers"),
+    # --- docs ---
+    ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
+    # --- system ---
     ("status", "Daily summary"),
-    ("debug", "Diagnostics & system info (try /debug help)"),
-    ("help", "Show available commands"),
+    ("debug", "Diagnostics: /debug [status|runs|routines|db|env]"),
+    ("help", "Show this help"),
 ]
 
 
 def texto_ajuda() -> str:
-    """Render ``/help`` (plain text, grouped by area)."""
+    """Render ``/help`` — referência completa com exemplos."""
     return (
-        "🧭 Atlas — command reference\n\n"
-        "🔷 API de objetos (kubectl-like)\n"
-        "  /resources                         list all kinds in store\n"
-        "  /list <Kind>                       list all objects of a kind\n"
-        "  /get <Kind> <name>                 get a specific object\n"
-        "  /describe <Kind> <name>            full detail (spec + status)\n"
-        "  /apply <Kind> <name> [k=v …]       create or update (upsert)\n"
-        "  /delete <Kind> <name>              remove an object\n\n"
-        "💡 Capture\n"
-        "  /idea <text>      capture an idea  → Kind: Idea\n"
-        "  /task <text>      capture a task   → Kind: Task\n"
-        "  /queue <text>     queue a routine  → Kind: Routine\n"
-        "  /reg <text>       log a free note (use /reg #<domain> <text> for domain)\n"
-        "  /note <text>      legacy alias for /reg\n\n"
-        "🗂 Pool\n"
-        "  /pool             list open items (by priority)\n"
-        "  /pool <state>     filter (capturada|priorizada|gerada|ativada)\n"
-        "  /pool <id>        item detail\n"
-        "  /pool <id> prio <n> | edit <text> | done | archive | drop\n\n"
-        "📈 Trackers\n"
-        "  /track            list trackers\n"
-        "  /track new <name> [unit]   create (then log with '<name>: <value>')\n"
-        "  /track <name>     history; /track <name> rm to remove\n\n"
-        "🧩 Routines\n"
-        "  /routines         list loaded routines\n"
-        "  /routine <name>   routine detail\n"
-        "  /run <name>       run a routine now\n"
-        "  /activate <name> | /deactivate <name>\n\n"
-        "⏰ Alarms\n"
-        "  /alarm HH:MM <msg>   set a reminder (add @once for one-shot)\n"
-        "  /alarms              list active alarms\n"
-        "  /alarm <id> remove   remove an alarm\n\n"
-        "⏱ Timers\n"
-        "  /timer start <name>    start a stopwatch (Kind: Timer)\n"
-        "  /timer finish <name>   stop and log duration to activities\n"
-        "  /timer status <name>   show elapsed time\n"
-        "  /timers                list running timers\n\n"
-        "📊 System\n"
-        "  /status           daily summary\n"
-        "  /debug            diagnostics (see /debug help)\n"
-        "  /help             this message"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🧭  Atlas — referência de comandos\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        "🔷  API de objetos (kubectl-like)\n"
+        "  /resources                         lista todos os kinds no store\n"
+        "  /list <Kind>                        lista todos os objetos de um kind\n"
+        "  /list Tracker -l domain=fisico      filtra por label (AND)\n"
+        "  /get <Kind> <name>                  busca um objeto específico\n"
+        "  /describe <Kind> <name>             detalhe completo (spec + status)\n"
+        "  /apply <Kind> <name> [k=v …]        cria ou atualiza (upsert)\n"
+        "  /apply Tracker peso labels.routine=treino\n"
+        "  /delete <Kind> <name>               remove um objeto\n\n"
+
+        "💡  Captura rápida\n"
+        "  /idea implementar dashboard          → Kind Idea, pool\n"
+        "  /task revisar relatório              → Kind Task, pool\n"
+        "  /queue nova rotina de meditação      → Kind RoutineRequest, pool\n"
+        "  /reg lembrei de algo importante      → nota livre (domínio: geral)\n"
+        "  /note texto                          → alias para /reg\n"
+        "  /reg #fisico treino pesado hoje      → nota com domínio explícito\n"
+        "  /reg #estudo capítulo 3 python       → domínios: fisico·estudo·sono·saude·trabalho\n\n"
+
+        "🗂  Pool de ideias\n"
+        "  /pool                                lista itens abertos (por prioridade)\n"
+        "  /pool capturada                      filtra por estado\n"
+        "  /pool 3                              detalhe do item #3\n"
+        "  /pool 3 prio 1                       eleva prioridade\n"
+        "  /pool 3 edit novo texto              edita corpo\n"
+        "  /pool 3 done                         marca como ativado\n"
+        "  /pool 3 archive | drop               arquiva ou descarta\n\n"
+
+        "📈  Trackers  (registro por micro-sintaxe)\n"
+        "  /track                               lista trackers ativos + último valor\n"
+        "  /track new peso kg                   cria tracker 'peso' em kg\n"
+        "  /track peso                          histórico + stats\n"
+        "  /track peso rm                       desativa\n"
+        "  peso: 82.3                           registra direto no chat\n\n"
+
+        "🎯  Metas\n"
+        "  /goal set peso target=80 unit=kg tracker=peso start=90 direction=down\n"
+        "  /goals                               lista todas as metas\n"
+        "  /goal status peso                    progresso detalhado\n"
+        "  /goal check peso                     recalcula do último tracker\n"
+        "  /goal done peso                      marca como atingida\n\n"
+
+        "⏱  Timers (cronômetro → registra em activities)\n"
+        "  /timer start estudo                  inicia → Kind Timer\n"
+        "  /timer finish estudo                 para e grava duração\n"
+        "  /timer status estudo                 tempo decorrido\n"
+        "  /timers                              lista timers ativos\n\n"
+
+        "⏰  Alarmes\n"
+        "  /alarm 07:30 bom dia!                lembrete diário\n"
+        "  /alarm 23:00 dormir @once            uma vez só\n"
+        "  /alarms                              lista alarmes ativos\n"
+        "  /alarm 2 remove                      remove alarme #2\n\n"
+
+        "🧩  Rotinas\n"
+        "  /routines                            lista todas as rotinas\n"
+        "  /routine treino                      detalhe + estado\n"
+        "  /routine checkin set agenda 0 9 * * *   muda horário\n"
+        "  /run resumo-diario                   executa agora\n"
+        "  /activate checkin                    ativa check-in diário\n"
+        "  /deactivate treino                   desativa\n\n"
+
+        "📚  Documentação inline\n"
+        "  /docs                                índice de tópicos\n"
+        "  /docs kinds                          catálogo de kinds + spec padrão\n"
+        "  /docs backlog                        backlog priorizado\n"
+        "  /docs arch                           visão geral da arquitetura\n"
+        "  /docs adr 15                         ADR-0015 (core API de objetos)\n"
+        "  /docs spec trackers                  spec técnica de trackers\n\n"
+
+        "📊  Sistema\n"
+        "  /status                              resumo de hoje\n"
+        "  /debug                               diagnóstico (db, runs, env)\n"
+        "  /debug runs 10                       últimas 10 execuções\n"
+        "  /help                                esta mensagem\n\n"
+
+        "Kinds ativos: Idea · Task · RoutineRequest · Tracker · Alarm ·\n"
+        "              Timer · Goal · Routine · CheckIn\n"
+        "Docs: /docs kinds  |  Arquitetura: /docs arch"
     )
 
 
 def texto_boas_vindas() -> str:
-    """``/start`` message."""
+    """``/start`` — apresentação rica do Atlas."""
     return (
-        "👋 Welcome to Atlas — your personal routine engine.\n\n"
-        "Capture things straight from chat and I'll store them:\n"
-        "  /idea buy a webcam\n"
-        "  /task review the report\n"
-        "  /pool   → see your list\n\n"
-        "Type /help for the full command list, or /debug for system info."
+        "👋  Bem-vindo ao Atlas!\n\n"
+        "Sou seu motor pessoal de rotinas — tudo que você registra aqui\n"
+        "vira um objeto que pode ser inspecionado, filtrado e automatizado.\n\n"
+        "━━  Comece por aqui  ━━\n\n"
+        "Capture ideias e tarefas:\n"
+        "  /idea implementar dashboard web\n"
+        "  /task revisar o relatório até sexta\n"
+        "  /pool → veja sua lista priorizada\n\n"
+        "Rastreie métricas:\n"
+        "  /track new peso kg\n"
+        "  peso: 82.3          ← registra direto no chat\n"
+        "  /track peso         ← histórico + stats\n\n"
+        "Defina metas:\n"
+        "  /goal set peso target=80 unit=kg tracker=peso start=90 direction=down\n"
+        "  /goal check peso    ← calcula progresso\n\n"
+        "Cronometre atividades:\n"
+        "  /timer start estudo\n"
+        "  /timer finish estudo → grava duração automaticamente\n\n"
+        "Configure alertas:\n"
+        "  /alarm 07:30 acordar!\n"
+        "  /alarm 22:00 dormir @once\n\n"
+        "Inspecione qualquer objeto:\n"
+        "  /resources          ← todos os kinds no store\n"
+        "  /list Tracker -l domain=fisico\n"
+        "  /describe Goal peso\n\n"
+        "Leia a documentação direto aqui:\n"
+        "  /docs               ← índice\n"
+        "  /docs backlog       ← o que está sendo construído\n"
+        "  /docs kinds         ← todos os tipos de objeto\n\n"
+        "  /help para a referência completa de comandos."
     )
 
 

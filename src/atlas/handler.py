@@ -19,6 +19,7 @@ from atlas.controle import responder_controle
 from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.debug import responder_debug
+from atlas.docs_cmd import responder_docs
 from atlas.metas import responder_metas
 from atlas.pool import responder_pool
 from atlas.timer import responder_timer
@@ -46,6 +47,11 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
         if texto == "/start":
             return texto_boas_vindas()
         return texto_ajuda()
+
+    # Documentação inline: /docs [topic]
+    resposta_docs = responder_docs(texto, agora, store=store)
+    if resposta_docs is not None:
+        return resposta_docs
 
     if texto == "/status":
         return _status(db, agora)

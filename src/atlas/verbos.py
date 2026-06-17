@@ -90,6 +90,9 @@ def _cmd_get(partes: list[str], store: ResourceStore) -> str:
 # --- /describe <Kind> <name> --------------------------------------------------
 
 
+_DOC_MAX_CHARS = 3_500
+
+
 def _cmd_describe(partes: list[str], store: ResourceStore) -> str:
     if len(partes) < 3:
         return "Usage: /describe <Kind> <name>   e.g. /describe Tracker weight"
@@ -97,6 +100,29 @@ def _cmd_describe(partes: list[str], store: ResourceStore) -> str:
     r = store.get(kind, name)
     if r is None:
         return f"Not found: {kind}/{name}"
+
+    # Doc kind: render body content directly (plain-text mode)
+    if r.kind == "Doc":
+        body = r.spec.get("body", "")
+        title = r.spec.get("title", r.name)
+        source = r.spec.get("source", "")
+        if body.startswith("---"):
+            fim = body.find("\n---", 3)
+            if fim != -1:
+                body = body[fim + 4:].lstrip("\n")
+        total = len(body)
+        if total > _DOC_MAX_CHARS:
+            body = body[:_DOC_MAX_CHARS]
+            nl = body.rfind("\n")
+            if nl > 0:
+                body = body[:nl]
+            body += f"\n\n… [{total} chars] /docs {r.name}"
+        header = f"📄 {title}"
+        if source:
+            header += f"  [src: {source}]"
+        labels_str = "  ".join(f"{k}={v}" for k, v in r.labels.items())
+        return f"{header}\nlabels: {labels_str}\n\n{body}"
+
     secoes = [
         f"Name:       {r.name}",
         f"Kind:       {r.kind}",
