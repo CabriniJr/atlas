@@ -272,6 +272,8 @@ def _sync_routines(rotinas: list[Rotina], store: ResourceStore, agora: datetime)
                 "model": rot.modelo,
                 "triggers": rot.triggers,
                 "active": rot.ativa,
+                "label": rot.label or "",
+                "coletar": rot.coletar or "",
             },
         )
         store.apply(res, agora)
