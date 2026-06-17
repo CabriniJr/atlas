@@ -123,7 +123,10 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
 .md th{background:var(--bg3);color:var(--blue);padding:4px 8px;border:1px solid var(--border);text-align:left}
 .md td{padding:3px 8px;border:1px solid var(--border)}
 .md tr:nth-child(even) td{background:rgba(255,255,255,.02)}
-#cli-section{border-top:1px solid var(--border);height:220px;display:flex;flex-direction:column;flex-shrink:0;background:#0a0e13}
+#cli-section{border-top:1px solid var(--border);height:220px;min-height:80px;max-height:80vh;display:flex;flex-direction:column;flex-shrink:0;background:#0a0e13;position:relative}
+#cli-resize{height:4px;cursor:ns-resize;background:transparent;flex-shrink:0;transition:background .15s}
+#cli-resize:hover,#cli-resize.dragging{background:var(--blue)}
+#cli-resize::before{content:'';display:block;width:32px;height:2px;background:var(--border);border-radius:1px;margin:1px auto 0}
 #cli-output{flex:1;overflow-y:auto;padding:8px 14px;font-size:12px;line-height:1.6}
 .cli-cmd{color:var(--green)}
 .cli-out{color:var(--text);white-space:pre-wrap;word-break:break-word}
@@ -169,8 +172,9 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
   </div>
   <div id="resource-list"><div class="loading">carregando…</div></div>
   <div id="cli-section">
+    <div id="cli-resize"></div>
     <div id="cli-output"></div>
-    <div id="cli-hint">Tab → completa · ↑↓ → histórico · Ctrl+L → limpa</div>
+    <div id="cli-hint">Tab → completa · ↑↓ → histórico · Ctrl+L → limpa · drag ↕ para redimensionar</div>
     <div id="cli-bar">
       <span id="cli-prompt">$</span>
       <div id="cli-suggestions"></div>
@@ -446,6 +450,54 @@ function markdownToHtml(md) {
 function isMarkdown(text) {
   return /^#+\s|```|\*\*|\|.+\|/.test(text);
 }
+
+// ── Resize CLI ───────────────────────────────────────────────────────────────
+(function() {
+  const handle = document.getElementById('cli-resize');
+  const section = document.getElementById('cli-section');
+  const MIN_H = 80, MAX_H = window.innerHeight * 0.8;
+  let startY, startH, dragging = false;
+
+  const savedH = localStorage.getItem('atlas_cli_h');
+  if (savedH) section.style.height = savedH + 'px';
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true;
+    startY = e.clientY;
+    startH = section.offsetHeight;
+    handle.classList.add('dragging');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const delta = startY - e.clientY;
+    const newH = Math.min(Math.max(startH + delta, MIN_H), window.innerHeight * 0.8);
+    section.style.height = newH + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    localStorage.setItem('atlas_cli_h', section.offsetHeight);
+  });
+
+  // Duplo clique: toggle entre mínimo e altura salva/padrão
+  handle.addEventListener('dblclick', () => {
+    const curr = section.offsetHeight;
+    if (curr <= MIN_H + 10) {
+      const restore = +(localStorage.getItem('atlas_cli_h_prev') || 220);
+      section.style.height = restore + 'px';
+    } else {
+      localStorage.setItem('atlas_cli_h_prev', curr);
+      section.style.height = MIN_H + 'px';
+    }
+  });
+})();
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
 const cliInput = document.getElementById('cli-input');
