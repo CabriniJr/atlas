@@ -25,5 +25,4 @@ data/
 
 # Coisas que não precisam rodar dentro do container
 tests
-docs
 resumo

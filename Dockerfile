@@ -7,7 +7,8 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ATLAS_DB_PATH=/data/atlas.sqlite \
-    ATLAS_ROUTINES_DIR=/app/routines
+    ATLAS_ROUTINES_DIR=/app/routines \
+    ATLAS_DOCS_DIR=/app/docs
 
 WORKDIR /app
 
@@ -19,6 +20,7 @@ RUN pip install --no-cache-dir .
 
 # Código que muda com frequência por último.
 COPY routines ./routines
+COPY docs ./docs
 
 # Usuário não-root + diretório de dados persistente (volume).
 RUN useradd --create-home --uid 10001 atlas \
