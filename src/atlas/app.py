@@ -102,6 +102,9 @@ def run(config: Config | None = None) -> None:
     db = Database(config.db_path)
     adapter = TelegramAdapter(config.telegram_token, poll_timeout=config.poll_timeout)
 
+    # Remove webhook antes do long-poll (evita HTTP 409 Conflict).
+    adapter.limpar_webhook()
+
     # Registra o menu de comandos do Telegram (best-effort; não derruba o boot).
     try:
         adapter.registrar_comandos(para_telegram())

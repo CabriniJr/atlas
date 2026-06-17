@@ -178,7 +178,6 @@ def _listar_por_label(store: ResourceStore | None, seletor: dict[str, str]) -> s
     linhas = [f"📚 Doc -l {','.join(f'{k}={v}' for k,v in seletor.items())} ({len(docs)})"]
     for d in docs:
         chars = d.status.get("chars", "?")
-        title = d.spec.get("title", d.name)
         linhas.append(f"  {d.name:<30} {chars} chars  → /docs {d.name}")
     return "\n".join(linhas)
 

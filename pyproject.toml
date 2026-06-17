@@ -22,6 +22,8 @@ extend-exclude = [".claude", ".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# api.py tem CSS/HTML/JS minificado inline — linhas longas são inevitáveis
+per-file-ignores = {"src/atlas/api.py" = ["E501"]}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

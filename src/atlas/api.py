@@ -53,49 +53,142 @@ def _html_dashboard() -> str:
   --border:#30363d;--text:#c9d1d9;--muted:#8b949e;
   --blue:#58a6ff;--green:#3fb950;--red:#f85149;--orange:#d29922;
   --purple:#bc8cff;--yellow:#e3b341;
+  --sidebar-w:240px;--bottom-h:200px;--titlebar-h:35px;
 }
-body{background:var(--bg);color:var(--text);font-family:'SF Mono',Consolas,monospace;font-size:13px;display:flex;height:100vh;overflow:hidden}
-#sidebar{width:200px;min-width:200px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column}
-#sidebar h1{padding:16px;font-size:14px;color:var(--blue);border-bottom:1px solid var(--border);letter-spacing:1px}
-#kinds{flex:1;overflow-y:auto;padding:8px 0}
-.kind-btn{display:flex;justify-content:space-between;align-items:center;width:100%;padding:6px 16px;background:none;border:none;color:var(--muted);cursor:pointer;text-align:left;font-family:inherit;font-size:12px;transition:all .15s}
-.kind-btn:hover,.kind-btn.active{background:var(--bg3);color:var(--text)}
-.kind-btn .badge{background:var(--bg3);color:var(--blue);border-radius:8px;padding:1px 7px;font-size:11px;min-width:20px;text-align:center}
-.kind-btn.active .badge{background:var(--blue);color:var(--bg)}
-#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#toolbar{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--bg2)}
-#toolbar h2{font-size:13px;color:var(--text);flex:1}
-#filter{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-family:inherit;font-size:12px;width:240px}
-#filter::placeholder{color:var(--muted)}
-#filter:focus{outline:none;border-color:var(--blue)}
-#resource-list{flex:1;overflow-y:auto;padding:12px}
-.resource-row{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:6px;cursor:pointer;transition:all .15s;display:flex;align-items:flex-start;gap:10px}
-.resource-row:hover{border-color:var(--blue);background:var(--bg3)}
-.resource-row.selected{border-color:var(--blue);background:#1c2433}
-.res-name{color:var(--blue);font-weight:600;font-size:13px;flex-shrink:0}
-.res-labels{flex:1;display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
-.label-chip{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11px;color:var(--muted)}
-.label-chip.label-active-true{border-color:var(--green);color:var(--green)}
-.label-chip.label-state-done{border-color:var(--purple);color:var(--purple)}
-.label-chip.label-state-running{border-color:var(--orange);color:var(--orange)}
-.res-status{font-size:11px;color:var(--muted);flex-shrink:0;text-align:right}
-#detail{width:360px;min-width:280px;border-left:1px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow:hidden}
-#detail-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
-#detail-title{flex:1;font-size:13px;color:var(--blue);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;transition:all .15s}
+/* ── Layout base ── */
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'SF Mono',Consolas,monospace;font-size:13px;display:flex;flex-direction:column}
+/* ── Titlebar ── */
+#titlebar{height:var(--titlebar-h);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:12px;flex-shrink:0;user-select:none}
+#titlebar .logo{color:var(--blue);font-weight:700;font-size:13px;letter-spacing:1px}
+#titlebar .sep{color:var(--border)}
+#titlebar #filter{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:5px;font-family:inherit;font-size:12px;width:220px}
+#titlebar #filter::placeholder{color:var(--muted)}
+#titlebar #filter:focus{outline:none;border-color:var(--blue)}
+#titlebar .spacer{flex:1}
+/* ── Workspace (sidebar + editor) ── */
+#workspace{flex:1;display:flex;overflow:hidden;min-height:0}
+/* ── Sidebar ── */
+#sidebar{width:var(--sidebar-w);min-width:120px;max-width:500px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+#sidebar-head{padding:8px 12px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;gap:6px}
+#tree{flex:1;overflow-y:auto;padding:4px 0}
+/* ── Sidebar resize handle ── */
+#sb-resize{width:4px;cursor:ew-resize;flex-shrink:0;background:transparent;transition:background .12s;position:relative;z-index:5}
+#sb-resize:hover,#sb-resize.drag{background:var(--blue)}
+/* ── Editor area ── */
+#editor{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+/* ── Tab bar ── */
+#tabbar{height:35px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0;overflow-x:auto;overflow-y:hidden}
+#tabbar::-webkit-scrollbar{height:2px}
+#tabbar::-webkit-scrollbar-thumb{background:var(--border)}
+.tab{display:flex;align-items:center;gap:6px;padding:0 14px 0 12px;border-right:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;transition:background .1s;position:relative;min-width:100px;max-width:200px}
+.tab:hover{background:var(--bg3);color:var(--text)}
+.tab.active{background:var(--bg);color:var(--text);border-bottom:1px solid var(--blue)}
+.tab .tab-icon{font-size:11px;flex-shrink:0}
+.tab .tab-name{flex:1;overflow:hidden;text-overflow:ellipsis}
+.tab .tab-close{opacity:0;font-size:12px;line-height:1;padding:2px 4px;border-radius:3px;margin-left:2px;flex-shrink:0}
+.tab:hover .tab-close,.tab.active .tab-close{opacity:.5}
+.tab .tab-close:hover{opacity:1;background:var(--bg3);color:var(--red)}
+.tab-welcome{color:var(--muted);font-style:italic}
+/* ── Editor content ── */
+#editor-content{flex:1;overflow:auto;padding:20px 24px;min-height:0}
+/* ── Bottom resize handle ── */
+#bot-resize{height:4px;cursor:ns-resize;flex-shrink:0;background:transparent;transition:background .12s}
+#bot-resize:hover,#bot-resize.drag{background:var(--blue)}
+/* ── Bottom panel ── */
+#bottom{height:var(--bottom-h);min-height:60px;max-height:70vh;background:#0a0e13;border-top:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+#bot-tabbar{height:30px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0}
+.bot-tab{display:flex;align-items:center;padding:0 14px;cursor:pointer;font-size:11px;color:var(--muted);border-right:1px solid var(--border)}
+.bot-tab:hover{color:var(--text)}
+.bot-tab.active{color:var(--text);border-bottom:2px solid var(--blue)}
+/* ── CLI ── */
+#cli-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+#cli-output{flex:1;overflow-y:auto;padding:6px 14px;font-size:12px;line-height:1.6}
+.cli-cmd{color:var(--green)}
+.cli-out{color:var(--text);white-space:pre-wrap;word-break:break-word}
+.cli-err{color:var(--red);white-space:pre-wrap}
+.cli-sep{color:var(--border);user-select:none;font-size:11px}
+#cli-bar{display:flex;align-items:center;padding:5px 12px;border-top:1px solid var(--border);flex-shrink:0;position:relative}
+#cli-prompt{color:var(--green);margin-right:8px;flex-shrink:0}
+#cli-input{flex:1;background:none;border:none;color:var(--text);font-family:inherit;font-size:13px;outline:none;caret-color:var(--green)}
+#cli-input::placeholder{color:var(--border)}
+#cli-suggestions{position:absolute;bottom:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;max-height:160px;overflow-y:auto;z-index:30}
+.sug{padding:4px 14px;cursor:pointer;color:var(--muted);font-size:12px}
+.sug:hover,.sug.active{background:var(--bg3);color:var(--text)}
+.sug-match{color:var(--blue);font-weight:600}
+/* ── Tree items ── */
+.kind-row{display:flex;align-items:center;gap:5px;padding:4px 8px 4px 10px;cursor:pointer;font-size:12px;color:var(--muted);user-select:none;transition:background .1s}
+.kind-row:hover{background:var(--bg3);color:var(--text)}
+.kind-row .arrow{width:14px;font-size:10px;flex-shrink:0;transition:transform .12s}
+.kind-row.open .arrow{transform:rotate(90deg)}
+.kind-row .k-name{flex:1}
+.kind-row .k-count{font-size:10px;background:var(--bg3);border-radius:8px;padding:0 5px;color:var(--muted)}
+.res-row{display:flex;align-items:center;gap:5px;padding:3px 8px 3px 26px;cursor:pointer;font-size:12px;color:var(--muted);transition:background .1s;border-left:2px solid transparent}
+.res-row:hover{background:rgba(88,166,255,.06);color:var(--text)}
+.res-row.active{background:rgba(88,166,255,.1);color:var(--blue);border-left-color:var(--blue)}
+.res-row .r-icon{font-size:10px;flex-shrink:0}
+.res-row .r-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ── Editor content styles ── */
+.welcome{text-align:center;padding:60px 20px;color:var(--muted)}
+.welcome .w-logo{font-size:40px;margin-bottom:16px}
+.welcome h2{color:var(--text);font-size:16px;margin-bottom:8px}
+.welcome p{font-size:12px;line-height:1.8}
+.welcome kbd{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 6px;font-size:11px}
+.r-card{max-width:860px}
+.r-card .r-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.r-card .r-header .r-kind{font-size:11px;color:var(--muted);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:2px 8px}
+.r-card .r-header .r-name-big{font-size:18px;color:var(--text);font-weight:600}
+.r-card .r-header .r-actions{margin-left:auto;display:flex;gap:6px}
+.btn{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:inherit;font-size:11px;transition:all .15s}
 .btn:hover{border-color:var(--blue);color:var(--blue)}
 .btn.danger:hover{border-color:var(--red);color:var(--red)}
-.btn.primary{border-color:var(--blue);background:#1c2d3e;color:var(--blue)}
-#detail-body{flex:1;overflow-y:auto;padding:12px}
-.section{margin-bottom:16px}
-.section-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
-pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all}
-.meta-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px}
-.meta-key{color:var(--muted)}
-.meta-val{color:var(--text)}
-#empty{text-align:center;padding:60px;color:var(--muted)}
-#empty .icon{font-size:36px;margin-bottom:12px}
-.loading{text-align:center;padding:40px;color:var(--muted)}
+.r-meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:16px}
+.meta-item{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px}
+.meta-item .mi-key{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.meta-item .mi-val{font-size:12px;color:var(--text)}
+.labels-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+.label-chip{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:2px 7px;font-size:11px;color:var(--muted)}
+.label-chip.lc-active-true{border-color:var(--green);color:var(--green)}
+.label-chip.lc-state-done{border-color:var(--purple);color:var(--purple)}
+.label-chip.lc-state-active{border-color:var(--blue);color:var(--blue)}
+.label-chip.lc-state-running{border-color:var(--orange);color:var(--orange)}
+.label-chip.lc-topic-adr{border-color:var(--yellow);color:var(--yellow)}
+.label-chip.lc-topic-kindref{border-color:var(--purple);color:var(--purple)}
+.r-section{margin-bottom:16px}
+.r-section .sec-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+pre.json{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:11px;color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6}
+/* ── Markdown ── */
+.md h1,.md h2,.md h3{color:var(--blue);margin:.6em 0 .3em;font-weight:600}
+.md h1{font-size:16px;border-bottom:1px solid var(--border);padding-bottom:5px}
+.md h2{font-size:14px}.md h3{font-size:13px;color:var(--text)}
+.md p{margin:.4em 0;line-height:1.7}
+.md code{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:11px;color:var(--orange)}
+.md pre{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:.5em 0}
+.md pre code{background:none;border:none;padding:0;color:var(--text);font-size:11px}
+.md ul,.md ol{padding-left:20px;margin:.3em 0}.md li{margin:.15em 0;line-height:1.6}
+.md blockquote{border-left:3px solid var(--blue);padding-left:10px;color:var(--muted);margin:.4em 0}
+.md hr{border:none;border-top:1px solid var(--border);margin:.6em 0}
+.md strong{color:var(--yellow);font-weight:600}.md em{color:var(--muted);font-style:italic}
+.md a{color:var(--blue);text-decoration:none}.md a:hover{text-decoration:underline}
+.md table{border-collapse:collapse;width:100%;margin:.5em 0;font-size:12px}
+.md th{background:var(--bg3);color:var(--blue);padding:5px 10px;border:1px solid var(--border);text-align:left}
+.md td{padding:4px 10px;border:1px solid var(--border)}
+.md tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+/* ── Misc ── */
+#toast{position:fixed;bottom:16px;right:16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200}
+#toast.show{opacity:1}
+#toast.err{border-color:var(--red);color:var(--red)}
+#toast.ok{border-color:var(--green);color:var(--green)}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+#token-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100}
+#token-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:32px;width:340px;text-align:center}
+#token-box h2{color:var(--blue);margin-bottom:8px;font-size:15px}
+#token-box p{color:var(--muted);font-size:12px;margin-bottom:20px}
+#token-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:inherit;font-size:13px;margin-bottom:12px}
+#token-input:focus{outline:none;border-color:var(--blue)}
+#token-submit{width:100%;padding:8px;border-radius:6px;border:1px solid var(--blue);background:#1c2d3e;color:var(--blue);cursor:pointer;font-family:inherit;font-size:13px}
+#token-submit:hover{background:var(--blue);color:var(--bg)}
 #toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
 #toast.err{border-color:var(--red);color:var(--red)}
@@ -153,28 +246,67 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
 </style>
 </head>
 <body>
+
+<!-- Token overlay -->
 <div id="token-overlay" style="display:none">
   <div id="token-box">
-    <h2>⚡ Atlas — API Token</h2>
+    <h2>⚡ Atlas</h2>
     <p>Configure <code>ATLAS_API_TOKEN</code> no .env e cole aqui:</p>
-    <input id="token-input" type="password" placeholder="seu token…" autocomplete="off">
+    <input id="token-input" type="password" placeholder="token…" autocomplete="off">
     <button id="token-submit">Entrar</button>
   </div>
 </div>
-<div id="sidebar">
-  <h1>⚡ ATLAS</h1>
-  <div id="kinds"></div>
+
+<!-- Titlebar -->
+<div id="titlebar">
+  <span class="logo">⚡ ATLAS</span>
+  <span class="sep">/</span>
+  <input id="filter" type="text" placeholder="filtrar…" autocomplete="off">
+  <span class="spacer"></span>
+  <span style="font-size:11px;color:var(--muted)" id="status-bar">—</span>
 </div>
-<div id="main">
-  <div id="toolbar">
-    <h2 id="kind-title">—</h2>
-    <input id="filter" type="text" placeholder="filtrar nome ou label…">
+
+<!-- Main workspace: sidebar + editor -->
+<div id="workspace">
+
+  <!-- Sidebar: árvore -->
+  <div id="sidebar">
+    <div id="sidebar-head">EXPLORER</div>
+    <div id="tree"></div>
   </div>
-  <div id="resource-list"><div class="loading">carregando…</div></div>
-  <div id="cli-section">
-    <div id="cli-resize"></div>
+  <div id="sb-resize"></div>
+
+  <!-- Editor: tabbar + content -->
+  <div id="editor">
+    <div id="tabbar">
+      <div class="tab tab-welcome active" data-id="welcome">
+        <span class="tab-icon">⚡</span>
+        <span class="tab-name">Bem-vindo</span>
+      </div>
+    </div>
+    <div id="editor-content">
+      <div class="welcome">
+        <div class="w-logo">⚡</div>
+        <h2>Atlas Resource Explorer</h2>
+        <p>Clique em um recurso na árvore para abrir.<br>
+        <kbd>Ctrl+K</kbd> foca o terminal · <kbd>Tab</kbd> completa comandos<br>
+        <kbd>↑↓</kbd> histórico · <kbd>Ctrl+L</kbd> limpa terminal</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /workspace -->
+
+<!-- Bottom resize handle -->
+<div id="bot-resize"></div>
+
+<!-- Bottom panel: terminal -->
+<div id="bottom">
+  <div id="bot-tabbar">
+    <div class="bot-tab active">TERMINAL</div>
+  </div>
+  <div id="cli-wrap">
     <div id="cli-output"></div>
-    <div id="cli-hint">Tab → completa · ↑↓ → histórico · Ctrl+L → limpa · drag ↕ para redimensionar</div>
     <div id="cli-bar">
       <span id="cli-prompt">$</span>
       <div id="cli-suggestions"></div>
@@ -182,22 +314,20 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
     </div>
   </div>
 </div>
-<div id="detail">
-  <div id="detail-header">
-    <span id="detail-title">selecione um recurso</span>
-    <button class="btn" id="btn-copy" title="copiar /describe">📋</button>
-    <button class="btn danger" id="btn-delete" title="deletar">🗑</button>
-  </div>
-  <div id="detail-body"><div id="empty"><div class="icon">🔍</div>Selecione um recurso<br>para ver o detalhe.</div></div>
-</div>
+
 <div id="toast"></div>
 
 <script>
 const API = '/apis/atlas/v1';
 let TOKEN = localStorage.getItem('atlas_token') || '';
-let allKinds = {}, currentKind = null, allResources = [], selectedName = null;
+let allKinds = {};
+// openTabs: [{id, kind, name, label, icon}]
+let openTabs = [{id:'welcome', kind:null, name:null, label:'Bem-vindo', icon:'⚡'}];
+let activeTab = 'welcome';
+let treeOpen = {}; // kind → bool
+let treeData = {}; // kind → [resource]
 
-// Token overlay
+// ── Token ──
 function showTokenOverlay() {
   document.getElementById('token-overlay').style.display = 'flex';
   document.getElementById('token-input').focus();
@@ -208,12 +338,13 @@ document.getElementById('token-submit').onclick = () => {
   TOKEN = val;
   localStorage.setItem('atlas_token', val);
   document.getElementById('token-overlay').style.display = 'none';
-  loadKinds();
+  init();
 };
 document.getElementById('token-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('token-submit').click();
 });
 
+// ── API ──
 async function apiFetch(path, opts={}) {
   const h = {'Content-Type':'application/json'};
   if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
@@ -222,131 +353,220 @@ async function apiFetch(path, opts={}) {
   return r.json();
 }
 
-async function loadKinds() {
+// ── Init ──
+async function init() {
   try {
     allKinds = await apiFetch(API + '/');
-    renderSidebar();
-    const first = Object.keys(allKinds)[0];
-    if (first) selectKind(first);
+    updateStatus();
+    renderTree();
   } catch(e) {
     if (e.message.includes('401') || e.message.toLowerCase().includes('unauth')) {
       showTokenOverlay();
     } else {
-      toast('erro ao carregar: ' + e.message, true);
+      toast('erro: ' + e.message, true);
     }
   }
 }
 
-function renderSidebar() {
-  const el = document.getElementById('kinds');
-  el.innerHTML = Object.entries(allKinds)
-    .sort(([a],[b]) => a.localeCompare(b))
-    .map(([k,v]) =>
-      `<button class="kind-btn" data-kind="${k}" onclick="selectKind('${k}')">
-        <span>${k}</span><span class="badge">${v}</span>
-      </button>`
-    ).join('');
+function updateStatus() {
+  const total = Object.values(allKinds).reduce((a,b)=>a+b,0);
+  document.getElementById('status-bar').textContent =
+    Object.keys(allKinds).length + ' kinds · ' + total + ' resources';
 }
 
-async function selectKind(kind) {
-  currentKind = kind;
-  selectedName = null;
-  document.getElementById('kind-title').textContent = kind;
-  document.querySelectorAll('.kind-btn').forEach(b=>{
-    b.classList.toggle('active', b.dataset.kind === kind);
-  });
-  document.getElementById('resource-list').innerHTML = '<div class="loading">carregando…</div>';
-  clearDetail();
-  try {
-    allResources = await apiFetch(API + '/' + kind);
-    renderList(allResources);
-  } catch(e) { toast('erro: ' + e.message, true); }
+// ── Tree ──
+function kindIcon(k) {
+  const icons = {Doc:'📄',Tracker:'📊',Goal:'🎯',Alarm:'⏰',Timer:'⏱',Routine:'🔄',
+    Idea:'💡',Task:'✅',RoutineRequest:'📋'};
+  return icons[k] || '🗂';
 }
 
-function renderList(resources) {
+function renderTree() {
+  const el = document.getElementById('tree');
   const filter = document.getElementById('filter').value.toLowerCase();
-  const filtered = resources.filter(r => {
-    if (!filter) return true;
-    if (r.name.toLowerCase().includes(filter)) return true;
-    return Object.entries(r.labels||{}).some(([k,v])=>(k+'='+v).toLowerCase().includes(filter));
+  let html = '';
+  Object.keys(allKinds).sort().forEach(kind => {
+    const open = !!treeOpen[kind];
+    const cnt = allKinds[kind];
+    html += `<div class="kind-row${open?' open':''}" onclick="toggleKind('${kind}')">
+      <span class="arrow">▶</span>
+      <span>${kindIcon(kind)}</span>
+      <span class="k-name">${kind}</span>
+      <span class="k-count">${cnt}</span>
+    </div>`;
+    if (open && treeData[kind]) {
+      treeData[kind]
+        .filter(r => !filter || r.name.toLowerCase().includes(filter))
+        .forEach(r => {
+          const tabId = kind + '/' + r.name;
+          const isActive = activeTab === tabId;
+          html += `<div class="res-row${isActive?' active':''}" onclick="openResource('${kind}','${r.name}')">
+            <span class="r-icon">${kindIcon(kind)}</span>
+            <span class="r-name">${esc(r.name)}</span>
+          </div>`;
+        });
+    }
   });
-  const el = document.getElementById('resource-list');
-  if (!filtered.length) {
-    el.innerHTML = `<div class="loading">${resources.length ? 'sem resultados para "'+filter+'"' : 'vazio'}</div>`;
-    return;
+  el.innerHTML = html;
+}
+
+async function toggleKind(kind) {
+  treeOpen[kind] = !treeOpen[kind];
+  if (treeOpen[kind] && !treeData[kind]) {
+    treeData[kind] = await apiFetch(API + '/' + kind).catch(()=>[]);
   }
-  el.innerHTML = filtered.map(r => {
-    const labels = Object.entries(r.labels||{}).map(([k,v]) =>
-      `<span class="label-chip label-${k}-${v}">${k}=${v}</span>`
-    ).join('');
-    const st = statusSummary(r.status);
-    return `<div class="resource-row${r.name===selectedName?' selected':''}" onclick="selectResource('${r.name}')">
-      <div style="flex:1">
-        <div class="res-name">${r.name}</div>
-        <div class="res-labels">${labels}</div>
-      </div>
-      ${st ? `<div class="res-status">${st}</div>` : ''}
+  renderTree();
+}
+
+// ── Tabs ──
+function renderTabs() {
+  const bar = document.getElementById('tabbar');
+  bar.innerHTML = openTabs.map(t => {
+    const cls = 'tab' + (t.id === activeTab ? ' active' : '');
+    const closeBtn = t.id === 'welcome' ? '' :
+      `<span class="tab-close" onclick="closeTab(event,'${t.id}')">✕</span>`;
+    return `<div class="${cls}" data-id="${t.id}" onclick="activateTab('${t.id}')">
+      <span class="tab-icon">${t.icon}</span>
+      <span class="tab-name" title="${t.label}">${esc(t.label)}</span>
+      ${closeBtn}
     </div>`;
   }).join('');
 }
 
-function statusSummary(status) {
-  if (!status) return '';
-  const keys = ['state','active','progress','duration_min','chars','count','last_value','next_fire'];
-  for (const k of keys) {
-    if (status[k] !== undefined) return `${k}=${status[k]}`;
+function activateTab(id) {
+  activeTab = id;
+  renderTabs();
+  const t = openTabs.find(x=>x.id===id);
+  if (!t) return;
+  if (id === 'welcome') {
+    showWelcome();
+  } else {
+    loadAndRender(t.kind, t.name);
   }
-  const entries = Object.entries(status);
-  return entries.length ? entries[0].join('=') : '';
+  renderTree();
 }
 
-async function selectResource(name) {
-  selectedName = name;
-  renderList(allResources);
+function closeTab(e, id) {
+  e.stopPropagation();
+  openTabs = openTabs.filter(t=>t.id!==id);
+  if (!openTabs.length) openTabs = [{id:'welcome',kind:null,name:null,label:'Bem-vindo',icon:'⚡'}];
+  if (activeTab === id) activeTab = openTabs[openTabs.length-1].id;
+  renderTabs();
+  const t = openTabs.find(x=>x.id===activeTab);
+  if (!t) return;
+  if (t.id === 'welcome') showWelcome();
+  else loadAndRender(t.kind, t.name);
+  renderTree();
+}
+
+function showWelcome() {
+  document.getElementById('editor-content').innerHTML = `
+    <div class="welcome">
+      <div class="w-logo">⚡</div>
+      <h2>Atlas Resource Explorer</h2>
+      <p>Clique em um recurso na árvore para abrir.<br>
+      <kbd>Ctrl+K</kbd> foca o terminal · <kbd>Tab</kbd> completa comandos<br>
+      <kbd>↑↓</kbd> histórico · <kbd>Ctrl+L</kbd> limpa terminal</p>
+    </div>`;
+}
+
+// ── Open resource ──
+async function openResource(kind, name) {
+  const id = kind + '/' + name;
+  const existing = openTabs.find(t=>t.id===id);
+  if (!existing) {
+    openTabs.push({id, kind, name, label: name, icon: kindIcon(kind)});
+  }
+  activeTab = id;
+  renderTabs();
+  renderTree();
+  await loadAndRender(kind, name);
+}
+
+async function loadAndRender(kind, name) {
+  const ec = document.getElementById('editor-content');
+  ec.innerHTML = '<div style="padding:20px;color:var(--muted)">carregando…</div>';
   try {
-    const r = await apiFetch(API + '/' + currentKind + '/' + name);
-    renderDetail(r);
-  } catch(e) { toast('erro: ' + e.message, true); }
+    const r = await apiFetch(API + '/' + kind + '/' + name);
+    renderResource(r);
+  } catch(e) {
+    ec.innerHTML = `<div style="padding:20px;color:var(--red)">erro: ${esc(e.message)}</div>`;
+  }
 }
 
-function renderDetail(r) {
-  document.getElementById('detail-title').textContent = r.kind + '/' + r.name;
-  document.getElementById('btn-copy').onclick = () => {
-    navigator.clipboard.writeText('/describe ' + r.kind + ' ' + r.name);
-    toast('copiado: /describe ' + r.kind + ' ' + r.name);
-  };
-  document.getElementById('btn-delete').onclick = () => deleteResource(r.kind, r.name);
-  const body = document.getElementById('detail-body');
+function renderResource(r) {
   const meta = [
-    ['apiVersion', r.api_version],
-    ['kind', r.kind],
-    ['name', r.name],
-    ['criado_em', r.criado_em?.slice(0,19)],
-    ['atualizado_em', r.atualizado_em?.slice(0,19)],
-  ].map(([k,v])=>v?`<div class="meta-row"><span class="meta-key">${k}</span><span class="meta-val">${v}</span></div>`:'').join('');
+    ['apiVersion', r.api_version], ['kind', r.kind], ['name', r.name],
+    ['criado_em', r.criado_em?.slice(0,19)], ['atualizado_em', r.atualizado_em?.slice(0,19)],
+  ].filter(([,v])=>v).map(([k,v])=>`
+    <div class="meta-item"><div class="mi-key">${k}</div><div class="mi-val">${esc(String(v))}</div></div>
+  `).join('');
+
   const labels = Object.entries(r.labels||{}).map(([k,v])=>
-    `<span class="label-chip label-${k}-${v}">${k}=${v}</span>`
-  ).join(' ');
-  body.innerHTML = `
-    <div class="section">
-      <div class="section-title">metadata</div>
-      ${meta}
-      ${labels ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">${labels}</div>` : ''}
-    </div>
-    ${Object.keys(r.spec||{}).length ? `
-    <div class="section">
-      <div class="section-title">spec</div>
-      ${r.kind === 'Doc' && r.spec.body ? `
-        <div class="md" style="font-size:12px;line-height:1.6">${markdownToHtml(r.spec.body.slice(0, 6000))}</div>
-        ${r.spec.source ? `<div style="margin-top:6px;font-size:10px;color:var(--muted)">src: ${r.spec.source}</div>` : ''}
-      ` : `<pre class="json">${jsonStr(r.spec)}</pre>`}
-    </div>` : ''}
-    ${Object.keys(r.status||{}).length ? `
-    <div class="section">
-      <div class="section-title">status</div>
+    `<span class="label-chip lc-${k}-${v}">${esc(k)}=${esc(v)}</span>`
+  ).join('');
+
+  let specHtml = '';
+  if (Object.keys(r.spec||{}).length) {
+    if (r.kind === 'Doc' && r.spec.body) {
+      specHtml = `<div class="r-section">
+        <div class="sec-title">spec · body</div>
+        <div class="md">${markdownToHtml(r.spec.body.slice(0,8000))}</div>
+        ${r.spec.source ? `<div style="margin-top:8px;font-size:10px;color:var(--muted)">src: ${esc(r.spec.source)}</div>` : ''}
+      </div>`;
+    } else {
+      specHtml = `<div class="r-section">
+        <div class="sec-title">spec</div>
+        <pre class="json">${jsonStr(r.spec)}</pre>
+      </div>`;
+    }
+  }
+
+  let statusHtml = '';
+  if (Object.keys(r.status||{}).length) {
+    statusHtml = `<div class="r-section">
+      <div class="sec-title">status</div>
       <pre class="json">${jsonStr(r.status)}</pre>
-    </div>` : ''}
-  `;
+    </div>`;
+  }
+
+  document.getElementById('editor-content').innerHTML = `
+    <div class="r-card">
+      <div class="r-header">
+        <span class="r-kind">${esc(r.kind)}</span>
+        <span class="r-name-big">${esc(r.name)}</span>
+        <div class="r-actions">
+          <button class="btn" onclick="copyDescribe('${r.kind}','${r.name}')">📋 copiar cmd</button>
+          <button class="btn danger" onclick="deleteResource('${r.kind}','${r.name}')">🗑 deletar</button>
+        </div>
+      </div>
+      <div class="r-meta">${meta}</div>
+      ${labels ? `<div class="labels-row">${labels}</div>` : ''}
+      ${specHtml}
+      ${statusHtml}
+    </div>`;
+}
+
+function copyDescribe(kind, name) {
+  navigator.clipboard.writeText('/describe ' + kind + ' ' + name);
+  toast('copiado: /describe ' + kind + ' ' + name);
+}
+
+async function deleteResource(kind, name) {
+  if (!confirm('Deletar ' + kind + '/' + name + '?')) return;
+  try {
+    const h = {};
+    if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+    const r = await fetch(API + '/' + kind + '/' + name, {method:'DELETE', headers:h});
+    if (!r.ok) throw new Error(await r.text());
+    toast('deletado: ' + kind + '/' + name);
+    closeTab({stopPropagation:()=>{}}, kind + '/' + name);
+    delete treeData[kind];
+    allKinds = await apiFetch(API + '/').catch(()=>allKinds);
+    if (treeOpen[kind]) treeData[kind] = await apiFetch(API + '/' + kind).catch(()=>[]);
+    updateStatus();
+    renderTree();
+  } catch(e) { toast('erro: ' + e.message, true); }
 }
 
 function jsonStr(obj) {
@@ -354,27 +574,7 @@ function jsonStr(obj) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-async function deleteResource(kind, name) {
-  if (!confirm(`Deletar ${kind}/${name}?`)) return;
-  try {
-    const h = {};
-    if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-    const r = await fetch(API + '/' + kind + '/' + name, {method:'DELETE', headers:h});
-    if (!r.ok) throw new Error(await r.text());
-    toast('deletado: ' + kind + '/' + name, false);
-    clearDetail();
-    await selectKind(currentKind);
-    await loadKinds();
-  } catch(e) { toast('erro: ' + e.message, true); }
-}
-
-function clearDetail() {
-  document.getElementById('detail-title').textContent = 'selecione um recurso';
-  document.getElementById('detail-body').innerHTML =
-    '<div id="empty"><div class="icon">🔍</div>Selecione um recurso<br>para ver o detalhe.</div>';
-  document.getElementById('btn-copy').onclick = null;
-  document.getElementById('btn-delete').onclick = null;
-}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 let toastTimer;
 function toast(msg, err=false) {
@@ -385,37 +585,29 @@ function toast(msg, err=false) {
   toastTimer = setTimeout(() => el.className = '', 3000);
 }
 
-document.getElementById('filter').addEventListener('input', () => renderList(allResources));
+// ── Filter ──
+document.getElementById('filter').addEventListener('input', () => renderTree());
 
-// ── Markdown renderer (sem deps externas) ────────────────────────────────────
+// ── Markdown ──
 function markdownToHtml(md) {
   if (!md) return '';
   let s = md;
-  // Extrai code blocks antes de escapar
   const blocks = [];
   s = s.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
     blocks.push(code.trimEnd());
-    return `\x00BLOCK${blocks.length - 1}\x00`;
+    return '\x00BLOCK'+(blocks.length-1)+'\x00';
   });
-  // Escapa HTML
   s = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  // Inline code
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // Bold + italic
-  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Links
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-  // Headers
-  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // HR
-  s = s.replace(/^[-*]{3,}$/gm, '<hr>');
-  // Blockquote
-  s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-  // Tables
+  s = s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  s = s.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  s = s.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  s = s.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  s = s.replace(/^[-*]{3,}$/gm,'<hr>');
+  s = s.replace(/^&gt; (.+)$/gm,'<blockquote>$1</blockquote>');
   s = s.replace(/^\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)+)/gm, (_, head, body) => {
     const ths = head.split('|').filter(c=>c.trim()).map(c=>`<th>${c.trim()}</th>`).join('');
     const rows = body.trim().split('\n').map(row => {
@@ -424,89 +616,102 @@ function markdownToHtml(md) {
     }).join('');
     return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
   });
-  // Lists
-  s = s.replace(/((?:^[-*+] .+\n?)+)/gm, match => {
-    const items = match.trim().split('\n').map(l=>`<li>${l.replace(/^[-*+] /,'')}</li>`).join('');
+  s = s.replace(/((?:^[-*+] .+\n?)+)/gm, m => {
+    const items = m.trim().split('\n').map(l=>`<li>${l.replace(/^[-*+] /,'')}</li>`).join('');
     return `<ul>${items}</ul>`;
   });
-  s = s.replace(/((?:^\d+\. .+\n?)+)/gm, match => {
-    const items = match.trim().split('\n').map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('');
+  s = s.replace(/((?:^\d+\. .+\n?)+)/gm, m => {
+    const items = m.trim().split('\n').map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('');
     return `<ol>${items}</ol>`;
   });
-  // Restaura code blocks
-  s = s.replace(/\x00BLOCK(\d+)\x00/g, (_, i) =>
+  s = s.replace(/\x00BLOCK(\d+)\x00/g, (_,i) =>
     `<pre><code>${blocks[+i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`
   );
-  // Parágrafos
   s = s.split('\n\n').map(para => {
     para = para.trim();
     if (!para) return '';
     if (/^<(h[1-3]|ul|ol|pre|table|blockquote|hr)/.test(para)) return para;
-    return `<p>${para.replace(/\n/g, '<br>')}</p>`;
+    return `<p>${para.replace(/\n/g,'<br>')}</p>`;
   }).join('\n');
   return s;
 }
+function isMarkdown(t) { return /^#+\s|```|\*\*|\|.+\|/.test(t); }
 
-function isMarkdown(text) {
-  return /^#+\s|```|\*\*|\|.+\|/.test(text);
-}
-
-// ── Resize CLI ───────────────────────────────────────────────────────────────
-(function() {
-  const handle = document.getElementById('cli-resize');
-  const section = document.getElementById('cli-section');
-  const MIN_H = 80, MAX_H = window.innerHeight * 0.8;
-  let startY, startH, dragging = false;
-
-  const savedH = localStorage.getItem('atlas_cli_h');
-  if (savedH) section.style.height = savedH + 'px';
+// ── Resize: sidebar (ew) ──
+(function(){
+  const handle = document.getElementById('sb-resize');
+  const sb = document.getElementById('sidebar');
+  let dragging = false, startX, startW;
+  const saved = localStorage.getItem('atlas_sb_w');
+  if (saved) sb.style.width = saved + 'px';
 
   handle.addEventListener('mousedown', e => {
-    dragging = true;
-    startY = e.clientY;
-    startH = section.offsetHeight;
-    handle.classList.add('dragging');
+    dragging = true; startX = e.clientX; startW = sb.offsetWidth;
+    handle.classList.add('drag');
     document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'ns-resize';
+    document.body.style.cursor = 'ew-resize';
   });
-
   document.addEventListener('mousemove', e => {
     if (!dragging) return;
-    const delta = startY - e.clientY;
-    const newH = Math.min(Math.max(startH + delta, MIN_H), window.innerHeight * 0.8);
-    section.style.height = newH + 'px';
+    const w = Math.min(Math.max(startW + e.clientX - startX, 120), 500);
+    sb.style.width = w + 'px';
+    document.documentElement.style.setProperty('--sidebar-w', w + 'px');
   });
-
   document.addEventListener('mouseup', () => {
     if (!dragging) return;
     dragging = false;
-    handle.classList.remove('dragging');
+    handle.classList.remove('drag');
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
-    localStorage.setItem('atlas_cli_h', section.offsetHeight);
+    localStorage.setItem('atlas_sb_w', sb.offsetWidth);
   });
+})();
 
-  // Duplo clique: toggle entre mínimo e altura salva/padrão
+// ── Resize: bottom panel (ns) ──
+(function(){
+  const handle = document.getElementById('bot-resize');
+  const bot = document.getElementById('bottom');
+  let dragging = false, startY, startH;
+  const saved = localStorage.getItem('atlas_bot_h');
+  if (saved) bot.style.height = saved + 'px';
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true; startY = e.clientY; startH = bot.offsetHeight;
+    handle.classList.add('drag');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
+  });
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const h = Math.min(Math.max(startH - (e.clientY - startY), 60), window.innerHeight * 0.7);
+    bot.style.height = h + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('drag');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    localStorage.setItem('atlas_bot_h', bot.offsetHeight);
+  });
+  // Duplo clique: toggle colapso
   handle.addEventListener('dblclick', () => {
-    const curr = section.offsetHeight;
-    if (curr <= MIN_H + 10) {
-      const restore = +(localStorage.getItem('atlas_cli_h_prev') || 220);
-      section.style.height = restore + 'px';
+    const h = bot.offsetHeight;
+    if (h <= 62) {
+      bot.style.height = (+(localStorage.getItem('atlas_bot_h_prev') || 200)) + 'px';
     } else {
-      localStorage.setItem('atlas_cli_h_prev', curr);
-      section.style.height = MIN_H + 'px';
+      localStorage.setItem('atlas_bot_h_prev', h);
+      bot.style.height = '30px';
     }
   });
 })();
 
-// ── CLI ──────────────────────────────────────────────────────────────────────
+// ── CLI ──
 const cliInput = document.getElementById('cli-input');
 const cliOutput = document.getElementById('cli-output');
 const cliSugs = document.getElementById('cli-suggestions');
 let cliHistory = JSON.parse(localStorage.getItem('atlas_cli_history') || '[]');
-let histIdx = -1;
-let sugList = [], sugIdx = -1;
-let sugDebounce;
+let histIdx = -1, sugList = [], sugIdx = -1, sugDebounce;
 
 function cliAppend(text, cls) {
   const el = document.createElement('div');
@@ -514,9 +719,7 @@ function cliAppend(text, cls) {
   if (cls === 'cli-out' && isMarkdown(text)) {
     el.classList.add('md');
     el.innerHTML = markdownToHtml(text);
-  } else {
-    el.textContent = text;
-  }
+  } else { el.textContent = text; }
   cliOutput.appendChild(el);
   cliOutput.scrollTop = cliOutput.scrollHeight;
 }
@@ -525,25 +728,31 @@ async function cliRun(text) {
   text = text.trim();
   if (!text) return;
   cliAppend('$ ' + text, 'cli-cmd');
-  cliHistory = [text, ...cliHistory.filter(h => h !== text)].slice(0, 80);
+  cliHistory = [text, ...cliHistory.filter(h=>h!==text)].slice(0,80);
   localStorage.setItem('atlas_cli_history', JSON.stringify(cliHistory));
   histIdx = -1;
   try {
     const h = {'Content-Type':'application/json'};
     if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-    const r = await fetch(API + '/_cmd', {method:'POST', headers:h, body:JSON.stringify({text})});
+    const r = await fetch(API+'/_cmd', {method:'POST', headers:h, body:JSON.stringify({text})});
     const j = await r.json();
     if (j.error) { cliAppend(j.error, 'cli-err'); return; }
     cliAppend(j.output || '(sem saída)', 'cli-out');
-  } catch(e) { cliAppend('erro: ' + e.message, 'cli-err'); }
-  cliAppend('─'.repeat(36), 'cli-sep');
+    // Refresh tree após comandos que mudam o store
+    if (/^\/(apply|delete|patch|rm|a)\b/.test(text)) {
+      allKinds = await apiFetch(API+'/').catch(()=>allKinds);
+      for (const k of Object.keys(treeOpen)) {
+        if (treeOpen[k]) treeData[k] = await apiFetch(API+'/'+k).catch(()=>[]);
+      }
+      updateStatus(); renderTree();
+    }
+  } catch(e) { cliAppend('erro: '+e.message, 'cli-err'); }
+  cliAppend('─'.repeat(40), 'cli-sep');
 }
 
 async function fetchSuggestions(q) {
-  if (!TOKEN && !q) return [];
-  const h = {};
-  if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-  const r = await fetch(API + '/_complete?q=' + encodeURIComponent(q), {headers:h}).catch(()=>null);
+  const h = {}; if (TOKEN) h['Authorization'] = 'Bearer '+TOKEN;
+  const r = await fetch(API+'/_complete?q='+encodeURIComponent(q), {headers:h}).catch(()=>null);
   if (!r || !r.ok) return [];
   return r.json();
 }
@@ -551,104 +760,74 @@ async function fetchSuggestions(q) {
 function renderSugs(list, q) {
   sugList = list; sugIdx = -1;
   cliSugs.innerHTML = '';
-  if (!list.length) return;
-  list.slice(0, 12).forEach((s, i) => {
+  list.slice(0,12).forEach((s,i) => {
     const el = document.createElement('div');
     el.className = 'sug';
-    el.dataset.idx = i;
-    const matchLen = q.length;
-    el.innerHTML = `<span class="sug-match">${esc(s.slice(0, matchLen))}</span><span class="sug-rest">${esc(s.slice(matchLen))}</span>`;
+    const ml = q.length;
+    el.innerHTML = `<span class="sug-match">${esc(s.slice(0,ml))}</span>${esc(s.slice(ml))}`;
     el.onmousedown = e => { e.preventDefault(); cliInput.value = s; hideSugs(); cliInput.focus(); };
     cliSugs.appendChild(el);
   });
 }
-
 function hideSugs() { cliSugs.innerHTML = ''; sugList = []; sugIdx = -1; }
-
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function highlightSug(idx) {
-  cliSugs.querySelectorAll('.sug').forEach((el, i) => el.classList.toggle('active', i === idx));
-}
+function highlightSug(i) { cliSugs.querySelectorAll('.sug').forEach((el,j)=>el.classList.toggle('active',j===i)); }
 
 cliInput.addEventListener('input', () => {
   clearTimeout(sugDebounce);
   const q = cliInput.value;
-  sugDebounce = setTimeout(async () => {
-    const list = await fetchSuggestions(q);
-    renderSugs(list, q);
-  }, 80);
+  sugDebounce = setTimeout(async () => renderSugs(await fetchSuggestions(q), q), 80);
 });
 
 cliInput.addEventListener('keydown', async e => {
   if (e.key === 'Tab') {
     e.preventDefault();
-    if (sugList.length === 1) { cliInput.value = sugList[0] + ' '; hideSugs(); }
-    else if (sugList.length > 1) {
-      sugIdx = (sugIdx + 1) % sugList.length;
-      highlightSug(sugIdx);
-      cliInput.value = sugList[sugIdx];
-    } else {
-      const list = await fetchSuggestions(cliInput.value);
-      renderSugs(list, cliInput.value);
-      if (list.length === 1) { cliInput.value = list[0] + ' '; hideSugs(); }
-    }
+    if (sugList.length === 1) { cliInput.value = sugList[0]+' '; hideSugs(); }
+    else if (sugList.length > 1) { sugIdx=(sugIdx+1)%sugList.length; highlightSug(sugIdx); cliInput.value=sugList[sugIdx]; }
+    else { const l=await fetchSuggestions(cliInput.value); renderSugs(l,cliInput.value); if(l.length===1){cliInput.value=l[0]+' ';hideSugs();} }
     return;
   }
   if (e.key === 'ArrowDown') {
     e.preventDefault();
-    if (sugList.length) { sugIdx = Math.min(sugIdx + 1, sugList.length - 1); highlightSug(sugIdx); cliInput.value = sugList[sugIdx]; return; }
-    if (histIdx > 0) { histIdx--; cliInput.value = cliHistory[histIdx] || ''; }
-    else if (histIdx === 0) { histIdx = -1; cliInput.value = ''; }
+    if (sugList.length) { sugIdx=Math.min(sugIdx+1,sugList.length-1); highlightSug(sugIdx); cliInput.value=sugList[sugIdx]; return; }
+    if (histIdx>0){histIdx--;cliInput.value=cliHistory[histIdx]||'';}
+    else if (histIdx===0){histIdx=-1;cliInput.value='';}
     return;
   }
   if (e.key === 'ArrowUp') {
     e.preventDefault();
-    if (sugList.length) { sugIdx = Math.max(sugIdx - 1, 0); highlightSug(sugIdx); cliInput.value = sugList[sugIdx]; return; }
-    if (histIdx < cliHistory.length - 1) { histIdx++; cliInput.value = cliHistory[histIdx]; }
+    if (sugList.length){sugIdx=Math.max(sugIdx-1,0);highlightSug(sugIdx);cliInput.value=sugList[sugIdx];return;}
+    if (histIdx<cliHistory.length-1){histIdx++;cliInput.value=cliHistory[histIdx];}
     return;
   }
-  if (e.key === 'Escape') { hideSugs(); return; }
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    hideSugs();
-    const cmd = cliInput.value.trim();
-    cliInput.value = '';
-    if (cmd) await cliRun(cmd);
-    return;
+  if (e.key==='Escape'){hideSugs();return;}
+  if (e.key==='Enter'){
+    e.preventDefault(); hideSugs();
+    const cmd=cliInput.value.trim(); cliInput.value='';
+    if (cmd) await cliRun(cmd); return;
   }
-  if (e.key === 'l' && e.ctrlKey) {
-    e.preventDefault();
-    cliOutput.innerHTML = '';
-    return;
-  }
+  if (e.key==='l'&&e.ctrlKey){e.preventDefault();cliOutput.innerHTML='';return;}
 });
 
-// Ctrl+K / backtick foca o CLI
 document.addEventListener('keydown', e => {
-  if ((e.key === 'k' && e.ctrlKey) || (e.key === '`' && !e.ctrlKey && document.activeElement !== cliInput)) {
-    e.preventDefault();
-    cliInput.focus();
+  if ((e.key==='k'&&e.ctrlKey)||(e.key==='`'&&!e.ctrlKey&&document.activeElement!==cliInput)){
+    e.preventDefault(); cliInput.focus();
   }
 });
+document.addEventListener('click', e => { if (!e.target.closest('#cli-bar')) hideSugs(); });
 
-// Clique fora esconde sugestões
-document.addEventListener('click', e => {
-  if (!e.target.closest('#cli-bar')) hideSugs();
-});
+// ── Boot ──
+cliAppend('Atlas CLI · Tab completa · ↑↓ histórico · Ctrl+K foca · Ctrl+L limpa', 'cli-sep');
+cliAppend('─'.repeat(40), 'cli-sep');
 
-// Mensagem de boas-vindas no CLI
-cliAppend('Atlas CLI — Tab para completar, ↑↓ para histórico, Ctrl+K para focar', 'cli-sep');
-cliAppend('Comandos: /list /get /describe /apply /delete /docs /snip /help', 'cli-sep');
-cliAppend('─'.repeat(36), 'cli-sep');
+if (TOKEN) { init(); } else { showTokenOverlay(); }
 
-if (TOKEN) { loadKinds(); } else { showTokenOverlay(); }
+// Auto-refresh kinds a cada 20s
 setInterval(async () => {
-  if (currentKind) {
-    const fresh = await apiFetch(API + '/').catch(()=>null);
-    if (fresh) { allKinds = fresh; renderSidebar(); }
-  }
-}, 15000);
+  try {
+    allKinds = await apiFetch(API+'/');
+    updateStatus(); renderTree();
+  } catch(_){}
+}, 20000);
 </script>
 </body>
 </html>"""

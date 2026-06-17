@@ -156,7 +156,11 @@ def _sync_docs(store: ResourceStore, agora: datetime) -> None:
                 kind="Doc",
                 name=slug,
                 labels={"topic": "adr", "format": "markdown"},
-                spec={"title": adr_file.stem, "body": body, "source": str(adr_file.relative_to(docs_root))},
+                spec={
+                    "title": adr_file.stem,
+                    "body": body,
+                    "source": str(adr_file.relative_to(docs_root)),
+                },
                 status={"chars": len(body)},
             )
             store.apply(res, agora)

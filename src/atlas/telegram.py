@@ -50,6 +50,14 @@ class TelegramAdapter:
         if isinstance(resposta, dict) and resposta.get("ok") is False:
             _log.warning("Telegram recusou sendMessage: %s", resposta.get("description"))
 
+    def limpar_webhook(self) -> None:
+        """Remove qualquer webhook registrado para liberar o long-poll (evita HTTP 409)."""
+        try:
+            self._transport(self._url("deleteWebhook"), b"drop_pending_updates=true")
+            _log.info("Webhook removido; long-poll liberado.")
+        except Exception:  # noqa: BLE001
+            _log.warning("Não foi possível remover o webhook (segue mesmo assim).")
+
     def registrar_comandos(self, comandos: list[dict[str, str]]) -> None:
         """Registra o menu de comandos do bot (``setMyCommands``)."""
         dados = urllib.parse.urlencode({"commands": json.dumps(comandos)}).encode("utf-8")
