@@ -18,6 +18,7 @@ atualizado-em: 2026-06-16
 | 1.2    | 2026-06-16 | Tech Lead | ADR-0015 (core API de objetos, K8s-like) — prioridade máxima | PO/PM |
 | 1.3    | 2026-06-17 | Tech Lead | ADR-0016 (IA plugável via Kind Prompt) — aceito | PO/PM |
 | 1.4    | 2026-06-17 | Tech Lead | ADR-0017 (GUI por Kind abstrai a API) — aceito | PO/PM |
+| 1.5    | 2026-06-17 | Tech Lead | ADR-0018 (Manifestos declarativos e `apply -f`) — aceito | PO/PM |
 
 ---
 
@@ -56,6 +57,7 @@ atualizado-em: 2026-06-16
 | [0015](ADR-0015-core-api-de-objetos.md) | **Core como API de objetos (estilo Kubernetes)** | **aceito (prioridade máx.)** | Motor central + UI web |
 | [0016](ADR-0016-ia-plugavel-kind-prompt.md) | Chamadas de IA plugáveis via Kind `Prompt` | aceito | IA conectável, não hard-coded |
 | [0017](ADR-0017-gui-por-kind-abstrai-api.md) | Todo Kind tem GUI completa que abstrai a API | aceito | Ações + config visual por Kind |
+| [0018](ADR-0018-manifestos-e-apply-f.md) | Manifestos declarativos e `apply -f`; interface como cliente da API | aceito | Manifestos de domínio + loader |
 
 ## Lastro
 

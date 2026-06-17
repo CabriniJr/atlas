@@ -2,7 +2,7 @@
 titulo: Kinds do Atlas — catálogo e padrão de definição
 id: ARQ-KINDS
 status: aprovado
-versao: 1.1
+versao: 1.2
 dono: Tech Lead
 revisado-por: PO/PM
 atualizado-em: 2026-06-17
@@ -19,6 +19,7 @@ atualizado-em: 2026-06-17
 |--------|------------|-----------|---------------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação       | PO/PM        |
 | 1.1    | 2026-06-17 | Tech Lead | Kinds `Repo`, `Diff`, `Prompt`; arquivo de diffs em `Doc`; hierarquia por labels | PO/PM |
+| 1.2    | 2026-06-17 | Tech Lead | Manifestos declarativos (`apply -f`) e grupos seed | PO/PM |
 
 ---
 
@@ -144,6 +145,13 @@ Status: `last_run`, `last_ok`, `last_output`.
 
 Qualquer kind pode ser criado diretamente com `/apply <Kind> <name> [k=v]` —
 o store é genérico e não conhece domínios.
+
+## Manifestos declarativos
+
+Objetos podem ser definidos em arquivos YAML e aplicados em lote com
+`python -m atlas apply -f <arquivo>` — ver [spec de manifestos](../specs/manifestos.md)
+e [ADR-0018](adr/ADR-0018-manifestos-e-apply-f.md). Os grupos seed vivem em
+`manifests/` e são agrupados por `labels.grupo`.
 
 ---
 
