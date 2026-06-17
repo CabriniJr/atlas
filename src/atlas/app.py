@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 import atlas.rotinas.resumo_diario  # noqa: F401 — registra collect no registry
+import atlas.rotinas.treino  # noqa: F401 — registra collect de treino
 from atlas.alarmes import tick_alarmes
 from atlas.comandos import para_telegram
 from atlas.config import Config

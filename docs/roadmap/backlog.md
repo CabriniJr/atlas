@@ -16,6 +16,7 @@ atualizado-em: 2026-06-16
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
 | 1.1    | 2026-06-16 | Tech Lead | Lição de casa (itens 0–5): ADR-0013 + specs; épico E5 (interface/trackers via chat); detalhe de E1/E2 | — |
 | 1.2    | 2026-06-16 | Tech Lead | Pool de ideias (ADR-0014, prioridade máxima) = épico E6; alarmes (E5-07) | PO/PM |
+| 1.3    | 2026-06-16 | Tech Lead | Atualização de estados: E0-01/03/04 feitos; E1-11/E5-06/E2-01 feitos; E5-03/E3-01 feitos | — |
 
 ---
 
@@ -30,10 +31,10 @@ atualizado-em: 2026-06-16
 
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E0-01 | **Core de objetos**: `Resource` + `ResourceStore` (verbos uniformes get/list/apply/patch/delete) sobre tabela `resources` (aditiva) | **em-andamento** | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md), [spec](../specs/core-api-objetos.md) |
+| E0-01 | **Core de objetos**: `Resource` + `ResourceStore` (verbos uniformes get/list/apply/patch/delete) sobre tabela `resources` (aditiva) | **feito** | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md), [spec](../specs/core-api-objetos.md) |
 | E0-02 | **API HTTP** (stdlib) expondo os verbos: `GET/POST/PUT/PATCH/DELETE /apis/atlas/v1/<kind>[/<name>]` | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
-| E0-03 | **Verbos uniformes no chat** (`/get`, `/describe`, `/apply`, `/delete`) + atalhos atuais como açúcar | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
-| E0-04 | **Migrar kinds** legados (Idea, Tracker, Alarm, Routine) para o store — um a um, sem quebrar | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-03 | **Verbos uniformes no chat** (`/resources`, `/list`, `/get`, `/describe`, `/apply`, `/delete`) | **feito** — `verbos.py` + roteado em `handler.py` | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-04 | **Migrar kinds** legados (Idea/Task/RoutineRequest, Tracker, Alarm, Routine) para o store — boot sync + CRUD espelhado | **feito** — `sync.py` + todos os módulos leem/escrevem no store | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 | E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP | proposto | [seguranca](../arquitetura/seguranca.md) |
 | E0-06 | **Web app (Vercel)** consumindo a API + **túnel** Vercel→backend doméstico | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 
@@ -48,14 +49,14 @@ atualizado-em: 2026-06-16
 | E1-06 | Agendador + catch-up de runs perdidos | **feito** — core + **wiring no loop do `app`** (catch-up no boot + `tick` por janela de poll, disparo via executor notificando o dono) | [ADR-0006](../arquitetura/adr/ADR-0006-erro-e-resiliencia.md), [spec scheduler](../specs/scheduler.md) |
 | E1-07 | Harness de teste de rotina | proposto | [ADR-0007](../arquitetura/adr/ADR-0007-contrato-de-teste.md) |
 | E1-10 | Executor do ciclo de vida (`trigger→collect→gate→analyze→deliver`) + notificação no Telegram + gravação em `runs` | **feito** (core; fases injetadas) — wiring de `/rodar` fica em E5-02 (precisa do carregador + invocador E1-05) | [ciclo-de-vida](../arquitetura/ciclo-de-vida-rotina.md), [spec executor](../specs/executor-e-notificacao.md) |
-| E1-11 | Barreira de entrada: registrar só com intenção explícita (reescreve `handler.py`) | proposto | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
+| E1-11 | Barreira de entrada: registrar só com intenção explícita (reescreve `handler.py`) | **feito** | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
 | E1-08 | Observabilidade: gravar `usage` em `runs` + `/uso` | proposto | [ADR-0010](../arquitetura/adr/ADR-0010-observabilidade-claude-p.md) |
 | E1-09 | Orçamento: teto global pré-despacho + disjuntor por rotina | proposto | [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md) |
 
 ## Épico E2 — Rotinas-âncora (M2)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E2-01 | Rotina **resumo diário** (collect tudo do dia + análise 2a) | proposto | [personas](../visao/personas-e-uso.md) |
+| E2-01 | Rotina **resumo diário** (collect tudo do dia; análise 2a bloqueada por E1-05) | **feito (camada 0)** — `rotinas/resumo_diario.py` + `routines/resumo-diario/routine.toml`; agenda 21h | [personas](../visao/personas-e-uso.md) |
 | E2-02 | **Meta-loop** fase 1 (planejamento no Telegram → `SPEC.md`) | proposto | [ADR-0009](../arquitetura/adr/ADR-0009-handoff-entre-modos.md) |
 | E2-03 | **Meta-loop** fase 2 (geração via agente 2b, inativo por padrão) | proposto | [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
 | E2-04 | `/ativar` + fluxo de revisão e commit da rotina gerada | proposto | [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md), [spec meta-loop](../specs/meta-loop-chat.md) |
@@ -68,10 +69,10 @@ atualizado-em: 2026-06-16
 |---|---|---|---|
 | E5-01 | Comandos de listagem/inspeção: `/rotinas`, `/rotina <nome>`, `/uso`, `/status` (evoluir), `/ajuda` dinâmico | **parcial** — registro único de comandos (inglês), `/help` dinâmico + `setMyCommands`, `/status` evoluído, **sessão `/debug`** (status/runs/routines/db/env); falta `/rotinas`/`/uso` | [spec interface](../specs/interface-config-chat.md) |
 | E5-02 | Ciclo de vida por chat: `/activate`, `/deactivate`, `/run <name>` (+ `/routines`, `/routine <name>`) | **feito** — ativação via override no DB (persiste no volume; agendamento aplica no restart) | [spec interface](../specs/interface-config-chat.md), [spec executor](../specs/executor-e-notificacao.md) |
-| E5-03 | Edição de config interativa (`/rotina <nome> set <campo> <valor>`) com validação | proposto | [spec interface](../specs/interface-config-chat.md) |
+| E5-03 | Edição de config interativa (`/routine <name> set <field> <value>`) com validação | **feito** — campo `agenda` (cron 5 parts); override persiste em `routine_state` | [spec interface](../specs/interface-config-chat.md) |
 | E5-04 | Tabela `trackers` + registro genérico `tracking` (micro-sintaxe aplica em runtime) | **feito** | [spec trackers](../specs/trackers-via-chat.md), [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E5-05 | Comandos `/track` (list/new/detalhe+stats/rm) + log por `nome: valor` | **feito** (single-line; wizard interativo e metas ficam p/ depois) | [spec trackers](../specs/trackers-via-chat.md) |
-| E5-06 | `/reg` (nota livre, com domínio opcional) | proposto | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
+| E5-06 | `/reg` (nota livre, com domínio opcional) | **feito** — `/reg <texto>` e `/reg #<domínio> <texto>`; domínios: sono/saude/fisico/estudo/leitura/trabalho/geral | [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [spec barreira](../specs/barreira-entrada.md) |
 | E5-07 | Alarmes/lembretes: tabela `alarms` + `tick_alarmes` no loop + `/alarm`/`/alarms` | **feito** — diário/uma-vez, dispara e notifica o dono; persiste no volume | [spec alarmes](../specs/alarmes.md), [spec scheduler](../specs/scheduler.md) |
 
 ## Épico E6 — Pool de ideias e autoimplementação (PRIORIDADE MÁXIMA)
@@ -88,7 +89,7 @@ atualizado-em: 2026-06-16
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E3-01 | Rotina físico (micro-sintaxe de treino) | proposto | — |
+| E3-01 | Rotina físico — collect treino (domínio fisico + trackers fitness) | **feito** — `rotinas/treino.py` + agenda 20h; log via `/reg #fisico` ou tracker | — |
 | E3-02 | Rotina estudos | proposto | — |
 | E3-03 | Rotina leitura (Librera; depende do formato de sync) | bloqueado | [constituicao](../arquitetura/constituicao.md) (em aberto) |
 | E3-04 | Sistema de metas + `goal_links` + checkup semanal | proposto | [modelo-de-dados](../arquitetura/modelo-de-dados.md) |

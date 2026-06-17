@@ -23,6 +23,7 @@ from atlas.executor import ContextoExecucao, executar
 from atlas.routines import Rotina, carregar_rotinas
 
 _CHAVE_ATIVA = "ativa"
+_CAMPOS_EDITAVEIS = {"agenda"}
 
 
 def responder_controle(texto: str, db: Database, agora: datetime) -> str | None:
@@ -35,7 +36,7 @@ def responder_controle(texto: str, db: Database, agora: datetime) -> str | None:
     if cmd == "/routines":
         return _listar(db)
     if cmd == "/routine":
-        return _detalhe(db, partes)
+        return _detalhe_ou_set(db, partes, agora)
     if cmd == "/run":
         return _run(db, partes, agora)
     if cmd in ("/activate", "/deactivate"):
@@ -59,19 +60,60 @@ def _listar(db: Database) -> str:
     return "🧩 Routines\n" + "\n".join(linhas) + "\n→ /routine <name> · /run <name>"
 
 
-def _detalhe(db: Database, partes: list[str]) -> str:
+def _detalhe_ou_set(db: Database, partes: list[str], agora: datetime) -> str:
     if len(partes) < 2:
-        return "Usage: /routine <name>"
-    rot = _achar(db, partes[1])
+        return "Usage: /routine <name> [set <field> <value>]"
+    nome = partes[1]
+    if len(partes) >= 3 and partes[2] == "set":
+        return _set(db, nome, partes[3:], agora)
+    return _detalhe(db, nome)
+
+
+def _detalhe(db: Database, nome: str) -> str:
+    rot = _achar(db, nome)
     if rot is None:
-        return f"❓ routine '{partes[1]}' not found. See /routines"
+        return f"❓ routine '{nome}' not found. See /routines"
     return (
         f"🧩 {rot.nome} [{'on' if rot.ativa else 'off'}]\n"
         f"{rot.descricao}\n"
         f"model: {rot.modelo} · agenda: {rot.agenda or '-'} · gate: {rot.gate or '-'}\n"
         f"triggers: {', '.join(rot.triggers) or '-'}\n"
         f"actions: /run {rot.nome} · /activate {rot.nome} · /deactivate {rot.nome}"
+        f" · /routine {rot.nome} set agenda <cron>"
     )
+
+
+def _set(db: Database, nome: str, args: list[str], agora: datetime) -> str:
+    if not args:
+        campos = ", ".join(sorted(_CAMPOS_EDITAVEIS))
+        return f"⚠️ Usage: /routine {nome} set <field> <value>  (editable: {campos})"
+
+    campo = args[0]
+    if campo not in _CAMPOS_EDITAVEIS:
+        campos = ", ".join(sorted(_CAMPOS_EDITAVEIS))
+        return f"⚠️ unknown field '{campo}'. Editable fields: {campos}"
+
+    valor_partes = args[1:]
+    if not valor_partes:
+        return f"⚠️ Usage: /routine {nome} set {campo} <value>"
+
+    rot = _achar(db, nome)
+    if rot is None:
+        return f"❓ routine '{nome}' not found. See /routines"
+
+    valor = " ".join(valor_partes)
+
+    if campo == "agenda":
+        if not _cron_valido(valor):
+            return f"⚠️ invalid cron expression '{valor}'. Expected 5 fields, e.g. '0 20 * * *'"
+
+    _set_override_str(db, nome, campo, valor, agora)
+    return f"✅ {nome}.{campo} = {valor}\n   (applies on next scheduler tick)"
+
+
+def _cron_valido(expr: str) -> bool:
+    partes = expr.strip().split()
+    return len(partes) == 5
 
 
 def _run(db: Database, partes: list[str], agora: datetime) -> str:
@@ -116,28 +158,33 @@ def _achar(db: Database, nome: str) -> Rotina | None:
 
 
 def aplicar_overrides(db: Database, rotinas: list[Rotina]) -> None:
-    """Aplica o estado de ativação salvo no DB sobre o default do ``routine.toml``."""
+    """Aplica overrides salvos no DB sobre os defaults do ``routine.toml``."""
     for r in rotinas:
-        ov = _override(db, r.nome)
-        if ov is not None:
-            r.ativa = ov
+        ov_ativa = _override_str(db, r.nome, _CHAVE_ATIVA)
+        if ov_ativa is not None:
+            r.ativa = ov_ativa == "true"
+        ov_agenda = _override_str(db, r.nome, "agenda")
+        if ov_agenda is not None:
+            r.agenda = ov_agenda
 
 
-def _override(db: Database, nome: str) -> bool | None:
+def _override_str(db: Database, nome: str, chave: str) -> str | None:
     row = db.connection.execute(
         "SELECT valor FROM routine_state WHERE rotina = ? AND chave = ?",
-        (nome, _CHAVE_ATIVA),
+        (nome, chave),
     ).fetchone()
-    if row is None or row[0] is None:
-        return None
-    return row[0] == "true"
+    return row[0] if row and row[0] is not None else None
 
 
 def _set_override(db: Database, nome: str, ativa: bool, agora: datetime) -> None:
+    _set_override_str(db, nome, _CHAVE_ATIVA, "true" if ativa else "false", agora)
+
+
+def _set_override_str(db: Database, nome: str, chave: str, valor: str, agora: datetime) -> None:
     db.connection.execute(
         "INSERT INTO routine_state (rotina, chave, valor, atualizado_em) VALUES (?,?,?,?) "
         "ON CONFLICT(rotina, chave) DO UPDATE SET valor = excluded.valor, "
         "atualizado_em = excluded.atualizado_em",
-        (nome, _CHAVE_ATIVA, "true" if ativa else "false", agora.isoformat()),
+        (nome, chave, valor, agora.isoformat()),
     )
     db.connection.commit()
