@@ -49,6 +49,7 @@ class ContextoExecucao:
     origem: str = "manual"  # manual | agenda | mensagem
     payload: str | None = None
     ultimo_run: dict | None = None
+    db: Any = None  # Database — disponível para fases collect que precisam de dados
 
 
 @dataclass
@@ -107,7 +108,8 @@ def executar(
             else:
                 status = "skipped"  # gate não passou: encerra sem IA
         else:
-            saida = f"✓ rotina '{rotina.nome}' executada."
+            # Camada 0: usa _saida do collect se disponível, senão confirmação simples.
+            saida = resultado.data.get("_saida") or f"✓ rotina '{rotina.nome}' executada."
 
         # deliver: entrega o resultado (silencioso quando skipped).
         if status != "skipped" and saida is not None:

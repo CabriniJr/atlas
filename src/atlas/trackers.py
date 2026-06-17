@@ -18,10 +18,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 
 
-def responder_trackers(texto: str, db: Database, agora: datetime) -> str | None:
+def responder_trackers(
+    texto: str,
+    db: Database,
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> str | None:
     """Route ``/track`` commands, or ``None`` if not a track command."""
     partes = texto.split()
     if not partes or partes[0] != "/track":
@@ -31,7 +38,7 @@ def responder_trackers(texto: str, db: Database, agora: datetime) -> str | None:
         return _listar(db)
 
     if partes[1] == "new":
-        return _criar(db, partes, agora)
+        return _criar(db, partes, agora, store=store)
 
     nome = partes[1].lower()
     if len(partes) >= 3 and partes[2] == "rm":
@@ -44,7 +51,12 @@ def responder_trackers(texto: str, db: Database, agora: datetime) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _criar(db: Database, partes: list[str], agora: datetime) -> str:
+def _criar(
+    db: Database,
+    partes: list[str],
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> str:
     if len(partes) < 3:
         return "Usage: /track new <name> [unit]   e.g. /track new weight kg"
     nome = partes[2].lower()
@@ -63,6 +75,15 @@ def _criar(db: Database, partes: list[str], agora: datetime) -> str:
         ativo=1,
         criado_em=agora.isoformat(),
     )
+    if store is not None:
+        r = Resource(
+            kind="Tracker",
+            name=nome,
+            labels={"domain": "geral", "active": "true"},
+            spec={"unit": unidade, "type": "number", "syntax": sintaxe, "aggregation": "last"},
+            status={"last_value": None, "count_today": 0},
+        )
+        store.apply(r, agora)
     exemplo = f"{nome}: 42" + (f"   (logs in {unidade})" if unidade else "")
     return f"📈 tracker '{nome}' created. Log with:\n   {exemplo}"
 

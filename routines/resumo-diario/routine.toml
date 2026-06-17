@@ -1,0 +1,6 @@
+nome = "resumo-diario"
+descricao = "Resumo diário: atividades, trackers, pool e alarmes do dia."
+agenda = "0 21 * * *"
+modelo = "none"
+saida = "telegram"
+ativa = true

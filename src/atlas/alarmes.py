@@ -11,10 +11,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 
+from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 
 
-def responder_alarmes(texto: str, db: Database, agora: datetime) -> str | None:
+def responder_alarmes(
+    texto: str,
+    db: Database,
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> str | None:
     """Route ``/alarm`` / ``/alarms``, or ``None`` if not an alarm command."""
     partes = texto.split()
     if not partes:
@@ -31,12 +38,17 @@ def responder_alarmes(texto: str, db: Database, agora: datetime) -> str | None:
         if partes[1].isdigit() and len(partes) >= 3 and partes[2] == "remove":
             return _remover(db, int(partes[1]))
         # /alarm HH:MM <message> [@once]
-        return _criar(db, partes, agora)
+        return _criar(db, partes, agora, store=store)
 
     return None
 
 
-def _criar(db: Database, partes: list[str], agora: datetime) -> str:
+def _criar(
+    db: Database,
+    partes: list[str],
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> str:
     hm = _parse_hora(partes[1])
     if hm is None:
         return "⚠️ invalid time. Use HH:MM, e.g. /alarm 23:00 go to sleep"
@@ -59,6 +71,15 @@ def _criar(db: Database, partes: list[str], agora: datetime) -> str:
         ativo=1,
         criado_em=agora.isoformat(),
     )
+    if store is not None:
+        r = Resource(
+            kind="Alarm",
+            name=f"alarm-{alarme_id}",
+            labels={"mode": "once" if uma_vez else "daily"},
+            spec={"time": partes[1], "mode": "once" if uma_vez else "daily", "message": mensagem},
+            status={"active": True, "next_fire": proximo.isoformat()},
+        )
+        store.apply(r, agora)
     quando = "once" if uma_vez else "daily"
     return f"⏰ alarm #{alarme_id} set for {partes[1]} ({quando})\n   next: {proximo.isoformat()}"
 

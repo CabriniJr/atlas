@@ -71,7 +71,7 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
         return resposta_ctrl
 
     # Alarms (E5-07): /alarm, /alarms.
-    resposta_alarme = responder_alarmes(texto, db, agora)
+    resposta_alarme = responder_alarmes(texto, db, agora, store=store)
     if resposta_alarme is not None:
         return resposta_alarme
 
@@ -81,7 +81,7 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
         return resposta_pool
 
     # Trackers (E5-04/05): /track ...
-    resposta_track = responder_trackers(texto, db, agora)
+    resposta_track = responder_trackers(texto, db, agora, store=store)
     if resposta_track is not None:
         return resposta_track
 

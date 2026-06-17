@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+import atlas.rotinas.resumo_diario  # noqa: F401 — registra collect no registry
 from atlas.alarmes import tick_alarmes
 from atlas.comandos import para_telegram
 from atlas.config import Config
@@ -21,8 +22,10 @@ from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
+from atlas.rotinas import obter as obter_collect
 from atlas.routines import Rotina, carregar_rotinas
 from atlas.scheduler import catch_up, tick
+from atlas.sync import sincronizar_store
 from atlas.telegram import TelegramAdapter
 
 _log = logging.getLogger("atlas")
@@ -81,8 +84,9 @@ def montar_disparo(db: Database, adapter: Adapter, chat_id: int) -> Callable[[Ro
     """
 
     def disparar(rotina: Rotina) -> object:
-        ctx = ContextoExecucao(agora=datetime.now(), rotina=rotina, origem="agenda")
-        return executar(ctx, db, lambda msg: adapter.enviar(chat_id, msg))
+        ctx = ContextoExecucao(agora=datetime.now(), rotina=rotina, origem="agenda", db=db)
+        collect = obter_collect(rotina.nome)
+        return executar(ctx, db, lambda msg: adapter.enviar(chat_id, msg), collect=collect)
 
     return disparar
 
@@ -116,6 +120,7 @@ def run(config: Config | None = None) -> None:
         _log.exception("Falha no catch-up de boot; seguindo.")
 
     store = ResourceStore(config.db_path)
+    sincronizar_store(db, store, carga.rotinas)
 
     _log.info(
         "Atlas no ar. user_id=%s · %d rotina(s) ativa(s). Ctrl+C para sair.",
