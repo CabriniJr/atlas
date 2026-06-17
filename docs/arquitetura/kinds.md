@@ -2,10 +2,10 @@
 titulo: Kinds do Atlas — catálogo e padrão de definição
 id: ARQ-KINDS
 status: aprovado
-versao: 1.0
+versao: 1.1
 dono: Tech Lead
 revisado-por: PO/PM
-atualizado-em: 2026-06-16
+atualizado-em: 2026-06-17
 ---
 
 # Kinds do Atlas
@@ -18,6 +18,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança       | Aprovado por |
 |--------|------------|-----------|---------------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação       | PO/PM        |
+| 1.1    | 2026-06-17 | Tech Lead | Kinds `Repo`, `Diff`, `Prompt`; arquivo de diffs em `Doc`; hierarquia por labels | PO/PM |
 
 ---
 
@@ -89,11 +90,41 @@ Status: `last_fired`, `active`
 #### `Routine` (E1-01)
 | Campo spec | Tipo | Descrição |
 |------------|------|-----------|
-| `schedule` | string | Expressão de agenda (cron / @every) |
+| `schedule` | string | Agenda: cron de 5 campos / `@every <n>` / `@daily HH:MM` — ver [scheduler](../specs/scheduler.md) |
 | `model` | string | `none` \| `haiku` \| `opus` |
 | `active` | bool | Ligada/desligada |
 
 Status: `last_run`, `run_count`, `last_status`
+
+#### `Repo` (collect `repo-sync`)
+Repositório git monitorado. Credencial de repos privados via `secrets/git-credentials`.
+| Campo spec | Tipo | Descrição |
+|------------|------|-----------|
+| `url` | string | URL (`https://github.com/user/repo`) |
+| `model` | string | (opcional) modelo da IA na análise (default haiku) |
+
+Status: `last_commit`, `last_commit_msg`, `last_author`, `last_commit_date`,
+`last_sync`, `last_check`, `files_changed`, `insertions`, `deletions`, `last_summary`.
+
+#### `Diff` (auto — `repo-sync`)
+Snapshot estruturado de uma atualização. `spec`: `commit`, `subject`, `author`,
+`date`, `files_changed`, `insertions`, `deletions`, `files_list`, `diff_raw`,
+`explicacao` (análise + sugestões da IA).
+
+> Cada atualização também é **arquivada como `Doc`** (`Doc/repo-<label>-<sha7>`,
+> `labels: topic=repo, repo=<label>, tipo=diff`) — histórico represado, navegável
+> na hierarquia de Docs (agrupada por labels).
+
+#### `Prompt` (IA plugável — [ADR-0016](adr/ADR-0016-ia-plugavel-kind-prompt.md))
+Chamada de IA reutilizável que qualquer rotina invoca via `coletar = "prompt"`.
+| Campo spec | Tipo | Descrição |
+|------------|------|-----------|
+| `template` | string | prompt; placeholders `{dados}` e `{agora}` |
+| `model` | string | modelo (default `claude-haiku-4-5-20251001`) |
+| `timeout` | int | segundos (default 90) |
+| `fonte` | string | `{dados}`: `grupo:<g>` · `kind:<K>` · `repo:<r>` · `texto:<t>` |
+
+Status: `last_run`, `last_ok`, `last_output`.
 
 ---
 
@@ -106,6 +137,10 @@ Status: `last_run`, `run_count`, `last_status`
 | `Routine` | `/queue <texto>` | ✅ aditivo (E0-04) |
 | `Tracker` | `/track new` | ❌ pendente (E0-04) |
 | `Alarm` | `/alarm` | ❌ pendente (E0-04) |
+| `Repo` | `/apply Repo <n> spec.url=…` | ✅ collect `repo-sync` |
+| `Diff` | auto (`repo-sync`) | ✅ |
+| `Prompt` | `/apply Prompt <n> spec.template=…` | ✅ collect `prompt` (ADR-0016) |
+| `Doc` | sync de docs + arquivo de diffs | ✅ hierarquia por labels |
 
 Qualquer kind pode ser criado diretamente com `/apply <Kind> <name> [k=v]` —
 o store é genérico e não conhece domínios.
