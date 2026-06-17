@@ -136,7 +136,9 @@ def run(config: Config | None = None) -> None:
             # Após cada janela de long-poll, verifica agenda e alarmes.
             agora = datetime.now()
             tick(agora, carga.rotinas, db, disparar)
-            tick_alarmes(agora, db, lambda msg: adapter.enviar(config.allowed_user_id, msg))
+            tick_alarmes(
+                agora, db, lambda msg: adapter.enviar(config.allowed_user_id, msg), store=store
+            )
         except KeyboardInterrupt:  # noqa: PERF203
             _log.info("Encerrando.")
             break

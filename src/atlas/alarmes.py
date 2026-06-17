@@ -1,9 +1,8 @@
-"""Alarmes / lembretes (E5-07).
+"""Alarmes / lembretes (E5-07 / E0-04).
 
-Modelo híbrido: o alarme é **dado** (tabela ``alarms``) e o disparo é feito por um
-``tick_alarmes`` no loop do app (ao lado do scheduler). Sem IA. Comandos de
-gestão (``/alarm``, ``/alarms``) respondem na hora; o disparo notifica o dono no
-horário e recalcula o próximo (diário) ou desativa (uma vez).
+ResourceStore é a fonte de verdade para leitura (kind="Alarm").
+A tabela ``alarms`` permanece para o tick de scheduling.
+Toda criação/remoção grava em ambos; o tick atualiza status no store.
 """
 
 from __future__ import annotations
@@ -29,15 +28,13 @@ def responder_alarmes(
     cmd = partes[0]
 
     if cmd == "/alarms":
-        return _listar(db)
+        return _listar(db, store)
 
     if cmd == "/alarm":
         if len(partes) == 1:
             return "Usage: /alarm HH:MM <message> [@once] · /alarm <id> remove · /alarms"
-        # /alarm <id> remove
         if partes[1].isdigit() and len(partes) >= 3 and partes[2] == "remove":
-            return _remover(db, int(partes[1]))
-        # /alarm HH:MM <message> [@once]
+            return _remover(db, int(partes[1]), store=store, agora=agora)
         return _criar(db, partes, agora, store=store)
 
     return None
@@ -75,16 +72,36 @@ def _criar(
         r = Resource(
             kind="Alarm",
             name=f"alarm-{alarme_id}",
-            labels={"mode": "once" if uma_vez else "daily"},
-            spec={"time": partes[1], "mode": "once" if uma_vez else "daily", "message": mensagem},
-            status={"active": True, "next_fire": proximo.isoformat()},
+            labels={"mode": "once" if uma_vez else "daily", "active": "true"},
+            spec={
+                "time": partes[1],
+                "mode": "once" if uma_vez else "daily",
+                "message": mensagem,
+                "active": True,
+            },
+            status={"active": True, "next_fire": proximo.isoformat(), "fire_count": 0},
         )
         store.apply(r, agora)
     quando = "once" if uma_vez else "daily"
     return f"⏰ alarm #{alarme_id} set for {partes[1]} ({quando})\n   next: {proximo.isoformat()}"
 
 
-def _listar(db: Database) -> str:
+def _listar(db: Database, store: ResourceStore | None) -> str:
+    if store is not None:
+        recursos = [r for r in store.list("Alarm") if r.spec.get("active", True)]
+        if not recursos:
+            return "⏰ No active alarms. Set one: /alarm 23:00 go to sleep"
+        linhas = []
+        for r in recursos:
+            modo = r.spec.get("mode", "daily")
+            prox = r.status.get("next_fire", "?")
+            linhas.append(
+                f"{r.name}  {r.spec.get('time','?')} ({modo}) → {r.spec.get('message','')}"
+                f"  · next {prox[:16]}"
+            )
+        return "⏰ Alarms\n" + "\n".join(linhas) + "\n→ /alarm <id> remove"
+
+    # fallback
     rows = db.connection.execute(
         "SELECT id, horario, recorrencia, proximo_disparo, mensagem "
         "FROM alarms WHERE ativo = 1 ORDER BY proximo_disparo ASC"
@@ -99,15 +116,31 @@ def _listar(db: Database) -> str:
     return "⏰ Alarms\n" + "\n".join(linhas) + "\n→ /alarm <id> remove"
 
 
-def _remover(db: Database, alarme_id: int) -> str:
+def _remover(
+    db: Database,
+    alarme_id: int,
+    store: ResourceStore | None = None,
+    agora: datetime | None = None,
+) -> str:
     cur = db.connection.execute("UPDATE alarms SET ativo = 0 WHERE id = ?", (alarme_id,))
     db.connection.commit()
     if cur.rowcount == 0:
         return f"❓ alarm #{alarme_id} not found. See /alarms"
+    if store is not None and agora is not None:
+        name = f"alarm-{alarme_id}"
+        r = store.get("Alarm", name)
+        if r is not None:
+            store.patch("Alarm", name, {"active": False}, agora)
+            store.set_status("Alarm", name, {**r.status, "active": False}, agora)
     return f"🗑 alarm #{alarme_id} removed"
 
 
-def tick_alarmes(agora: datetime, db: Database, notificar: Callable[[str], None]) -> int:
+def tick_alarmes(
+    agora: datetime,
+    db: Database,
+    notificar: Callable[[str], None],
+    store: ResourceStore | None = None,
+) -> int:
     """Fire alarms whose time has come. Returns how many fired."""
     vencidos = db.connection.execute(
         "SELECT id, horario, mensagem, recorrencia FROM alarms "
@@ -116,14 +149,29 @@ def tick_alarmes(agora: datetime, db: Database, notificar: Callable[[str], None]
     ).fetchall()
     for a in vencidos:
         notificar(f"⏰ {a['mensagem']}")
+        name = f"alarm-{a['id']}"
         if a["recorrencia"] == "diario":
             prox = _proximo(_parse_hora(a["horario"]), agora)
             db.connection.execute(
                 "UPDATE alarms SET proximo_disparo = ? WHERE id = ?",
                 (prox.isoformat(), a["id"]),
             )
+            if store is not None:
+                r = store.get("Alarm", name)
+                if r is not None:
+                    count = r.status.get("fire_count", 0) + 1
+                    store.set_status(
+                        "Alarm", name,
+                        {"active": True, "next_fire": prox.isoformat(), "fire_count": count},
+                        agora,
+                    )
         else:
             db.connection.execute("UPDATE alarms SET ativo = 0 WHERE id = ?", (a["id"],))
+            if store is not None:
+                r = store.get("Alarm", name)
+                if r is not None:
+                    store.patch("Alarm", name, {"active": False}, agora)
+                    store.set_status("Alarm", name, {**r.status, "active": False}, agora)
     db.connection.commit()
     return len(vencidos)
 

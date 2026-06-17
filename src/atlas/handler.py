@@ -90,7 +90,7 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
 
     # Texto livre: só registra se casa micro-sintaxe de tracker declarado.
     # Sem match → barreira: devolve ajuda, nada grava (E1-11 / ADR-0013).
-    resposta_sintaxe = registrar_por_sintaxe(texto, db, agora)
+    resposta_sintaxe = registrar_por_sintaxe(texto, db, agora, store=store)
     if resposta_sintaxe is not None:
         return resposta_sintaxe
 
