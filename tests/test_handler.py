@@ -23,40 +23,36 @@ def test_start_da_boas_vindas():
     assert "Atlas" in resposta
 
 
-def test_mensagem_livre_registra_atividade():
+def test_texto_livre_nao_registra_e_retorna_ajuda():
+    """E1-11: barreira — texto sem intenção não grava nada."""
     db = _db()
     resposta = responder("perna hoje, agachamento 80kg", db, datetime(2026, 6, 16, 21, 0))
+    n = db.connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
+    assert n == 0
+    assert "/reg" in resposta or "help" in resposta.lower()
+
+
+def test_reg_grava_atividade():
+    db = _db()
+    resposta = responder("/reg treino de perna", db, datetime(2026, 6, 16, 21, 0))
     linhas = db.connection.execute("SELECT texto_cru, dominio FROM activities").fetchall()
     assert len(linhas) == 1
-    assert linhas[0]["texto_cru"] == "perna hoje, agachamento 80kg"
-    assert "✓" in resposta
-
-
-def test_infere_dominio_fisico():
-    db = _db()
-    responder("treino de perna", db, datetime(2026, 6, 16, 21, 0))
-    dominio = db.connection.execute("SELECT dominio FROM activities").fetchone()["dominio"]
-    assert dominio == "fisico"
-
-
-def test_infere_dominio_estudo():
-    db = _db()
-    responder("estudei álgebra linear 1h30", db, datetime(2026, 6, 16, 21, 0))
-    dominio = db.connection.execute("SELECT dominio FROM activities").fetchone()["dominio"]
-    assert dominio == "estudo"
+    assert "perna" in linhas[0]["texto_cru"]
+    assert linhas[0]["dominio"] == "geral"
+    assert "📝" in resposta
 
 
 def test_status_conta_registros_do_dia():
     db = _db()
     agora = datetime(2026, 6, 16, 21, 0)
-    responder("treino", db, agora)
-    responder("estudei", db, agora)
+    responder("/reg treino", db, agora)
+    responder("/reg estudei", db, agora)
     resposta = responder("/status", db, agora)
     assert "2" in resposta
 
 
 def test_status_ignora_dias_anteriores():
     db = _db()
-    responder("treino ontem", db, datetime(2026, 6, 15, 21, 0))
+    responder("/reg treino ontem", db, datetime(2026, 6, 15, 21, 0))
     resposta = responder("/status", db, datetime(2026, 6, 16, 9, 0))
     assert "0" in resposta

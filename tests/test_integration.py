@@ -38,7 +38,7 @@ def test_loop_atende_o_dono_fim_a_fim():
                 "message": {
                     "chat": {"id": 42},
                     "from": {"id": 42},
-                    "text": "treino de perna",
+                    "text": "/reg treino de perna",
                 },
             }
         ]

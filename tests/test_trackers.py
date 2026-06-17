@@ -50,13 +50,13 @@ def test_detalhe_mostra_historico_e_stats():
     assert "avg" in resp and "weight" in resp
 
 
-def test_texto_livre_sem_tracker_cai_no_log_normal():
+def test_texto_livre_sem_tracker_retorna_ajuda_barreira():
+    """E1-11: texto livre sem micro-sintaxe → ajuda, sem registro."""
     db = _db()
     resp = responder("treino de perna", db, _AGORA)
-    assert "logged" in resp.lower()
-    # virou activity normal, não tracking
-    rot = db.connection.execute("SELECT rotina FROM activities").fetchone()[0]
-    assert rot == "log"
+    n = db.connection.execute("SELECT COUNT(*) FROM activities").fetchone()[0]
+    assert n == 0
+    assert "/reg" in resp or "help" in resp.lower()
 
 
 def test_rm_desativa():

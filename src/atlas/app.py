@@ -17,6 +17,7 @@ from atlas.alarmes import tick_alarmes
 from atlas.comandos import para_telegram
 from atlas.config import Config
 from atlas.controle import aplicar_overrides
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
@@ -47,6 +48,7 @@ def processar_update(
     db: Database,
     adapter: Adapter,
     agora: datetime | None = None,
+    store: ResourceStore | None = None,
 ) -> None:
     """Atende um update. Só o dono é respondido (seguranca.md)."""
     if upd.user_id != config.allowed_user_id:
@@ -54,7 +56,7 @@ def processar_update(
         return
     if not upd.texto:
         return
-    resposta = responder(upd.texto, db, agora or datetime.now())
+    resposta = responder(upd.texto, db, agora or datetime.now(), store=store)
     adapter.enviar(upd.chat_id, resposta)
 
 
@@ -113,6 +115,8 @@ def run(config: Config | None = None) -> None:
     except Exception:  # noqa: BLE001
         _log.exception("Falha no catch-up de boot; seguindo.")
 
+    store = ResourceStore(config.db_path)
+
     _log.info(
         "Atlas no ar. user_id=%s · %d rotina(s) ativa(s). Ctrl+C para sair.",
         config.allowed_user_id,
@@ -123,7 +127,7 @@ def run(config: Config | None = None) -> None:
             for update_cru in adapter.receber():
                 upd = _normalizar(update_cru)
                 if upd is not None:
-                    processar_update(upd, config, db, adapter)
+                    processar_update(upd, config, db, adapter, store=store)
             # Após cada janela de long-poll, verifica agenda e alarmes.
             agora = datetime.now()
             tick(agora, carga.rotinas, db, disparar)

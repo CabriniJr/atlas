@@ -1,8 +1,12 @@
 """Handler do bot — o "cérebro" da Camada 0 (zero IA).
 
 Recebe o texto de uma mensagem e devolve a resposta. Comandos explícitos e
-registro rápido de atividades são resolvidos sem IA (P1/P2). É a fatia funcional
-mínima do roteador (§roteamento; ADR-0008 detalha a versão completa).
+registro com intenção explícita são resolvidos sem IA (P1/P2). É a fatia
+funcional mínima do roteador (§roteamento; ADR-0008 detalha a versão completa).
+
+Barreira de entrada (E1-11 / ADR-0013): texto livre sem trigger, micro-sintaxe
+ou /reg NÃO grava nada — devolve ajuda. Só a intenção explícita do usuário gera
+registro.
 """
 
 from __future__ import annotations
@@ -12,22 +16,29 @@ from datetime import datetime
 from atlas.alarmes import responder_alarmes
 from atlas.comandos import texto_ajuda, texto_boas_vindas
 from atlas.controle import responder_controle
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.debug import responder_debug
 from atlas.pool import responder_pool
 from atlas.trackers import registrar_por_sintaxe, responder_trackers
+from atlas.verbos import responder_verbos
 
-# Palavras-chave → domínio (inferência barata, 0 IA). Versão completa: ADR-0008.
-_DOMINIOS = {
-    "fisico": ("treino", "academia", "perna", "peito", "costas", "agachamento", "corrida"),
-    "estudo": ("estudei", "estudo", "leetcode", "álgebra", "algebra", "curso", "aula"),
-    "leitura": ("li ", "página", "pagina", "livro", "capítulo", "capitulo"),
-}
+_AJUDA_BARREIRA = (
+    "Não entendi o que registrar.\n"
+    "• Use a sintaxe de um tracker (ex.: weight: 82.3).\n"
+    "• Ou /reg <texto> para uma nota livre.\n"
+    "• /trackers lista o que dá pra registrar · /help mostra os comandos."
+)
+
+# Domínios aceitos em /reg #<domínio>. Extensível conforme trackers crescem.
+_DOMINIOS_VALIDOS = {"sono", "saude", "fisico", "estudo", "leitura", "trabalho", "geral"}
 
 
-def responder(texto: str, db: Database, agora: datetime) -> str:
+def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | None = None) -> str:
     """Resolve uma mensagem e devolve a resposta (sempre Camada 0)."""
     texto = texto.strip()
+    if not texto:
+        return _AJUDA_BARREIRA
 
     if texto in ("/start", "/ajuda", "/help"):
         if texto == "/start":
@@ -39,6 +50,15 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
 
     if texto == "/note" or texto.startswith("/note "):
         return _nota_livre(texto, db, agora)
+
+    if texto == "/reg" or texto.startswith("/reg "):
+        return _reg(texto, db, agora)
+
+    # Verbos kubectl-like (E0-03): /get /list /describe /apply /delete.
+    if store is not None:
+        resposta_verbos = responder_verbos(texto, store, agora)
+        if resposta_verbos is not None:
+            return resposta_verbos
 
     # Debug session (diagnostics CLI over Telegram).
     resposta_debug = responder_debug(texto, db, agora)
@@ -56,7 +76,7 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
         return resposta_alarme
 
     # Pool commands (E6): /idea, /task, /queue, /pool.
-    resposta_pool = responder_pool(texto, db, agora)
+    resposta_pool = responder_pool(texto, db, agora, store=store)
     if resposta_pool is not None:
         return resposta_pool
 
@@ -68,12 +88,42 @@ def responder(texto: str, db: Database, agora: datetime) -> str:
     if texto.startswith("/"):
         return "❓ unknown command. See /help"
 
-    # Texto livre: tenta micro-sintaxe de tracker (ex.: 'weight: 82.3'); senão loga.
+    # Texto livre: só registra se casa micro-sintaxe de tracker declarado.
+    # Sem match → barreira: devolve ajuda, nada grava (E1-11 / ADR-0013).
     resposta_sintaxe = registrar_por_sintaxe(texto, db, agora)
     if resposta_sintaxe is not None:
         return resposta_sintaxe
 
-    return _registrar(texto, db, agora)
+    return _AJUDA_BARREIRA
+
+
+def _reg(texto: str, db: Database, agora: datetime) -> str:
+    """Nota livre com intenção explícita. /reg <texto> ou /reg #<domínio> <texto>."""
+    corpo = texto[len("/reg") :].strip()
+    if not corpo:
+        return "Usage: /reg <texto>   ou   /reg #<domínio> <texto>"
+
+    dominio = "geral"
+    if corpo.startswith("#"):
+        partes = corpo.split(None, 1)
+        candidato = partes[0][1:].strip().lower()
+        if candidato and candidato in _DOMINIOS_VALIDOS:
+            dominio = candidato
+            corpo = partes[1].strip() if len(partes) > 1 else ""
+        else:
+            corpo = corpo  # domínio inválido → mantém tudo como texto, usa "geral"
+
+    if not corpo.strip():
+        return "Usage: /reg <texto>   ou   /reg #<domínio> <texto>"
+
+    db.insert(
+        "activities",
+        ts=agora.isoformat(),
+        dominio=dominio,
+        rotina="reg",
+        texto_cru=corpo,
+    )
+    return f"📝 logged ({dominio})"
 
 
 def _nota_livre(texto: str, db: Database, agora: datetime) -> str:
@@ -90,18 +140,6 @@ def _nota_livre(texto: str, db: Database, agora: datetime) -> str:
     return "📝 note logged"
 
 
-def _registrar(texto: str, db: Database, agora: datetime) -> str:
-    dominio = _inferir_dominio(texto)
-    db.insert(
-        "activities",
-        ts=agora.isoformat(),
-        dominio=dominio,
-        rotina="log",
-        texto_cru=texto,
-    )
-    return f"✓ logged ({dominio})"
-
-
 def _status(db: Database, agora: datetime) -> str:
     inicio_do_dia = agora.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     total = db.connection.execute(
@@ -111,11 +149,3 @@ def _status(db: Database, agora: datetime) -> str:
         "SELECT COUNT(*) AS n FROM ideas WHERE estado NOT IN ('descartada','arquivada')"
     ).fetchone()["n"]
     return f"📊 Today: {total} activity record(s) · pool: {abertas} open\nSee /pool or /debug."
-
-
-def _inferir_dominio(texto: str) -> str:
-    minusculo = texto.lower()
-    for dominio, palavras in _DOMINIOS.items():
-        if any(p in minusculo for p in palavras):
-            return dominio
-    return "geral"

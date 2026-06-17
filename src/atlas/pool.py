@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 
 # Comando de captura → tipo do item. Termos em inglês (E5-01).
@@ -19,6 +21,13 @@ _CAPTURA_CMD = {
     "/idea": "ideia",
     "/task": "tarefa",
     "/queue": "rotina",
+}
+
+# Mapa tipo legado → kind no ResourceStore.
+_TIPO_PARA_KIND = {
+    "ideia": "Idea",
+    "tarefa": "Task",
+    "rotina": "Routine",
 }
 
 # Operações de item e a função correspondente (preenchidas após defini-las).
@@ -32,11 +41,22 @@ _ESTADOS_OCULTOS = ("descartada", "arquivada")
 # ---------------------------------------------------------------------------
 
 
-def capturar_ideia(db: Database, *, tipo: str, texto: str, agora: datetime) -> int:
-    """Captura um item no pool. ``titulo`` = 1ª linha; ``corpo`` = texto completo."""
+def capturar_ideia(
+    db: Database,
+    *,
+    tipo: str,
+    texto: str,
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> int:
+    """Captura um item no pool. ``titulo`` = 1ª linha; ``corpo`` = texto completo.
+
+    Se ``store`` for fornecido, também grava como Resource no ResourceStore
+    (E0-04 — migração aditiva; a tabela ``ideas`` continua como está).
+    """
     titulo = texto.strip().splitlines()[0].strip() if texto.strip() else ""
     ts = agora.isoformat()
-    return db.insert(
+    ideia_id = db.insert(
         "ideas",
         tipo=tipo,
         titulo=titulo,
@@ -46,6 +66,18 @@ def capturar_ideia(db: Database, *, tipo: str, texto: str, agora: datetime) -> i
         criado_em=ts,
         atualizado_em=ts,
     )
+    if store is not None:
+        kind = _TIPO_PARA_KIND.get(tipo, tipo.capitalize())
+        name = f"idea-{ideia_id}"
+        r = Resource(
+            kind=kind,
+            name=name,
+            labels={"tipo": tipo, "estado": "capturada"},
+            spec={"body": texto, "title": titulo, "priority": 100},
+            status={"state": "capturada"},
+        )
+        store.apply(r, agora)
+    return ideia_id
 
 
 def obter_ideia(db: Database, ideia_id: int) -> dict | None:
@@ -109,7 +141,12 @@ def _set(db: Database, ideia_id: int, agora: datetime, **campos: object) -> None
 # ---------------------------------------------------------------------------
 
 
-def responder_pool(texto: str, db: Database, agora: datetime) -> str | None:
+def responder_pool(
+    texto: str,
+    db: Database,
+    agora: datetime,
+    store: ResourceStore | None = None,
+) -> str | None:
     """Route pool commands. Returns the reply, or ``None`` if not a pool command."""
     partes = texto.split()
     if not partes:
@@ -121,7 +158,7 @@ def responder_pool(texto: str, db: Database, agora: datetime) -> str | None:
         corpo = texto[len(cmd) :].strip()
         if not corpo:
             return f"Usage: {cmd} <text>"
-        ideia_id = capturar_ideia(db, tipo=tipo, texto=corpo, agora=agora)
+        ideia_id = capturar_ideia(db, tipo=tipo, texto=corpo, agora=agora, store=store)
         rotulo = _ROTULO.get(tipo, tipo)
         return f"✅ {rotulo} #{ideia_id} saved · priority 100\n   inspect: /pool {ideia_id}"
 

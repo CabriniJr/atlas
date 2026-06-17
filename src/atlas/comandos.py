@@ -10,10 +10,19 @@ from __future__ import annotations
 # (command_without_slash, short description). Order = display order.
 COMANDOS: list[tuple[str, str]] = [
     ("start", "Welcome & quick start"),
+    # --- kubectl-like verbs (E0-03) --
+    ("resources", "List all kinds in the store"),
+    ("list", "List objects of a kind: /list <Kind>"),
+    ("get", "Get an object: /get <Kind> <name>"),
+    ("describe", "Full detail: /describe <Kind> <name>"),
+    ("apply", "Create/update: /apply <Kind> <name> [k=v …]"),
+    ("delete", "Delete: /delete <Kind> <name>"),
+    # --- capture --
     ("idea", "Capture an idea"),
     ("task", "Capture a task / homework"),
     ("queue", "Queue a new routine request (autogen candidate)"),
-    ("note", "Log a free-form note"),
+    ("reg", "Log a free-form note: /reg <text> or /reg #<domain> <text>"),
+    ("note", "Log a note (legacy alias for /reg)"),
     ("pool", "List / inspect / manage the idea pool"),
     ("track", "Trackers: list / new / detail (e.g. 'weight: 82.3')"),
     ("routines", "List loaded routines"),
@@ -32,11 +41,19 @@ def texto_ajuda() -> str:
     """Render ``/help`` (plain text, grouped by area)."""
     return (
         "🧭 Atlas — command reference\n\n"
+        "🔷 API de objetos (kubectl-like)\n"
+        "  /resources                         list all kinds in store\n"
+        "  /list <Kind>                       list all objects of a kind\n"
+        "  /get <Kind> <name>                 get a specific object\n"
+        "  /describe <Kind> <name>            full detail (spec + status)\n"
+        "  /apply <Kind> <name> [k=v …]       create or update (upsert)\n"
+        "  /delete <Kind> <name>              remove an object\n\n"
         "💡 Capture\n"
-        "  /idea <text>      capture an idea\n"
-        "  /task <text>      capture a task / homework\n"
-        "  /queue <text>     queue a new routine request (autogen candidate)\n"
-        "  /note <text>      log a free-form note\n\n"
+        "  /idea <text>      capture an idea  → Kind: Idea\n"
+        "  /task <text>      capture a task   → Kind: Task\n"
+        "  /queue <text>     queue a routine  → Kind: Routine\n"
+        "  /reg <text>       log a free note (use /reg #<domain> <text> for domain)\n"
+        "  /note <text>      legacy alias for /reg\n\n"
         "🗂 Pool\n"
         "  /pool             list open items (by priority)\n"
         "  /pool <state>     filter (capturada|priorizada|gerada|ativada)\n"
