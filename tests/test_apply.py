@@ -80,3 +80,46 @@ def test_build_request_sem_token_nao_inclui_auth():
     assert url == "http://127.0.0.1:8080/apis/atlas/v1/Goal/peso-alvo"
     assert "Authorization" not in headers
     assert _json.loads(body) == {"labels": {}, "spec": {}}
+
+
+from atlas.apply import apply_manifests
+
+_MANIFESTS = [
+    {"kind": "Tracker", "name": "peso", "labels": {"grupo": "academia"}, "spec": {"unit": "kg"}},
+    {"kind": "Goal", "name": "peso-alvo", "labels": {"grupo": "academia"}, "spec": {}},
+]
+
+
+def test_apply_chama_sender_por_objeto():
+    chamadas = []
+
+    def fake_send(method, url, body, headers):
+        chamadas.append((method, url))
+
+    res = apply_manifests(_MANIFESTS, "http://api", token="t", send=fake_send)
+    assert res.ok is True
+    assert res.aplicados == ["Tracker/peso", "Goal/peso-alvo"]
+    assert chamadas == [
+        ("PUT", "http://api/apis/atlas/v1/Tracker/peso"),
+        ("PUT", "http://api/apis/atlas/v1/Goal/peso-alvo"),
+    ]
+
+
+def test_apply_dry_run_nao_chama_sender():
+    def boom(*a, **k):
+        raise AssertionError("não deveria chamar HTTP em dry-run")
+
+    res = apply_manifests(_MANIFESTS, "http://api", token=None, dry_run=True, send=boom)
+    assert res.ok is True
+    assert res.aplicados == ["Tracker/peso", "Goal/peso-alvo"]
+
+
+def test_apply_falha_parcial_continua_e_marca_nao_ok():
+    def flaky_send(method, url, body, headers):
+        if "Goal" in url:
+            raise RuntimeError("HTTP 500")
+
+    res = apply_manifests(_MANIFESTS, "http://api", token=None, send=flaky_send)
+    assert res.ok is False
+    assert res.aplicados == ["Tracker/peso"]
+    assert res.falhas == [("Goal/peso-alvo", "HTTP 500")]

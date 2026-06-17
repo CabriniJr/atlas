@@ -8,6 +8,7 @@ API — não conhece domínio nem escreve no store direto (ADR-0015/ADR-0017).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 
 import yaml
 
@@ -52,3 +53,45 @@ def build_request(
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return ("PUT", url, body, headers)
+
+
+@dataclass
+class ResultadoApply:
+    """Resumo de uma aplicação de manifestos (ADR-0006: resiliente)."""
+
+    aplicados: list[str] = field(default_factory=list)
+    falhas: list[tuple[str, str]] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.falhas
+
+
+def apply_manifests(
+    manifests: list[dict],
+    api_url: str,
+    token: str | None = None,
+    *,
+    dry_run: bool = False,
+    send=None,
+) -> ResultadoApply:
+    """Aplica cada manifesto via ``send(method, url, body, headers)``.
+
+    Falha num objeto é registrada e **não** interrompe os demais. Em
+    ``dry_run`` nenhuma chamada é feita.
+    """
+    if send is None:
+        send = send_http
+    res = ResultadoApply()
+    for m in manifests:
+        ref = f"{m['kind']}/{m['name']}"
+        method, url, body, headers = build_request(api_url, m, token)
+        if dry_run:
+            res.aplicados.append(ref)
+            continue
+        try:
+            send(method, url, body, headers)
+            res.aplicados.append(ref)
+        except Exception as exc:  # noqa: BLE001 — resiliência por objeto
+            res.falhas.append((ref, str(exc)))
+    return res
