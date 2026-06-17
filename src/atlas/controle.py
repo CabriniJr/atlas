@@ -26,7 +26,12 @@ _CHAVE_ATIVA = "ativa"
 _CAMPOS_EDITAVEIS = {"agenda"}
 
 
-def responder_controle(texto: str, db: Database, agora: datetime) -> str | None:
+def responder_controle(
+    texto: str,
+    db: Database,
+    agora: datetime,
+    store: object = None,
+) -> str | None:
     """Route routine-control commands, or ``None`` if not one of them."""
     partes = texto.split()
     if not partes:
@@ -38,7 +43,7 @@ def responder_controle(texto: str, db: Database, agora: datetime) -> str | None:
     if cmd == "/routine":
         return _detalhe_ou_set(db, partes, agora)
     if cmd == "/run":
-        return _run(db, partes, agora)
+        return _run(db, partes, agora, store=store)
     if cmd in ("/activate", "/deactivate"):
         return _toggle(db, partes, ativar=cmd == "/activate", agora=agora)
     return None
@@ -116,14 +121,22 @@ def _cron_valido(expr: str) -> bool:
     return len(partes) == 5
 
 
-def _run(db: Database, partes: list[str], agora: datetime) -> str:
+def _run(db: Database, partes: list[str], agora: datetime, store: object = None) -> str:
     if len(partes) < 2:
-        return "Usage: /run <name>"
-    rot = _achar(db, partes[1])
+        return "Usage: /run <name> [--test]"
+    nome = partes[1]
+
+    # /run <nome> --test → harness sem executor completo
+    if "--test" in partes[2:]:
+        from atlas.harness import inspecionar
+        return inspecionar(nome, db=db, store=store, agora=agora)
+
+    rot = _achar(db, nome)
     if rot is None:
-        return f"❓ routine '{partes[1]}' not found. See /routines"
+        return f"❓ routine '{nome}' not found. See /routines"
     saidas: list[str] = []
-    res = executar(ContextoExecucao(agora=agora, rotina=rot, origem="manual"), db, saidas.append)
+    ctx = ContextoExecucao(agora=agora, rotina=rot, origem="manual", store=store)
+    res = executar(ctx, db, saidas.append)
     corpo = "\n".join(saidas) if saidas else f"run {res.status} (layer {res.camada})"
     return f"▶️ {rot.nome}\n{corpo}"
 

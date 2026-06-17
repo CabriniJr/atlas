@@ -74,7 +74,7 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
         return resposta_debug
 
     # Routine control (E5-02): /routines, /routine, /run, /activate, /deactivate.
-    resposta_ctrl = responder_controle(texto, db, agora)
+    resposta_ctrl = responder_controle(texto, db, agora, store=store)
     if resposta_ctrl is not None:
         return resposta_ctrl
 
