@@ -44,7 +44,7 @@ class ResourceStore:
     """Store de objetos sobre SQLite. Cria o schema ao abrir (aditivo)."""
 
     def __init__(self, path: str = ":memory:") -> None:
-        self.connection = sqlite3.connect(path)
+        self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(SCHEMA)
         self.connection.commit()

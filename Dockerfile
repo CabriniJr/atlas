@@ -8,7 +8,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ATLAS_DB_PATH=/data/atlas.sqlite \
     ATLAS_ROUTINES_DIR=/app/routines \
-    ATLAS_DOCS_DIR=/app/docs
+    ATLAS_DOCS_DIR=/app/docs \
+    ATLAS_API_PORT=8080
 
 WORKDIR /app
 
@@ -26,6 +27,7 @@ COPY docs ./docs
 RUN useradd --create-home --uid 10001 atlas \
     && mkdir -p /data \
     && chown -R atlas:atlas /data /app
+EXPOSE 8080
 VOLUME ["/data"]
 USER atlas
 

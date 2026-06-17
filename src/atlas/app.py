@@ -118,6 +118,10 @@ def run(config: Config | None = None) -> None:
     sincronizar_store(db, store, carga.rotinas)
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
 
+    # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon
+    from atlas.api import iniciar as iniciar_api
+    iniciar_api(store)
+
     # Catch-up dos disparos perdidos enquanto esteve fora do ar (ADR-0006).
     try:
         recuperados = catch_up(datetime.now(), carga.rotinas, db, disparar)
