@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+import json as _json
+
 import pytest
 
-from atlas.apply import ManifestoInvalido, parse_manifests
+from atlas.apply import (
+    ManifestoInvalido,
+    apply_manifests,
+    build_request,
+    cli_apply,
+    parse_manifests,
+)
 
 
 def test_pyyaml_disponivel():
@@ -59,13 +67,8 @@ def test_parse_erro_documento_nao_mapa():
         parse_manifests("- isto\n- e uma lista\n")
 
 
-import json as _json
-
-from atlas.apply import build_request
-
-
 def test_build_request_monta_put():
-    m = {"kind": "Tracker", "name": "peso", "labels": {"grupo": "academia"}, "spec": {"unit": "kg"}}
+    m = {"kind": "Tracker", "name": "peso", "labels": {"grupo": "academia"}, "spec": {"unit": "kg"}}  # noqa: E501
     method, url, body, headers = build_request("http://127.0.0.1:8080", m, token="t0k")
     assert method == "PUT"
     assert url == "http://127.0.0.1:8080/apis/atlas/v1/Tracker/peso"
@@ -81,8 +84,6 @@ def test_build_request_sem_token_nao_inclui_auth():
     assert "Authorization" not in headers
     assert _json.loads(body) == {"labels": {}, "spec": {}}
 
-
-from atlas.apply import apply_manifests
 
 _MANIFESTS = [
     {"kind": "Tracker", "name": "peso", "labels": {"grupo": "academia"}, "spec": {"unit": "kg"}},
@@ -123,9 +124,6 @@ def test_apply_falha_parcial_continua_e_marca_nao_ok():
     assert res.ok is False
     assert res.aplicados == ["Tracker/peso"]
     assert res.falhas == [("Goal/peso-alvo", "HTTP 500")]
-
-
-from atlas.apply import cli_apply
 
 
 def test_cli_apply_dry_run_le_arquivo(tmp_path, capsys):
