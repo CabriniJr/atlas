@@ -19,6 +19,7 @@ from atlas.controle import responder_controle
 from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.debug import responder_debug
+from atlas.metas import responder_metas
 from atlas.pool import responder_pool
 from atlas.timer import responder_timer
 from atlas.trackers import registrar_por_sintaxe, responder_trackers
@@ -80,6 +81,11 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
     resposta_timer = responder_timer(texto, db, agora, store=store)
     if resposta_timer is not None:
         return resposta_timer
+
+    # Goals (E3-04): /goal set|status|check|done / /goals
+    resposta_meta = responder_metas(texto, db, agora, store=store)
+    if resposta_meta is not None:
+        return resposta_meta
 
     # Pool commands (E6): /idea, /task, /queue, /pool.
     resposta_pool = responder_pool(texto, db, agora, store=store)

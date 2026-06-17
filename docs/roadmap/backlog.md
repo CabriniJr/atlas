@@ -17,6 +17,7 @@ atualizado-em: 2026-06-16
 | 1.1    | 2026-06-16 | Tech Lead | Lição de casa (itens 0–5): ADR-0013 + specs; épico E5 (interface/trackers via chat); detalhe de E1/E2 | — |
 | 1.2    | 2026-06-16 | Tech Lead | Pool de ideias (ADR-0014, prioridade máxima) = épico E6; alarmes (E5-07) | PO/PM |
 | 1.3    | 2026-06-16 | Tech Lead | Atualização de estados: E0-01/03/04 feitos; E1-11/E5-06/E2-01 feitos; E5-03/E3-01 feitos | — |
+| 1.4    | 2026-06-16 | Tech Lead | E1-05 scaffold feito; E4-07 feito; kinds Timer+CheckIn+labels adicionados ao core | — |
 
 ---
 
@@ -45,7 +46,7 @@ atualizado-em: 2026-06-16
 | E1-02 | Schema SQLite + camada de acesso | **feito** | [ADR-0002](../arquitetura/adr/ADR-0002-modelo-de-dados.md) |
 | E1-03 | Adapter Telegram (long-poll, `enviar`/`receber`, filtro de ID) | **feito (MVP)** | [seguranca](../arquitetura/seguranca.md) |
 | E1-04 | Roteador determinístico + micro-sintaxe + fallback Haiku | **parcial (MVP)** — handler de comandos + registro; falta conflito de triggers e fallback Haiku | [ADR-0008](../arquitetura/adr/ADR-0008-roteamento-e-extracao.md) |
-| E1-05 | Invocador de IA: modo análise (2a) e agente (2b). No Pi: verificar `claude -p` (cliente) em **arm64** + login ativo + rede — modelos rodam na nuvem, não no Pi | proposto | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md), [ADR-0012](../arquitetura/adr/ADR-0012-empacotamento-docker.md) |
+| E1-05 | Invocador de IA: modo análise (2a) e agente (2b). No Pi: verificar `claude -p` (cliente) em **arm64** + login ativo + rede — modelos rodam na nuvem, não no Pi | **parcial** — `atlas.ia.invocar` via `claude -p` implementado; pendente field-test no Pi (arm64 + login) | [ADR-0001](../arquitetura/adr/ADR-0001-ia-em-dois-modos.md), [ADR-0012](../arquitetura/adr/ADR-0012-empacotamento-docker.md) |
 | E1-06 | Agendador + catch-up de runs perdidos | **feito** — core + **wiring no loop do `app`** (catch-up no boot + `tick` por janela de poll, disparo via executor notificando o dono) | [ADR-0006](../arquitetura/adr/ADR-0006-erro-e-resiliencia.md), [spec scheduler](../specs/scheduler.md) |
 | E1-07 | Harness de teste de rotina | proposto | [ADR-0007](../arquitetura/adr/ADR-0007-contrato-de-teste.md) |
 | E1-10 | Executor do ciclo de vida (`trigger→collect→gate→analyze→deliver`) + notificação no Telegram + gravação em `runs` | **feito** (core; fases injetadas) — wiring de `/rodar` fica em E5-02 (precisa do carregador + invocador E1-05) | [ciclo-de-vida](../arquitetura/ciclo-de-vida-rotina.md), [spec executor](../specs/executor-e-notificacao.md) |
@@ -90,7 +91,7 @@ atualizado-em: 2026-06-16
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
 | E3-01 | Rotina físico — collect treino (domínio fisico + trackers fitness) | **feito** — `rotinas/treino.py` + agenda 20h; log via `/reg #fisico` ou tracker | — |
-| E3-02 | Rotina estudos | proposto | — |
+| E3-02 | Rotina estudos — collect de atividades de estudo + trackers | proposto | — |
 | E3-03 | Rotina leitura (Librera; depende do formato de sync) | bloqueado | [constituicao](../arquitetura/constituicao.md) (em aberto) |
 | E3-04 | Sistema de metas + `goal_links` + checkup semanal | proposto | [modelo-de-dados](../arquitetura/modelo-de-dados.md) |
 
@@ -104,7 +105,7 @@ atualizado-em: 2026-06-16
 | E4-04 | Units systemd `atlas-dev` (main) e `atlas-prod` (tag) | proposto | [politica-de-desenvolvimento](../processos/politica-de-desenvolvimento.md) |
 | E4-05 | Poller de deploy (timer systemd) + ativar `scripts/deploy.sh` | proposto | [politica-de-desenvolvimento](../processos/politica-de-desenvolvimento.md) |
 | E4-06 | Ativar release automation (release-please) + versão inicial | proposto | [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md) |
-| E4-07 | Configurar `pyproject.toml` (ruff, pytest, deps) p/ a CI sair do no-op | proposto | [ci.yml](../../.github/workflows/ci.yml) |
+| E4-07 | Configurar `pyproject.toml` (ruff, pytest, deps) p/ a CI sair do no-op | **feito** — pyproject.toml + ci.yml ativos; ruff+pytest rodando | [ci.yml](../../.github/workflows/ci.yml) |
 
 ## Dívida de documentação
 | ID | Item | Estado |
