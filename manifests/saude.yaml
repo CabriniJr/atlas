@@ -1,0 +1,21 @@
+# Grupo saude — hidratação e sono.
+# Aplicar com: python -m atlas apply -f manifests/saude.yaml
+kind: Tracker
+name: agua
+labels:
+  grupo: saude
+spec:
+  unit: copos
+  type: count
+  syntax: "agua:"
+  aggregation: sum
+---
+kind: Tracker
+name: sono
+labels:
+  grupo: saude
+spec:
+  unit: h
+  type: duration
+  syntax: "sono:"
+  aggregation: mean

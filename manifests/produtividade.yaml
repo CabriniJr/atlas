@@ -1,0 +1,18 @@
+# Grupo produtividade — tempo de estudo e timer de foco.
+# Tasks: crie com /task e rotule labels.grupo=produtividade.
+# Aplicar com: python -m atlas apply -f manifests/produtividade.yaml
+kind: Tracker
+name: estudo
+labels:
+  grupo: produtividade
+spec:
+  unit: h
+  type: duration
+  syntax: "estudo:"
+  aggregation: sum
+---
+kind: Timer
+name: foco
+labels:
+  grupo: produtividade
+spec: {}

@@ -1,0 +1,27 @@
+# Grupo academia — peso, entry de treino e meta de peso.
+# Aplicar com: python -m atlas apply -f manifests/academia.yaml
+kind: Tracker
+name: peso
+labels:
+  grupo: academia
+spec:
+  unit: kg
+  type: number
+  syntax: "peso:"
+  aggregation: last
+---
+kind: Tracker
+name: treino
+labels:
+  grupo: academia
+spec:
+  type: text
+  syntax: "treino:"
+---
+kind: Goal
+name: peso-alvo
+labels:
+  grupo: academia
+spec:
+  target: 78
+  unit: kg
