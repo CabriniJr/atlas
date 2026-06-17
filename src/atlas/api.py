@@ -352,6 +352,15 @@ body[data-view="status"] #status-view{display:flex}
 .ep-btngroup button{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer;font-family:inherit;font-size:11px;transition:all .12s}
 .ep-btngroup button:hover{border-color:var(--muted);color:var(--text)}
 .ep-btngroup button.sel{border-color:var(--blue);background:#0d1a2a;color:var(--blue)}
+/* cron builder visual */
+.cron-builder{display:flex;flex-direction:column;gap:6px}
+.cron-presets{display:flex;flex-wrap:wrap;gap:4px}
+.cron-presets button{padding:4px 9px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--muted);cursor:pointer;font-family:inherit;font-size:10px;transition:all .12s}
+.cron-presets button:hover{border-color:var(--muted);color:var(--text)}
+.cron-presets button.sel{border-color:var(--blue);background:#0d1a2a;color:var(--blue)}
+.cron-text{font-family:'SF Mono',Consolas,monospace}
+.cron-human{font-size:11px;color:var(--green)}
+.ep-typed input[type=time]{font-family:inherit}
 /* ── markdown render ── */
 .md h1,.md h2,.md h3{color:var(--blue);margin:.6em 0 .3em;font-weight:600}
 .md h1{font-size:15px;border-bottom:1px solid var(--border);padding-bottom:4px}
@@ -950,7 +959,7 @@ const _KIND_SCHEMA = {
   Alarm: {
     meta: {icon:'⏰', desc:'Lembrete agendado enviado via Telegram'},
     spec: [
-      {k:'hora',    type:'text', label:'Horário (HH:MM)', hint:'Ex: 07:30'},
+      {k:'hora',    type:'time', label:'Horário',          hint:'Quando o lembrete dispara'},
       {k:'mensagem',type:'text', label:'Mensagem',        hint:'Texto enviado pelo bot'},
       {k:'once',    type:'bool', label:'Uma vez só',      hint:'false = repete diariamente'},
     ],
@@ -959,7 +968,7 @@ const _KIND_SCHEMA = {
   Routine: {
     meta: {icon:'🧩', desc:'Rotina agendada ou disparada por trigger'},
     spec: [
-      {k:'agenda',  type:'text',  label:'Cron agenda',    hint:'Ex: 0 9 * * * (todo dia 9h)'},
+      {k:'agenda',  type:'cron',  label:'Agenda',         hint:'Escolha um preset ou edite o cron'},
       {k:'modelo',  type:'select',label:'Modelo IA',      opts:['none','claude-haiku-4-5-20251001','claude-sonnet-4-6'], hint:'none = sem IA'},
       {k:'saida',   type:'select',label:'Saída',          opts:['telegram','none'], hint:'Destino do resultado'},
       {k:'label',   type:'text',  label:'Label grupo',    hint:'Grupo de recursos (coletar-por-label)'},
@@ -2688,10 +2697,62 @@ function epTypedHtml(scope, key, value, def) {
     ctrl = `<input type="number" data-scope="${scope}" data-key="${esc(key)}" data-type="number" value="${esc(value==null?'':String(value))}">`;
   } else if (t==='area') {
     ctrl = `<textarea data-scope="${scope}" data-key="${esc(key)}" data-type="text" rows="3">${esc(value==null?'':String(value))}</textarea>`;
+  } else if (t==='time') {
+    ctrl = `<input type="time" data-scope="${scope}" data-key="${esc(key)}" data-type="text" value="${esc(value==null?'':String(value))}">`;
+  } else if (t==='cron') {
+    ctrl = _cronBuilderHtml(scope, key, value==null?'':String(value));
   } else {
     ctrl = `<input type="text" data-scope="${scope}" data-key="${esc(key)}" data-type="text" value="${esc(value==null?'':String(value))}">`;
   }
   return `<div class="ep-typed">${lbl}${ctrl}${hint}</div>`;
+}
+
+// ── Cron builder visual (presets + texto editável + descrição legível) ──
+const _CRON_PRESETS = [
+  ['Todo dia 9h','0 9 * * *'], ['Dias úteis 9h','0 9 * * 1-5'],
+  ['Semanal (seg 10h)','0 10 * * 1'], ['Todo dia 21h','0 21 * * *'],
+  ['A cada 1h','@every 1h'], ['A cada 15min','@every 15m'],
+];
+function _cronBuilderHtml(scope, key, value){
+  const presets = _CRON_PRESETS.map(([l,v])=>
+    `<button type="button" class="${v===value?'sel':''}" onclick="_cronSet(this,'${v}')">${esc(l)}</button>`).join('');
+  return `<div class="cron-builder">
+    <div class="cron-presets">${presets}</div>
+    <input type="text" class="cron-text" data-scope="${scope}" data-key="${esc(key)}" data-type="text"
+      value="${esc(value)}" placeholder="0 9 * * *" oninput="_cronSync(this)">
+    <div class="cron-human">${esc(_cronHuman(value))}</div>
+  </div>`;
+}
+function _cronSet(btn, expr){
+  const b=btn.closest('.cron-builder');
+  b.querySelectorAll('.cron-presets button').forEach(x=>x.classList.remove('sel'));
+  btn.classList.add('sel');
+  const inp=b.querySelector('.cron-text'); inp.value=expr;
+  _cronSync(inp);
+}
+function _cronSync(inp){
+  const b=inp.closest('.cron-builder');
+  b.querySelector('.cron-human').textContent=_cronHuman(inp.value);
+  b.querySelectorAll('.cron-presets button').forEach(x=>x.classList.toggle('sel', x.getAttribute('onclick').includes("'"+inp.value+"'")));
+  if(typeof _formToJson==='function' && _edMode==='form') _formToJson();
+}
+function _cronHuman(expr){
+  expr=(expr||'').trim();
+  if(!expr) return 'sem agenda';
+  if(expr.startsWith('@every ')) return 'a cada '+expr.slice(7);
+  if(expr.startsWith('@daily ')) return 'todo dia às '+expr.slice(7);
+  const p=expr.split(/\s+/); if(p.length!==5) return '⚠️ formato inválido';
+  const [mi,ho,dm,mo,dw]=p;
+  const dias={'0':'dom','1':'seg','2':'ter','3':'qua','4':'qui','5':'sex','6':'sáb','7':'dom'};
+  let quando='';
+  if(ho!=='*'&&mi!=='*') quando='às '+ho.padStart(2,'0')+':'+mi.padStart(2,'0');
+  else if(mi.startsWith('*/')) quando='a cada '+mi.slice(2)+'min';
+  else quando='min '+mi+' h '+ho;
+  let q2='';
+  if(dw!=='*'){ q2=' ('+dw.split(',').map(d=>d.includes('-')?d.split('-').map(x=>dias[x]||x).join('-'):(dias[d]||d)).join(',')+')'; }
+  else if(dm!=='*'){ q2=' (dia '+dm+')'; }
+  else q2=' (todo dia)';
+  return quando+q2;
 }
 
 function epToggle(el) {
