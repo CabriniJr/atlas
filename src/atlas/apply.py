@@ -13,9 +13,14 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import yaml
+
+# Assinatura do transporte HTTP injetável (testabilidade): recebe método, URL,
+# corpo e headers; devolve o corpo da resposta.
+Sender = Callable[[str, str, bytes, dict[str, str]], bytes]
 
 
 class ManifestoInvalido(ValueError):
@@ -26,9 +31,12 @@ def parse_manifests(text: str) -> list[dict]:
     """Parseia YAML multi-doc em uma lista de manifestos validados.
 
     Cada documento precisa ser um mapa com ``kind`` e ``name``. Documentos
-    vazios (``None``) são ignorados.
+    vazios (``None``) são ignorados. YAML inválido vira ``ManifestoInvalido``.
     """
-    docs = [d for d in yaml.safe_load_all(text) if d is not None]
+    try:
+        docs = [d for d in yaml.safe_load_all(text) if d is not None]
+    except yaml.YAMLError as exc:
+        raise ManifestoInvalido(f"YAML inválido: {exc}") from exc
     for i, d in enumerate(docs):
         if not isinstance(d, dict):
             raise ManifestoInvalido(f"documento {i}: não é um mapa")
@@ -78,7 +86,7 @@ def apply_manifests(
     token: str | None = None,
     *,
     dry_run: bool = False,
-    send=None,
+    send: Sender | None = None,
 ) -> ResultadoApply:
     """Aplica cada manifesto via ``send(method, url, body, headers)``.
 

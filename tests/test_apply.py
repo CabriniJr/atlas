@@ -14,13 +14,6 @@ from atlas.apply import (
     parse_manifests,
 )
 
-
-def test_pyyaml_disponivel():
-    import yaml  # noqa: F401
-
-    assert hasattr(yaml, "safe_load_all")
-
-
 _YAML_OK = """
 kind: Tracker
 name: peso
@@ -50,6 +43,11 @@ def test_parse_multidoc_retorna_lista():
 def test_parse_ignora_documento_vazio():
     docs = parse_manifests("---\n\n---\nkind: Tracker\nname: peso\n")
     assert len(docs) == 1
+
+
+def test_parse_erro_yaml_malformado():
+    with pytest.raises(ManifestoInvalido, match="YAML inválido"):
+        parse_manifests("kind: Tracker\n  name: bad\n :::\n")
 
 
 def test_parse_erro_sem_kind():
