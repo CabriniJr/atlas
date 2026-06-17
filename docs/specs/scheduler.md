@@ -2,10 +2,10 @@
 titulo: Spec — Scheduler (agendador de rotinas)
 id: SPEC-SCHEDULER
 status: em-revisao
-versao: 0.1
+versao: 0.2
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-16
+atualizado-em: 2026-06-17
 ---
 
 # Spec — Scheduler (agendador de rotinas)
@@ -14,6 +14,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-06-16 | Tech Lead | Criação (lição de casa, item 2) | — |
+| 0.2    | 2026-06-17 | Tech Lead | Suporte a cron de 5 campos (`min hora dia mês dia-semana`) | — |
 
 ---
 
@@ -29,8 +30,15 @@ Telegram** quando roda.
 
 ## Requisitos
 - **R1.** Rotina ativa com `agenda` definida é disparada no horário/intervalo.
-- **R2.** Formato de `agenda` suporta, no mínimo: intervalo (`@every 1m`,
-  `@every 1h`) e horário diário (`@daily 21:00`). (Sintaxe completa em Pendências.)
+- **R2.** Formato de `agenda` suporta:
+  - intervalo: `@every 1m`, `@every 2h` (`s`/`m`/`h`);
+  - horário diário: `@daily 21:00`;
+  - **cron de 5 campos**: `min hora dia-mês mês dia-semana`. Cada campo aceita
+    `*`, número, lista `a,b`, faixa `a-b` e passo `*/n` (ou `a-b/n`).
+    Dia-da-semana: `0=domingo … 6=sábado` (`7` também = domingo). Quando dia-mês
+    e dia-semana são ambos restritos, casa com **qualquer** um (semântica cron
+    padrão). Ex.: `0 9 * * *` (todo dia 9h), `0 20 * * 1,2,4` (seg/ter/qui 20h),
+    `*/15 * * * *` (a cada 15min).
 - **R3.** No boot, para cada rotina com `catch_up=true`, runs perdidos são
   **recuperados** uma vez; com `catch_up=false`, são **pulados** (grava `skipped`).
 - **R4.** O disparo agendado passa pelo executor (ciclo de vida completo) e grava

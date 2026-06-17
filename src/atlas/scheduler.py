@@ -6,9 +6,12 @@ do último disparo vive em ``routine_state`` (chave ``ultimo_run``). O disparo e
 si é **injetado** (``disparar(rotina)``): em produção, embrulha o
 [executor](executor-e-notificacao); aqui o scheduler não conhece o executor.
 
-Gramática de ``agenda`` (MVP):
+Gramática de ``agenda``:
 - ``@every <n>{s|m|h}`` — intervalo (ex.: ``@every 1m``, ``@every 2h``).
 - ``@daily HH:MM`` — diário no horário (hora local).
+- ``min hora dia-mês mês dia-semana`` — cron padrão de 5 campos. Cada campo
+  aceita ``*``, número, lista ``a,b``, faixa ``a-b`` e passo ``*/n``/``a-b/n``.
+  Dia-da-semana usa 0=domingo … 6=sábado (7 também = domingo).
 """
 
 from __future__ import annotations
@@ -51,6 +54,10 @@ def proxima_execucao(agenda: str, ultimo: datetime | None, agora: datetime) -> d
         if cand <= ultimo:
             cand += timedelta(days=1)
         return cand
+
+    # cron padrão de 5 campos
+    if len(agenda.split()) == 5:
+        return _proxima_cron(agenda, ultimo, agora)
 
     return None
 
@@ -144,4 +151,93 @@ def _parse_hora(texto: str) -> tuple[int, int] | None:
         return None
     if 0 <= hora <= 23 and 0 <= minuto <= 59:
         return hora, minuto
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Cron (5 campos)
+# ---------------------------------------------------------------------------
+
+# limites (lo, hi) de cada campo: minuto, hora, dia-mês, mês, dia-semana
+_CRON_LIMITES = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)]
+
+
+def _parse_cron_campo(campo: str, lo: int, hi: int) -> set[int] | None:
+    """Expande um campo de cron (``*``, ``a``, ``a-b``, ``*/n``, ``a,b``) num set."""
+    valores: set[int] = set()
+    for parte in campo.split(","):
+        parte = parte.strip()
+        passo = 1
+        if "/" in parte:
+            faixa, _, p = parte.partition("/")
+            if not p.isdigit() or int(p) == 0:
+                return None
+            passo = int(p)
+            parte = faixa
+        if parte == "*":
+            inicio, fim = lo, hi
+        elif "-" in parte:
+            a, _, b = parte.partition("-")
+            if not (a.isdigit() and b.isdigit()):
+                return None
+            inicio, fim = int(a), int(b)
+        elif parte.isdigit():
+            inicio = fim = int(parte)
+        else:
+            return None
+        if inicio < lo or fim > hi or inicio > fim:
+            return None
+        valores.update(range(inicio, fim + 1, passo))
+    return valores or None
+
+
+def _parse_cron(expr: str) -> dict | None:
+    """Compila uma expressão cron de 5 campos (None se inválida)."""
+    campos = expr.split()
+    if len(campos) != 5:
+        return None
+    sets: list[set[int]] = []
+    for campo, (lo, hi) in zip(campos, _CRON_LIMITES, strict=True):
+        s = _parse_cron_campo(campo, lo, hi)
+        if s is None:
+            return None
+        sets.append(s)
+    minuto, hora, dia_mes, mes, dia_sem = sets
+    if 7 in dia_sem:  # 7 e 0 são ambos domingo
+        dia_sem = (dia_sem - {7}) | {0}
+    return {
+        "minuto": minuto, "hora": hora, "dia_mes": dia_mes, "mes": mes, "dia_sem": dia_sem,
+        "dia_mes_star": campos[2].strip() == "*",
+        "dia_sem_star": campos[4].strip() == "*",
+    }
+
+
+def _cron_casa(c: dict, t: datetime) -> bool:
+    if t.minute not in c["minuto"] or t.hour not in c["hora"] or t.month not in c["mes"]:
+        return False
+    # cron: 0=domingo; Python weekday(): 0=segunda → converte
+    cron_dow = (t.weekday() + 1) % 7
+    dia_mes_ok = t.day in c["dia_mes"]
+    dia_sem_ok = cron_dow in c["dia_sem"]
+    # regra padrão do cron: se ambos restritos, casa com QUALQUER um (OR)
+    if c["dia_mes_star"] and c["dia_sem_star"]:
+        return True
+    if c["dia_mes_star"]:
+        return dia_sem_ok
+    if c["dia_sem_star"]:
+        return dia_mes_ok
+    return dia_mes_ok or dia_sem_ok
+
+
+def _proxima_cron(expr: str, ultimo: datetime | None, agora: datetime) -> datetime | None:
+    c = _parse_cron(expr)
+    if c is None:
+        return None
+    base = ultimo if ultimo is not None else agora - timedelta(minutes=1)
+    t = base.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    fim = t + timedelta(days=367)  # cobre qualquer cron válido (guarda contra loop infinito)
+    while t <= fim:
+        if _cron_casa(c, t):
+            return t
+        t += timedelta(minutes=1)
     return None

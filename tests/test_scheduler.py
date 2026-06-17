@@ -57,6 +57,66 @@ def test_daily_nao_redispara_no_mesmo_dia():
 
 
 # ---------------------------------------------------------------------------
+# cron padrão: min hora dia-do-mês mês dia-da-semana
+# ---------------------------------------------------------------------------
+
+
+def test_cron_no_horario_vence():
+    agora = _AGORA.replace(hour=9, minute=0, second=30)
+    assert proxima_execucao("0 9 * * *", None, agora) <= agora
+
+
+def test_cron_depois_do_horario_proximo_dia():
+    agora = _AGORA.replace(hour=10, minute=0)  # 09:00 já passou hoje
+    prox = proxima_execucao("0 9 * * *", None, agora)
+    assert prox > agora
+    assert prox.hour == 9 and prox.minute == 0
+    assert prox.day == agora.day + 1
+
+
+def test_cron_nao_redispara_no_mesmo_slot():
+    ultimo = _AGORA.replace(hour=9, minute=0)
+    agora = _AGORA.replace(hour=9, minute=30)
+    prox = proxima_execucao("0 9 * * *", ultimo, agora)
+    assert prox.day == agora.day + 1 and prox.hour == 9
+
+
+def test_cron_intervalo_passo():
+    agora = _AGORA.replace(hour=10, minute=7)
+    prox = proxima_execucao("*/15 * * * *", None, agora)
+    assert prox.minute == 15 and prox.hour == 10
+
+
+def test_cron_dia_da_semana_segunda():
+    # cron dow 1 = segunda; Python weekday() segunda = 0
+    prox = proxima_execucao("0 12 * * 1", None, _AGORA)
+    assert prox.weekday() == 0
+    assert prox.hour == 12 and prox.minute == 0
+
+
+def test_cron_lista_de_dias():
+    # treino: seg(1), ter(2), qui(4) às 20h → Python weekday {0,1,3}
+    prox = proxima_execucao("0 20 * * 1,2,4", None, _AGORA)
+    assert prox.weekday() in {0, 1, 3}
+    assert prox.hour == 20 and prox.minute == 0
+
+
+def test_cron_invalido_retorna_none():
+    assert proxima_execucao("0 9 * *", None, _AGORA) is None       # 4 campos
+    assert proxima_execucao("99 9 * * *", None, _AGORA) is None     # minuto inválido
+    assert proxima_execucao("0 25 * * *", None, _AGORA) is None     # hora inválida
+
+
+def test_tick_dispara_rotina_cron(monkeypatch):
+    db = _db()
+    agora = _AGORA.replace(hour=21, minute=0, second=5)
+    disparadas = []
+    rot = Rotina(nome="resumo", descricao="d", agenda="0 21 * * *", ativa=True)
+    tick(agora, [rot], db, lambda r: disparadas.append(r.nome) or "ok")
+    assert disparadas == ["resumo"]
+
+
+# ---------------------------------------------------------------------------
 # tick
 # ---------------------------------------------------------------------------
 
