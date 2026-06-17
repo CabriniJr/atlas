@@ -44,16 +44,18 @@ def responder_verbos(texto: str, store: ResourceStore, agora: datetime) -> str |
     return None
 
 
-# --- /list <Kind> ------------------------------------------------------------
+# --- /list <Kind> [-l key=val,key=val] ---------------------------------------
 
 
 def _cmd_list(partes: list[str], store: ResourceStore) -> str:
     if len(partes) < 2:
-        return "Usage: /list <Kind>   e.g. /list Idea"
+        return "Usage: /list <Kind> [-l key=val,…]   e.g. /list Tracker -l domain=fisico"
     kind = partes[1]
-    recursos = store.list(kind)
+    selector = _parse_label_selector(partes[2:])
+    recursos = store.list(kind, labels=selector if selector else None)
     if not recursos:
-        return f"No {kind} objects found."
+        filtro = f" (selector: {selector})" if selector else ""
+        return f"No {kind} objects found{filtro}."
     linhas = [f"  {r.name}" + (f"  [{_status_resumo(r)}]" if r.status else "") for r in recursos]
     return f"{kind} ({len(recursos)})\n" + "\n".join(linhas)
 
@@ -123,10 +125,33 @@ def _cmd_describe(partes: list[str], store: ResourceStore) -> str:
 
 def _cmd_apply(partes: list[str], store: ResourceStore, agora: datetime) -> str:
     if len(partes) < 3:
-        return "Usage: /apply <Kind> <name> [key=value …]   e.g. /apply Idea nova body=fazer UI"
+        return (
+            "Usage: /apply <Kind> <name> [spec.key=val …] [labels.key=val …]\n"
+            "e.g. /apply Tracker peso labels.routine=treino"
+        )
     kind, name = partes[1], partes[2]
-    spec = _parse_kv(partes[3:])
-    r = Resource(kind=kind, name=name, spec=spec)
+    kv = _parse_kv(partes[3:])
+
+    # Separa labels.* de spec.*
+    labels: dict[str, str] = {}
+    spec: dict[str, str] = {}
+    for k, v in kv.items():
+        if k.startswith("labels."):
+            labels[k[len("labels."):]] = v
+        elif k.startswith("spec."):
+            spec[k[len("spec."):]] = v
+        else:
+            spec[k] = v
+
+    # Merge com existente (preserva campos não mencionados)
+    existente = store.get(kind, name)
+    if existente is not None:
+        merged_labels = {**existente.labels, **labels}
+        merged_spec = {**existente.spec, **spec}
+        r = Resource(kind=kind, name=name, labels=merged_labels, spec=merged_spec,
+                     status=existente.status)
+    else:
+        r = Resource(kind=kind, name=name, labels=labels, spec=spec)
     store.apply(r, agora)
     return f"✅ {kind}/{name} applied"
 
@@ -164,6 +189,28 @@ def _cmd_resources(store: ResourceStore) -> str:
 
 
 # --- helpers -----------------------------------------------------------------
+
+
+def _parse_label_selector(partes: list[str]) -> dict[str, str]:
+    """Parseia '-l key=val,key=val' ou '-l key=val -l key2=val2'."""
+    selector: dict[str, str] = {}
+    i = 0
+    while i < len(partes):
+        tok = partes[i]
+        if tok == "-l" and i + 1 < len(partes):
+            i += 1
+            for par in partes[i].split(","):
+                par = par.strip()
+                if "=" in par:
+                    k, _, v = par.partition("=")
+                    selector[k.strip()] = v.strip()
+        elif tok.startswith("-l") and len(tok) > 2:
+            for par in tok[2:].split(","):
+                if "=" in par:
+                    k, _, v = par.partition("=")
+                    selector[k.strip()] = v.strip()
+        i += 1
+    return selector
 
 
 def _parse_kv(tokens: list[str]) -> dict:

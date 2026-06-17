@@ -20,6 +20,7 @@ from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.debug import responder_debug
 from atlas.pool import responder_pool
+from atlas.timer import responder_timer
 from atlas.trackers import registrar_por_sintaxe, responder_trackers
 from atlas.verbos import responder_verbos
 
@@ -74,6 +75,11 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
     resposta_alarme = responder_alarmes(texto, db, agora, store=store)
     if resposta_alarme is not None:
         return resposta_alarme
+
+    # Timer kind: /timer start|finish|status <name> / /timers
+    resposta_timer = responder_timer(texto, db, agora, store=store)
+    if resposta_timer is not None:
+        return resposta_timer
 
     # Pool commands (E6): /idea, /task, /queue, /pool.
     resposta_pool = responder_pool(texto, db, agora, store=store)

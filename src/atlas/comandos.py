@@ -31,6 +31,8 @@ COMANDOS: list[tuple[str, str]] = [
     ("deactivate", "Deactivate a routine"),
     ("alarm", "Set a reminder (/alarm HH:MM <msg>)"),
     ("alarms", "List active alarms"),
+    ("timer", "Stopwatch: /timer start|finish|status <name>"),
+    ("timers", "List active timers"),
     ("status", "Daily summary"),
     ("debug", "Diagnostics & system info (try /debug help)"),
     ("help", "Show available commands"),
@@ -72,6 +74,11 @@ def texto_ajuda() -> str:
         "  /alarm HH:MM <msg>   set a reminder (add @once for one-shot)\n"
         "  /alarms              list active alarms\n"
         "  /alarm <id> remove   remove an alarm\n\n"
+        "⏱ Timers\n"
+        "  /timer start <name>    start a stopwatch (Kind: Timer)\n"
+        "  /timer finish <name>   stop and log duration to activities\n"
+        "  /timer status <name>   show elapsed time\n"
+        "  /timers                list running timers\n\n"
         "📊 System\n"
         "  /status           daily summary\n"
         "  /debug            diagnostics (see /debug help)\n"

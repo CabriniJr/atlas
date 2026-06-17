@@ -1,0 +1,6 @@
+nome = "checkin"
+descricao = "Pergunta periódica para registrar trackers ativos."
+agenda = "0 9 * * *"
+modelo = "none"
+saida = "telegram"
+ativa = false

@@ -50,6 +50,7 @@ class ContextoExecucao:
     payload: str | None = None
     ultimo_run: dict | None = None
     db: Any = None  # Database — disponível para fases collect que precisam de dados
+    store: Any = None  # ResourceStore — opcional, para collects que leem do store
 
 
 @dataclass

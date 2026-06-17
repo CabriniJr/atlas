@@ -105,8 +105,17 @@ class ResourceStore:
         ).fetchone()
         return self._row_to_resource(row) if row is not None else None
 
-    def list(self, kind: str, selector: dict[str, str] | None = None) -> list[Resource]:
-        """Lista um kind, opcionalmente filtrando por labels (match exato)."""
+    def list(
+        self,
+        kind: str,
+        selector: dict[str, str] | None = None,
+        labels: dict[str, str] | None = None,
+    ) -> list[Resource]:
+        """Lista um kind, opcionalmente filtrando por labels (match exato AND).
+
+        ``labels`` é o nome K8s-idiomático; ``selector`` é um alias legado.
+        """
+        selector = selector or labels
         rows = self.connection.execute(
             "SELECT * FROM resources WHERE kind = ? ORDER BY name", (kind,)
         ).fetchall()

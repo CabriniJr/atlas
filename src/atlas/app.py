@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Protocol
 
+import atlas.rotinas.checkin  # noqa: F401 — registra collect de check-in
 import atlas.rotinas.resumo_diario  # noqa: F401 — registra collect no registry
 import atlas.rotinas.treino  # noqa: F401 — registra collect de treino
 from atlas.alarmes import tick_alarmes
@@ -76,16 +77,18 @@ def _normalizar(update_cru: dict) -> Update | None:
     )
 
 
-def montar_disparo(db: Database, adapter: Adapter, chat_id: int) -> Callable[[Rotina], object]:
-    """Cria o callback que o scheduler usa para disparar uma rotina.
-
-    Embrulha o [executor](executor-e-notificacao): roda o ciclo de vida com
-    origem ``agenda`` e notifica o dono pelo Telegram. (Sem invocador de IA por
-    enquanto — rotinas com modelo só confirmam; análise real vem com E1-05.)
-    """
+def montar_disparo(
+    db: Database,
+    adapter: Adapter,
+    chat_id: int,
+    store: ResourceStore | None = None,
+) -> Callable[[Rotina], object]:
+    """Cria o callback que o scheduler usa para disparar uma rotina."""
 
     def disparar(rotina: Rotina) -> object:
-        ctx = ContextoExecucao(agora=datetime.now(), rotina=rotina, origem="agenda", db=db)
+        ctx = ContextoExecucao(
+            agora=datetime.now(), rotina=rotina, origem="agenda", db=db, store=store
+        )
         collect = obter_collect(rotina.nome)
         return executar(ctx, db, lambda msg: adapter.enviar(chat_id, msg), collect=collect)
 
@@ -110,7 +113,10 @@ def run(config: Config | None = None) -> None:
     aplicar_overrides(db, carga.rotinas)  # ativação salva no DB sobrepõe o default (E5-02)
     for erro in carga.erros:
         _log.warning("Rotina ignorada (%s): %s", erro.pasta, erro.mensagem)
-    disparar = montar_disparo(db, adapter, config.allowed_user_id)
+
+    store = ResourceStore(config.db_path)
+    sincronizar_store(db, store, carga.rotinas)
+    disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
 
     # Catch-up dos disparos perdidos enquanto esteve fora do ar (ADR-0006).
     try:
@@ -119,9 +125,6 @@ def run(config: Config | None = None) -> None:
             _log.info("Catch-up: %d rotina(s) recuperada(s) no boot.", len(recuperados))
     except Exception:  # noqa: BLE001
         _log.exception("Falha no catch-up de boot; seguindo.")
-
-    store = ResourceStore(config.db_path)
-    sincronizar_store(db, store, carga.rotinas)
 
     _log.info(
         "Atlas no ar. user_id=%s · %d rotina(s) ativa(s). Ctrl+C para sair.",
