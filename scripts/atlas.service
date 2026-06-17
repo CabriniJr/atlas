@@ -1,0 +1,42 @@
+# Unidade systemd para o Atlas (bot + API HTTP) como container Podman rootless.
+#
+# Instalação (usuário):
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/atlas.service ~/.config/systemd/user/atlas.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now atlas
+#
+# Atualização de código:
+#   bash scripts/atlasctl.sh atualizar   # rebuild + recria container
+#   systemctl --user restart atlas       # reinicia a unidade
+#
+# Logs:
+#   journalctl --user -u atlas -f
+
+[Unit]
+Description=Atlas — motor de rotinas pessoais (Podman)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+# Garante que o container seja removido antes de criar um novo
+ExecStartPre=-/usr/bin/podman rm -f atlas
+
+ExecStart=/usr/bin/podman run -d \
+  --name atlas \
+  --restart=no \
+  --env-file %h/atlas/.env \
+  -p 8080:8080 \
+  -v atlas-data:/data:Z \
+  atlas:latest
+
+ExecStop=/usr/bin/podman stop atlas
+ExecStopPost=-/usr/bin/podman rm -f atlas
+
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=30
+
+[Install]
+WantedBy=default.target

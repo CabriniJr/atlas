@@ -37,10 +37,14 @@ COMANDOS: list[tuple[str, str]] = [
     ("alarms", "List active alarms"),
     # --- routines ---
     ("routines", "List loaded routines"),
+    ("rotinas", "Alias PT-BR para /routines"),
     ("routine", "Routine detail / set field: /routine <name> [set agenda <cron>]"),
+    ("rotina", "Alias PT-BR para /routine"),
     ("run", "Run a routine now: /run <name>"),
     ("activate", "Activate a routine"),
+    ("ativar", "Alias PT-BR para /activate"),
     ("deactivate", "Deactivate a routine"),
+    ("desativar", "Alias PT-BR para /deactivate"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
     ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Routine|Doc)"),
@@ -113,12 +117,12 @@ def texto_ajuda() -> str:
         "  /alarm 2 remove                      remove alarme #2\n\n"
 
         "🧩  Rotinas\n"
-        "  /routines                            lista todas as rotinas\n"
-        "  /routine treino                      detalhe + estado\n"
-        "  /routine checkin set agenda 0 9 * * *   muda horário\n"
+        "  /rotinas  (ou /routines)             lista todas as rotinas\n"
+        "  /rotina treino  (ou /routine)        detalhe + estado\n"
+        "  /rotina checkin set agenda 0 9 * * *  muda horário\n"
         "  /run resumo-diario                   executa agora\n"
-        "  /activate checkin                    ativa check-in diário\n"
-        "  /deactivate treino                   desativa\n\n"
+        "  /ativar checkin   (/activate)        ativa rotina\n"
+        "  /desativar treino (/deactivate)      desativa rotina\n\n"
 
         "⌨️  Atalhos (aliases de verbo + Kind)\n"
         "  /r  → /get     /ls → /list    /cat → /describe    /a → /apply    /rm → /delete\n"

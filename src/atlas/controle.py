@@ -38,14 +38,14 @@ def responder_controle(
         return None
     cmd = partes[0]
 
-    if cmd == "/routines":
+    if cmd in ("/routines", "/rotinas"):
         return _listar(db)
-    if cmd == "/routine":
+    if cmd in ("/routine", "/rotina"):
         return _detalhe_ou_set(db, partes, agora)
     if cmd == "/run":
         return _run(db, partes, agora, store=store)
-    if cmd in ("/activate", "/deactivate"):
-        return _toggle(db, partes, ativar=cmd == "/activate", agora=agora)
+    if cmd in ("/activate", "/deactivate", "/ativar", "/desativar"):
+        return _toggle(db, partes, ativar=cmd in ("/activate", "/ativar"), agora=agora)
     return None
 
 

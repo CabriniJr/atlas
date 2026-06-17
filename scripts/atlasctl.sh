@@ -19,6 +19,7 @@ cd "$(dirname "$0")/.."
 IMG="atlas:latest"
 NAME="atlas"
 VOL="atlas-data"
+API_PORT="${ATLAS_API_PORT:-8080}"
 
 # Engine: prefere podman; cai para docker.
 if command -v podman >/dev/null 2>&1; then
@@ -39,8 +40,10 @@ _recriar() {
   [ -f .env ] || { echo "✗ Falta .env (TELEGRAM_TOKEN + ATLAS_ALLOWED_USER_ID)." >&2; exit 1; }
   echo "==> recriando container '$NAME'"
   "$ENGINE" rm -f "$NAME" >/dev/null 2>&1 || true
+  # :Z corrige contexto SELinux para Podman rootless no Fedora/RHEL
   "$ENGINE" run -d --name "$NAME" --restart=always \
-    --env-file .env -v "$VOL:/data" "$IMG" >/dev/null
+    --env-file .env -p "${API_PORT}:${API_PORT}" \
+    -v "${VOL}:/data:Z" "$IMG" >/dev/null
   sleep 1
   "$ENGINE" ps --filter "name=$NAME" --format '{{.Names}}  {{.Status}}  {{.Image}}'
   echo "--- últimos logs ---"

@@ -1,0 +1,6 @@
+nome = "estudos"
+descricao = "Resumo diário de estudo: /reg #estudo, timers e trackers de estudo."
+agenda = "0 22 * * *"
+modelo = "none"
+saida = "telegram"
+ativa = false
