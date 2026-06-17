@@ -51,6 +51,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 
 ### 📝 Specs — *como cada feature funciona em detalhe*
 Specs detalhadas que guiam a implementação (requisitos, fluxo, dados, erros, testes).
+- [`specs/core-api-objetos.md`](specs/core-api-objetos.md) — ⭐ **PRIORIDADE MÁXIMA:** core como API de objetos (K8s-like).
 - [`specs/barreira-entrada.md`](specs/barreira-entrada.md) — registro só com intenção (item 0).
 - [`specs/executor-e-notificacao.md`](specs/executor-e-notificacao.md) — ciclo de vida + notificação (item 1).
 - [`specs/scheduler.md`](specs/scheduler.md) — agendador + catch-up (item 2).

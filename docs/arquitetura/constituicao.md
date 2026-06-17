@@ -26,7 +26,8 @@ atualizado-em: 2026-06-16
 
 | # | Tema | Decisão | ADR |
 |---|---|---|---|
-| 1 | Interface | Bot do **Telegram** (long-poll, sem domínio), como adapter plugável. | — |
+| 0 | Core | O backend é uma **API de objetos (estilo Kubernetes)**: tudo é `Resource` (kind+spec+status), com **verbos uniformes** (get/describe/apply/delete). Interfaces (Telegram, web) são **adapters** do core. | [0015](adr/ADR-0015-core-api-de-objetos.md) |
+| 1 | Interface | Bot do **Telegram** (long-poll, sem domínio) **+ web app (Vercel)**, ambos adapters da API central. | [0015](adr/ADR-0015-core-api-de-objetos.md) |
 | 2 | Motor de IA | **Claude Code local** na assinatura, dividido em **análise single-turn (2a)** e **agente (2b, só meta-loop)** — sem billing por token de API. | [0001](adr/ADR-0001-ia-em-dois-modos.md) |
 | 3 | Padrão de rotina | **Script-primeiro, agente só quando precisa** (ciclo de vida). | — |
 | 4 | Rotinas | **Pastas plugáveis** auto-descobertas; o repositório é o estado. | — |

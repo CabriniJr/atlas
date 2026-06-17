@@ -23,6 +23,20 @@ atualizado-em: 2026-06-16
 > decompõe em specs de tarefa. Estados: `proposto` · `pronto` (DoR ok) ·
 > `em-andamento` · `feito` · `bloqueado`.
 
+## ⭐ Épico E0 — Core como API de objetos (K8s-like) — **PRIORIDADE MÁXIMA**
+> Motor central: tudo é objeto, verbos uniformes, `describe` em tudo. Interfaces
+> (Telegram, web) viram adapters. Ver [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md)
+> e [spec core-api-objetos](../specs/core-api-objetos.md).
+
+| ID | História | Estado | ADR/doc |
+|---|---|---|---|
+| E0-01 | **Core de objetos**: `Resource` + `ResourceStore` (verbos uniformes get/list/apply/patch/delete) sobre tabela `resources` (aditiva) | **em-andamento** | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md), [spec](../specs/core-api-objetos.md) |
+| E0-02 | **API HTTP** (stdlib) expondo os verbos: `GET/POST/PUT/PATCH/DELETE /apis/atlas/v1/<kind>[/<name>]` | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-03 | **Verbos uniformes no chat** (`/get`, `/describe`, `/apply`, `/delete`) + atalhos atuais como açúcar | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-04 | **Migrar kinds** legados (Idea, Tracker, Alarm, Routine) para o store — um a um, sem quebrar | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP | proposto | [seguranca](../arquitetura/seguranca.md) |
+| E0-06 | **Web app (Vercel)** consumindo a API + **túnel** Vercel→backend doméstico | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+
 ## Épico E1 — Motor mínimo (M1)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|

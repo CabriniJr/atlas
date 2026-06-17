@@ -15,6 +15,7 @@ atualizado-em: 2026-06-16
 |--------|------------|-----------|--------------------------------------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação + 10 ADRs de endurecimento   | PO/PM        |
 | 1.1    | 2026-06-16 | Tech Lead | ADR-0013 (barreira) e ADR-0014 (pool) — aceitos | PO/PM |
+| 1.2    | 2026-06-16 | Tech Lead | ADR-0015 (core API de objetos, K8s-like) — prioridade máxima | PO/PM |
 
 ---
 
@@ -50,6 +51,7 @@ atualizado-em: 2026-06-16
 | [0012](ADR-0012-empacotamento-docker.md) | Empacotamento e deploy via Docker | aceito | Sempre-ligado |
 | [0013](ADR-0013-barreira-de-entrada.md) | Barreira de entrada (registro só com intenção) | aceito | Lição de casa (item 0) |
 | [0014](ADR-0014-pool-de-ideias-desenvolvimento.md) | Pool de ideias → desenvolvimento (autoimplementação, ativação humana) | aceito | Lição de casa (pool, prioridade máxima) |
+| [0015](ADR-0015-core-api-de-objetos.md) | **Core como API de objetos (estilo Kubernetes)** | **aceito (prioridade máx.)** | Motor central + UI web |
 
 ## Lastro
 
