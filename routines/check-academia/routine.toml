@@ -1,0 +1,8 @@
+nome      = "check-academia"
+descricao = "Check-in diário do grupo academia (peso, treino, metas)."
+label     = "academia"
+coletar   = "coletar-por-label"
+agenda    = "0 20 * * *"
+modelo    = "none"
+saida     = "telegram"
+ativa     = false

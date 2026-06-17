@@ -1,0 +1,8 @@
+nome      = "check-produtividade"
+descricao = "Check-in diário do grupo produtividade (estudo, foco)."
+label     = "produtividade"
+coletar   = "coletar-por-label"
+agenda    = "0 22 * * *"
+modelo    = "none"
+saida     = "telegram"
+ativa     = false

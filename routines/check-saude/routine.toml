@@ -1,0 +1,8 @@
+nome      = "check-saude"
+descricao = "Check-in diário do grupo saude (água, sono)."
+label     = "saude"
+coletar   = "coletar-por-label"
+agenda    = "0 21 * * *"
+modelo    = "none"
+saida     = "telegram"
+ativa     = false
