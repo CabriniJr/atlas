@@ -105,7 +105,8 @@ Reusa 100% `coletar_por_label.py`. Zero código novo de rotina.
 ```
 atlas apply -f <arquivo.yaml> [--api-url URL] [--token T] [--dry-run]
 ```
-- **URL default:** `http://127.0.0.1:8787` (ou `ATLAS_API_URL`); **token:**
+- **URL default:** `http://127.0.0.1:8080` (porto da API, `ATLAS_API_PORT`; ou
+  `ATLAS_API_URL`); **token:**
   `--token` ou `ATLAS_API_TOKEN`.
 - Lê YAML multi-doc → lista de manifestos. Para cada um:
   `PUT {api-url}/apis/atlas/v1/<kind>/<name>` com corpo `{"labels":…, "spec":…}`
