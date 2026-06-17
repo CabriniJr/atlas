@@ -102,7 +102,27 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
 #toast.ok{border-color:var(--green);color:var(--green)}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+/* ── markdown render ── */
+.md h1,.md h2,.md h3{color:var(--blue);margin:.6em 0 .3em;font-weight:600}
+.md h1{font-size:15px;border-bottom:1px solid var(--border);padding-bottom:4px}
+.md h2{font-size:13px}
+.md h3{font-size:12px;color:var(--text)}
+.md p{margin:.3em 0;line-height:1.6}
+.md code{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:11px;color:var(--orange)}
+.md pre{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;overflow-x:auto;margin:.4em 0}
+.md pre code{background:none;border:none;padding:0;color:var(--text);font-size:11px}
+.md ul,.md ol{padding-left:18px;margin:.3em 0}
+.md li{margin:.15em 0;line-height:1.5}
+.md blockquote{border-left:3px solid var(--blue);padding-left:10px;color:var(--muted);margin:.3em 0}
+.md hr{border:none;border-top:1px solid var(--border);margin:.5em 0}
+.md strong{color:var(--yellow);font-weight:600}
+.md em{color:var(--muted);font-style:italic}
+.md a{color:var(--blue);text-decoration:none}
+.md a:hover{text-decoration:underline}
+.md table{border-collapse:collapse;width:100%;margin:.4em 0;font-size:11px}
+.md th{background:var(--bg3);color:var(--blue);padding:4px 8px;border:1px solid var(--border);text-align:left}
+.md td{padding:3px 8px;border:1px solid var(--border)}
+.md tr:nth-child(even) td{background:rgba(255,255,255,.02)}
 #cli-section{border-top:1px solid var(--border);height:220px;display:flex;flex-direction:column;flex-shrink:0;background:#0a0e13}
 #cli-output{flex:1;overflow-y:auto;padding:8px 14px;font-size:12px;line-height:1.6}
 .cli-cmd{color:var(--green)}
@@ -312,7 +332,10 @@ function renderDetail(r) {
     ${Object.keys(r.spec||{}).length ? `
     <div class="section">
       <div class="section-title">spec</div>
-      <pre class="json">${jsonStr(r.spec)}</pre>
+      ${r.kind === 'Doc' && r.spec.body ? `
+        <div class="md" style="font-size:12px;line-height:1.6">${markdownToHtml(r.spec.body.slice(0, 6000))}</div>
+        ${r.spec.source ? `<div style="margin-top:6px;font-size:10px;color:var(--muted)">src: ${r.spec.source}</div>` : ''}
+      ` : `<pre class="json">${jsonStr(r.spec)}</pre>`}
     </div>` : ''}
     ${Object.keys(r.status||{}).length ? `
     <div class="section">
@@ -360,6 +383,70 @@ function toast(msg, err=false) {
 
 document.getElementById('filter').addEventListener('input', () => renderList(allResources));
 
+// ── Markdown renderer (sem deps externas) ────────────────────────────────────
+function markdownToHtml(md) {
+  if (!md) return '';
+  let s = md;
+  // Extrai code blocks antes de escapar
+  const blocks = [];
+  s = s.replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
+    blocks.push(code.trimEnd());
+    return `\x00BLOCK${blocks.length - 1}\x00`;
+  });
+  // Escapa HTML
+  s = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Bold + italic
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Links
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  // Headers
+  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // HR
+  s = s.replace(/^[-*]{3,}$/gm, '<hr>');
+  // Blockquote
+  s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  // Tables
+  s = s.replace(/^\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)+)/gm, (_, head, body) => {
+    const ths = head.split('|').filter(c=>c.trim()).map(c=>`<th>${c.trim()}</th>`).join('');
+    const rows = body.trim().split('\n').map(row => {
+      const tds = row.split('|').filter(c=>c.trim()).map(c=>`<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+  // Lists
+  s = s.replace(/((?:^[-*+] .+\n?)+)/gm, match => {
+    const items = match.trim().split('\n').map(l=>`<li>${l.replace(/^[-*+] /,'')}</li>`).join('');
+    return `<ul>${items}</ul>`;
+  });
+  s = s.replace(/((?:^\d+\. .+\n?)+)/gm, match => {
+    const items = match.trim().split('\n').map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('');
+    return `<ol>${items}</ol>`;
+  });
+  // Restaura code blocks
+  s = s.replace(/\x00BLOCK(\d+)\x00/g, (_, i) =>
+    `<pre><code>${blocks[+i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`
+  );
+  // Parágrafos
+  s = s.split('\n\n').map(para => {
+    para = para.trim();
+    if (!para) return '';
+    if (/^<(h[1-3]|ul|ol|pre|table|blockquote|hr)/.test(para)) return para;
+    return `<p>${para.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n');
+  return s;
+}
+
+function isMarkdown(text) {
+  return /^#+\s|```|\*\*|\|.+\|/.test(text);
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────
 const cliInput = document.getElementById('cli-input');
 const cliOutput = document.getElementById('cli-output');
@@ -372,7 +459,12 @@ let sugDebounce;
 function cliAppend(text, cls) {
   const el = document.createElement('div');
   el.className = cls;
-  el.textContent = text;
+  if (cls === 'cli-out' && isMarkdown(text)) {
+    el.classList.add('md');
+    el.innerHTML = markdownToHtml(text);
+  } else {
+    el.textContent = text;
+  }
   cliOutput.appendChild(el);
   cliOutput.scrollTop = cliOutput.scrollHeight;
 }
