@@ -15,7 +15,10 @@ from typing import Protocol
 
 import atlas.rotinas.checkin  # noqa: F401 — registra collect de check-in
 import atlas.rotinas.checkup_semanal  # noqa: F401 — registra collect de checkup semanal
+import atlas.rotinas.coletar_por_label  # noqa: F401 — collect genérico por label de grupo
 import atlas.rotinas.estudos  # noqa: F401 — registra collect de estudos
+import atlas.rotinas.prompt  # noqa: F401 — registra collect genérico de IA (Kind=Prompt)
+import atlas.rotinas.repo_sync  # noqa: F401 — registra collect genérico repo-sync
 import atlas.rotinas.resumo_diario  # noqa: F401 — registra collect no registry
 import atlas.rotinas.treino  # noqa: F401 — registra collect de treino
 from atlas.alarmes import tick_alarmes
@@ -91,7 +94,7 @@ def montar_disparo(
         ctx = ContextoExecucao(
             agora=datetime.now(), rotina=rotina, origem="agenda", db=db, store=store
         )
-        collect = obter_collect(rotina.nome)
+        collect = obter_collect(rotina.coletar or rotina.nome)
         return executar(ctx, db, lambda msg: adapter.enviar(chat_id, msg), collect=collect)
 
     return disparar

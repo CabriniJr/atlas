@@ -47,7 +47,7 @@ COMANDOS: list[tuple[str, str]] = [
     ("desativar", "Alias PT-BR para /deactivate"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
-    ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Routine|Doc)"),
+    ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Repo|Diff|Doc)"),
     # --- system ---
     ("status", "Daily summary"),
     ("uso", "Routine run history: /uso [<n>]"),
@@ -150,8 +150,9 @@ def texto_ajuda() -> str:
         "  /help                                esta mensagem\n\n"
 
         "Kinds ativos: Idea · Task · RoutineRequest · Tracker · Alarm ·\n"
-        "              Timer · Goal · Routine · CheckIn\n"
-        "Docs: /docs kinds  |  Arquitetura: /docs arch"
+        "              Timer · Goal · Routine · CheckIn · Repo · Diff\n"
+        "Docs: /docs kinds  |  Arquitetura: /docs arch\n"
+        "/snip Repo  → como configurar monitoramento de repositório git"
     )
 
 

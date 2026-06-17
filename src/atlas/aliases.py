@@ -69,6 +69,13 @@ _KIND_ALIASES: dict[str, str] = {
     "rr":             "RoutineRequest",
     "routinerequest": "RoutineRequest",
     "checkin":        "CheckIn",
+    "repo":           "Repo",
+    "repos":          "Repo",
+    "diff":           "Diff",
+    "diffs":          "Diff",
+    "prompt":         "Prompt",
+    "prompts":        "Prompt",
+    "ia":             "Prompt",
 }
 
 _SNIPS: dict[str, str] = {
@@ -152,6 +159,62 @@ _SNIPS: dict[str, str] = {
         "  /deactivate <nome>\n\n"
         "Editar agenda:\n"
         "  /routine <nome> set agenda 0 20 * * *"
+    ),
+    "Repo": (
+        "📋 Snip — Kind Repo\n\n"
+        "Criar (obrigatório antes de ativar repo-sync):\n"
+        "  /apply Repo <nome> spec.url=https://github.com/user/repo\n"
+        "  /apply Repo nora spec.url=https://github.com/sys0xFF/nora\n\n"
+        "Routine TOML para monitorar:\n"
+        "  nome     = \"<nome>-sync\"\n"
+        "  label    = \"<nome>\"          # = nome do Repo Resource\n"
+        "  coletar  = \"repo-sync\"\n"
+        "  agenda   = \"0 9 * * *\"\n"
+        "  modelo   = \"none\"\n"
+        "  saida    = \"telegram\"\n"
+        "  ativa    = false\n\n"
+        "Inspecionar:\n"
+        "  /list Repo\n"
+        "  /describe Repo nora\n\n"
+        "Ver histórico de diffs:\n"
+        "  /list Diff -l repo=nora\n"
+        "  /describe Diff nora-abc1234"
+    ),
+    "Prompt": (
+        "📋 Snip — Kind Prompt (chamada de IA plugável)\n\n"
+        "Qualquer rotina chama IA apontando para um Prompt — sem código.\n\n"
+        "Criar:\n"
+        '  /apply Prompt resumo-ia spec.template="Resuma em PT-BR: {dados}" \\\n'
+        "      spec.model=claude-haiku-4-5-20251001 spec.fonte=grupo:saude\n\n"
+        "Placeholders no template:\n"
+        "  {dados}  → contexto montado pela spec.fonte\n"
+        "  {agora}  → data/hora atual\n\n"
+        "Fontes de {dados} (spec.fonte):\n"
+        "  grupo:<g>   recursos com labels.grupo=<g>\n"
+        "  kind:<K>    todos os recursos de um Kind\n"
+        "  repo:<r>    diff mais recente do repositório <r>\n"
+        "  texto:<t>   texto fixo\n\n"
+        "Routine que usa o Prompt:\n"
+        '  nome="resumo-ia"  label="resumo-ia"  coletar="prompt"\n'
+        '  agenda="@daily 21:00"  modelo="none"  saida="telegram"\n\n"'
+        "Inspecionar:\n"
+        "  /describe Prompt resumo-ia    (status.last_output guarda a última resposta)"
+    ),
+    "Diff": (
+        "📋 Snip — Kind Diff\n\n"
+        "Criado automaticamente pelo collect repo-sync.\n"
+        "Não criar manualmente.\n\n"
+        "Listar diffs de um repo:\n"
+        "  /list Diff -l repo=nora\n"
+        "  /list Diff -l repo=alpha\n\n"
+        "Ver detalhe de um diff:\n"
+        "  /describe Diff nora-abc1234\n\n"
+        "Campos disponíveis (spec):\n"
+        "  commit     → SHA abreviado do commit\n"
+        "  diff_raw   → patch completo (truncado em 8 KB)\n"
+        "  explicacao → análise do Haiku em PT-BR\n\n"
+        "Campos de status:\n"
+        "  synced_at  → ISO timestamp do sync"
     ),
     "Doc": (
         "📋 Snip — Kind Doc\n\n"

@@ -9,14 +9,57 @@ Uso interno: ``invocar(prompt, modelo, timeout)`` → str com a resposta.
 
 from __future__ import annotations
 
+import glob
+import os
+import shutil
 import subprocess
 
 _MODELO_PADRAO = "claude-haiku-4-5-20251001"
 _TIMEOUT_PADRAO = 60
 
+_claude_bin: str | None = None
+
 
 class InvocarErro(RuntimeError):
     """Falha ao invocar o cliente de IA."""
+
+
+def _resolver_claude() -> str:
+    """Localiza o binário ``claude`` (cacheado). Ordem:
+
+    1. ``ATLAS_CLAUDE_BIN`` (override explícito)
+    2. ``claude`` na PATH
+    3. binário embutido da extensão Claude Code do VS Code (versão mais recente)
+    4. fallback ``"claude"`` (deixa o subprocess falhar com mensagem clara)
+    """
+    global _claude_bin
+    if _claude_bin is not None:
+        return _claude_bin
+
+    env = os.environ.get("ATLAS_CLAUDE_BIN")
+    if env and os.path.exists(env):
+        _claude_bin = env
+        return _claude_bin
+
+    found = shutil.which("claude")
+    if found:
+        _claude_bin = found
+        return _claude_bin
+
+    padroes = [
+        "~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude",
+        "~/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude",
+        "~/.cursor/extensions/anthropic.claude-code-*/resources/native-binary/claude",
+    ]
+    candidatos: list[str] = []
+    for p in padroes:
+        candidatos.extend(glob.glob(os.path.expanduser(p)))
+    if candidatos:
+        _claude_bin = max(candidatos, key=os.path.getmtime)  # extensão mais recente
+        return _claude_bin
+
+    _claude_bin = "claude"
+    return _claude_bin
 
 
 def invocar(
@@ -29,7 +72,7 @@ def invocar(
     Raises:
         InvocarErro: se o processo retornar código != 0 ou se ocorrer timeout.
     """
-    args = ["claude", "-p", "--model", modelo]
+    args = [_resolver_claude(), "-p", "--model", modelo]
     try:
         proc = subprocess.run(
             args,
