@@ -7,6 +7,8 @@ API — não conhece domínio nem escreve no store direto (ADR-0015/ADR-0017).
 
 from __future__ import annotations
 
+import json
+
 import yaml
 
 
@@ -31,3 +33,22 @@ def parse_manifests(text: str) -> list[dict]:
                 f"documento {i} ({d['kind']}): falta 'name'"
             )
     return docs
+
+
+_API_PREFIX = "/apis/atlas/v1"
+
+
+def build_request(
+    api_url: str, manifest: dict, token: str | None = None
+) -> tuple[str, str, bytes, dict[str, str]]:
+    """Monta a chamada ``PUT`` para um manifesto. Função pura (sem rede)."""
+    kind = manifest["kind"]
+    name = manifest["name"]
+    url = f"{api_url.rstrip('/')}{_API_PREFIX}/{kind}/{name}"
+    body = json.dumps(
+        {"labels": manifest.get("labels", {}), "spec": manifest.get("spec", {})}
+    ).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return ("PUT", url, body, headers)

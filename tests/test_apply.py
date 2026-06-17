@@ -57,3 +57,26 @@ def test_parse_erro_sem_name():
 def test_parse_erro_documento_nao_mapa():
     with pytest.raises(ManifestoInvalido, match="mapa"):
         parse_manifests("- isto\n- e uma lista\n")
+
+
+import json as _json
+
+from atlas.apply import build_request
+
+
+def test_build_request_monta_put():
+    m = {"kind": "Tracker", "name": "peso", "labels": {"grupo": "academia"}, "spec": {"unit": "kg"}}
+    method, url, body, headers = build_request("http://127.0.0.1:8080", m, token="t0k")
+    assert method == "PUT"
+    assert url == "http://127.0.0.1:8080/apis/atlas/v1/Tracker/peso"
+    assert _json.loads(body) == {"labels": {"grupo": "academia"}, "spec": {"unit": "kg"}}
+    assert headers["Authorization"] == "Bearer t0k"
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_build_request_sem_token_nao_inclui_auth():
+    m = {"kind": "Goal", "name": "peso-alvo"}
+    _, url, body, headers = build_request("http://127.0.0.1:8080/", m, token=None)
+    assert url == "http://127.0.0.1:8080/apis/atlas/v1/Goal/peso-alvo"
+    assert "Authorization" not in headers
+    assert _json.loads(body) == {"labels": {}, "spec": {}}
