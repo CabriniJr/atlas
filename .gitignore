@@ -11,6 +11,9 @@ secrets/
 routines/**/state/
 runs/
 
+# Diretório de dados do runtime (DB + clones de repo do repo-sync)
+data/
+
 # Python
 __pycache__/
 *.py[cod]
