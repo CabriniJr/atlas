@@ -103,9 +103,25 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+#token-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100}
+#token-box{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:32px;width:340px;text-align:center}
+#token-box h2{color:var(--blue);margin-bottom:8px;font-size:15px}
+#token-box p{color:var(--muted);font-size:12px;margin-bottom:20px}
+#token-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:inherit;font-size:13px;margin-bottom:12px}
+#token-input:focus{outline:none;border-color:var(--blue)}
+#token-submit{width:100%;padding:8px;border-radius:6px;border:1px solid var(--blue);background:#1c2d3e;color:var(--blue);cursor:pointer;font-family:inherit;font-size:13px}
+#token-submit:hover{background:var(--blue);color:var(--bg)}
 </style>
 </head>
 <body>
+<div id="token-overlay" style="display:none">
+  <div id="token-box">
+    <h2>⚡ Atlas — API Token</h2>
+    <p>Configure <code>ATLAS_API_TOKEN</code> no .env e cole aqui:</p>
+    <input id="token-input" type="password" placeholder="seu token…" autocomplete="off">
+    <button id="token-submit">Entrar</button>
+  </div>
+</div>
 <div id="sidebar">
   <h1>⚡ ATLAS</h1>
   <div id="kinds"></div>
@@ -129,8 +145,25 @@ pre.json{background:var(--bg3);border:1px solid var(--border);border-radius:6px;
 
 <script>
 const API = '/apis/atlas/v1';
-const TOKEN = document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('atlas_token='))?.split('=')[1] || '';
+let TOKEN = localStorage.getItem('atlas_token') || '';
 let allKinds = {}, currentKind = null, allResources = [], selectedName = null;
+
+// Token overlay
+function showTokenOverlay() {
+  document.getElementById('token-overlay').style.display = 'flex';
+  document.getElementById('token-input').focus();
+}
+document.getElementById('token-submit').onclick = () => {
+  const val = document.getElementById('token-input').value.trim();
+  if (!val) return;
+  TOKEN = val;
+  localStorage.setItem('atlas_token', val);
+  document.getElementById('token-overlay').style.display = 'none';
+  loadKinds();
+};
+document.getElementById('token-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('token-submit').click();
+});
 
 async function apiFetch(path, opts={}) {
   const h = {'Content-Type':'application/json'};
@@ -146,7 +179,13 @@ async function loadKinds() {
     renderSidebar();
     const first = Object.keys(allKinds)[0];
     if (first) selectKind(first);
-  } catch(e) { toast('erro ao carregar: ' + e.message, true); }
+  } catch(e) {
+    if (e.message.includes('401') || e.message.toLowerCase().includes('unauth')) {
+      showTokenOverlay();
+    } else {
+      toast('erro ao carregar: ' + e.message, true);
+    }
+  }
 }
 
 function renderSidebar() {
@@ -296,7 +335,7 @@ function toast(msg, err=false) {
 
 document.getElementById('filter').addEventListener('input', () => renderList(allResources));
 
-loadKinds();
+if (TOKEN) { loadKinds(); } else { showTokenOverlay(); }
 setInterval(async () => {
   if (currentKind) {
     const fresh = await apiFetch(API + '/').catch(()=>null);
