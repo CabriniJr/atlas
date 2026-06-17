@@ -43,6 +43,7 @@ COMANDOS: list[tuple[str, str]] = [
     ("deactivate", "Deactivate a routine"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
+    ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Routine|Doc)"),
     # --- system ---
     ("status", "Daily summary"),
     ("debug", "Diagnostics: /debug [status|runs|routines|db|env]"),
@@ -119,6 +120,14 @@ def texto_ajuda() -> str:
         "  /activate checkin                    ativa check-in diário\n"
         "  /deactivate treino                   desativa\n\n"
 
+        "⌨️  Atalhos (aliases de verbo + Kind)\n"
+        "  /r  → /get     /ls → /list    /cat → /describe    /a → /apply    /rm → /delete\n"
+        "  Kind: t=Tracker  g=Goal  al=Alarm  rot=Routine  doc=Doc  rr=RoutineRequest\n"
+        "  ex: /ls t        → /list Tracker\n"
+        "      /cat g meta  → /describe Goal meta\n"
+        "      /r t peso    → /get Tracker peso\n\n"
+        "  /snip <Kind>   template copy-paste pronto para criar/usar o Kind\n"
+        "  /snip Tracker  /snip Goal  /snip Timer  /snip Alarm  /snip Doc\n\n"
         "📚  Documentação inline\n"
         "  /docs                                índice de tópicos\n"
         "  /docs kinds                          catálogo de kinds + spec padrão\n"

@@ -55,6 +55,14 @@ def _cmd_list(partes: list[str], store: ResourceStore) -> str:
     recursos = store.list(kind, labels=selector if selector else None)
     if not recursos:
         filtro = f" (selector: {selector})" if selector else ""
+        # Sugestão fuzzy se Kind não existe no store
+        todos_kinds = store.kinds()
+        sugestoes = [k for k in todos_kinds if k.lower().startswith(kind.lower()[:3])]
+        if sugestoes and kind not in todos_kinds:
+            return (
+                f"No {kind} objects found{filtro}.\n"
+                f"Did you mean: {', '.join(sugestoes)}?"
+            )
         return f"No {kind} objects found{filtro}."
     linhas = [f"  {r.name}" + (f"  [{_status_resumo(r)}]" if r.status else "") for r in recursos]
     return f"{kind} ({len(recursos)})\n" + "\n".join(linhas)

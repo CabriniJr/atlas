@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from atlas.alarmes import responder_alarmes
+from atlas.aliases import expandir, responder_snip
 from atlas.comandos import texto_ajuda, texto_boas_vindas
 from atlas.controle import responder_controle
 from atlas.core.store import ResourceStore
@@ -47,6 +48,14 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
         if texto == "/start":
             return texto_boas_vindas()
         return texto_ajuda()
+
+    # Snips: /snip <Kind>
+    resposta_snip = responder_snip(texto)
+    if resposta_snip is not None:
+        return resposta_snip
+
+    # Expande aliases de verbo e Kind antes de qualquer roteamento
+    texto = expandir(texto)
 
     # Documentação inline: /docs [topic]
     resposta_docs = responder_docs(texto, agora, store=store)
