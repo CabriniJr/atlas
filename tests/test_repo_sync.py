@@ -312,7 +312,10 @@ def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     prompts = []
-    with patch("atlas.rotinas.repo_sync.invocar", side_effect=lambda p, **kw: prompts.append(p) or "ok"):
+    with patch(
+        "atlas.rotinas.repo_sync.invocar",
+        side_effect=lambda p, **kw: prompts.append(p) or "ok",
+    ):
         fn = obter("repo-sync")
         fn(_ctx(db, store))
 

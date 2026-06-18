@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-from atlas.core.store import ResourceStore
 from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.executor import ContextoExecucao
 from atlas.rotinas import obter

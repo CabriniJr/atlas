@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import atlas.aliases as aliases
 
-
 # ── expandir ─────────────────────────────────────────────────────────────────
 
 def test_alias_r_expande_para_get():

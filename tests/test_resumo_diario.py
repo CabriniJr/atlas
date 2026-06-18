@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import atlas.rotinas.resumo_diario  # noqa: F401 — registra
-
 from atlas.db import Database
 from atlas.executor import ContextoExecucao
 from atlas.rotinas import obter

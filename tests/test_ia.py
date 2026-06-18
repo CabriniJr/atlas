@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from atlas.ia import InvocarErro, invocar
-
 
 # ---------------------------------------------------------------------------
 # Modo análise (2a) — resposta de texto

@@ -16,9 +16,17 @@ _AGORA = datetime(2025, 6, 16, 10, 0)
 @pytest.fixture
 def store(tmp_path):
     s = ResourceStore(str(tmp_path / "test.db"))
-    s.apply(Resource(kind="Tracker", name="peso", labels={"domain": "fisico", "routine": "treino"}), _AGORA)
+    s.apply(
+        Resource(kind="Tracker", name="peso", labels={"domain": "fisico", "routine": "treino"}),
+        _AGORA,
+    )
     s.apply(Resource(kind="Tracker", name="sono", labels={"domain": "sono"}), _AGORA)
-    s.apply(Resource(kind="Tracker", name="estudo", labels={"domain": "estudo", "routine": "resumo-diario"}), _AGORA)
+    s.apply(
+        Resource(
+            kind="Tracker", name="estudo", labels={"domain": "estudo", "routine": "resumo-diario"}
+        ),
+        _AGORA,
+    )
     return s
 
 

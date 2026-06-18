@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
-
-import pytest
 
 from atlas.docs_cmd import responder_docs
 

@@ -34,8 +34,9 @@ def api_server(store, free_tcp_port):
     import atlas.api as api_mod
     api_mod._store = store
     api_mod._TOKEN = ""  # sem token → aceita qualquer origem nos testes
-    from atlas.api import _Handler
     from http.server import HTTPServer
+
+    from atlas.api import _Handler
     server = HTTPServer(("127.0.0.1", free_tcp_port), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
@@ -64,7 +65,12 @@ def _delete(port, path):
 def _put(port, path, body):
     data = json.dumps(body).encode()
     conn = HTTPConnection("127.0.0.1", port)
-    conn.request("PUT", path, body=data, headers={"Content-Type": "application/json", "Content-Length": str(len(data))})
+    conn.request(
+        "PUT",
+        path,
+        body=data,
+        headers={"Content-Type": "application/json", "Content-Length": str(len(data))},
+    )
     resp = conn.getresponse()
     out = resp.read()
     conn.close()

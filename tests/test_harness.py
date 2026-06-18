@@ -7,14 +7,13 @@ sem IA real, sem Telegram, sem banco em disco permanente.
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
+import atlas.harness as harness
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.db import Database
-import atlas.harness as harness
 from atlas.harness import HarnessResult
 from atlas.rotinas import registrar
 
