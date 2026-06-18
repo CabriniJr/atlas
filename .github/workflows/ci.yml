@@ -73,3 +73,19 @@ jobs:
         env:
           # A CI NUNCA chama claude -p real (P1). analyze é mockado (ADR-0007).
           ATLAS_DISABLE_AI: "1"
+
+  web:
+    name: Web (front)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
