@@ -1,4 +1,5 @@
 """Testes — rotina checkup-semanal (E3-04)."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -32,33 +33,53 @@ def db(tmp_path):
 @pytest.fixture
 def store(tmp_path):
     s = ResourceStore(str(tmp_path / "test.db"))
-    s.apply(Resource(
-        kind="Goal", name="emagrecimento",
-        labels={"state": "active"},
-        spec={"target": "80", "unit": "kg", "tracker": "peso",
-              "start": "90", "direction": "down"},
-        status={"current": "90", "progress": "0%"},
-    ), _AGORA)
-    s.apply(Resource(
-        kind="Goal", name="sem-tracker",
-        labels={"state": "active"},
-        spec={"target": "10", "unit": "km"},
-        status={},
-    ), _AGORA)
-    s.apply(Resource(
-        kind="Goal", name="concluida",
-        labels={"state": "done"},
-        spec={"target": "5", "unit": "km", "tracker": "corrida"},
-        status={"progress": "100%"},
-    ), _AGORA)
+    s.apply(
+        Resource(
+            kind="Goal",
+            name="emagrecimento",
+            labels={"state": "active"},
+            spec={
+                "target": "80",
+                "unit": "kg",
+                "tracker": "peso",
+                "start": "90",
+                "direction": "down",
+            },
+            status={"current": "90", "progress": "0%"},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Goal",
+            name="sem-tracker",
+            labels={"state": "active"},
+            spec={"target": "10", "unit": "km"},
+            status={},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Goal",
+            name="concluida",
+            labels={"state": "done"},
+            spec={"target": "5", "unit": "km", "tracker": "corrida"},
+            status={"progress": "100%"},
+        ),
+        _AGORA,
+    )
     return s
 
 
 def _ctx(db, store):
     rot = Rotina(
         nome="checkup-semanal",
-        descricao="", agenda="0 10 * * 1",
-        modelo="none", saida="telegram", ativa=True,
+        descricao="",
+        agenda="0 10 * * 1",
+        modelo="none",
+        saida="telegram",
+        ativa=True,
     )
     return ContextoExecucao(agora=_AGORA, rotina=rot, origem="agenda", db=db, store=store)
 
@@ -66,6 +87,7 @@ def _ctx(db, store):
 def test_collect_retorna_saida(db, store):
     import atlas.rotinas.checkup_semanal  # noqa: F401
     from atlas.rotinas import obter
+
     collect = obter("checkup-semanal")
     assert collect is not None
     result = collect(_ctx(db, store))
@@ -76,6 +98,7 @@ def test_collect_retorna_saida(db, store):
 
 def test_collect_inclui_progresso(db, store):
     from atlas.rotinas import obter
+
     collect = obter("checkup-semanal")
     result = collect(_ctx(db, store))
     saida = result.data["_saida"]
@@ -85,6 +108,7 @@ def test_collect_inclui_progresso(db, store):
 
 def test_collect_ignora_goals_concluidas(db, store):
     from atlas.rotinas import obter
+
     collect = obter("checkup-semanal")
     result = collect(_ctx(db, store))
     saida = result.data["_saida"]
@@ -96,6 +120,7 @@ def test_collect_ignora_goals_concluidas(db, store):
 def test_collect_sem_goals(tmp_path):
     import atlas.rotinas.checkup_semanal  # noqa: F401
     from atlas.rotinas import obter
+
     db2 = Database(str(tmp_path / "empty.db"))
     s2 = ResourceStore(str(tmp_path / "empty.db"))
     collect = obter("checkup-semanal")

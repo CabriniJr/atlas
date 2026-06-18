@@ -62,7 +62,6 @@ def texto_ajuda() -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "🧭  Atlas — referência de comandos\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
         "🔷  API de objetos (kubectl-like)\n"
         "  /resources                         lista todos os kinds no store\n"
         "  /list <Kind>                        lista todos os objetos de um kind\n"
@@ -72,7 +71,6 @@ def texto_ajuda() -> str:
         "  /apply <Kind> <name> [k=v …]        cria ou atualiza (upsert)\n"
         "  /apply Tracker peso labels.routine=treino\n"
         "  /delete <Kind> <name>               remove um objeto\n\n"
-
         "💡  Captura rápida\n"
         "  /idea implementar dashboard          → Kind Idea, pool\n"
         "  /task revisar relatório              → Kind Task, pool\n"
@@ -81,7 +79,6 @@ def texto_ajuda() -> str:
         "  /note texto                          → alias para /reg\n"
         "  /reg #fisico treino pesado hoje      → nota com domínio explícito\n"
         "  /reg #estudo capítulo 3 python       → domínios: fisico·estudo·sono·saude·trabalho\n\n"
-
         "🗂  Pool de ideias\n"
         "  /pool                                lista itens abertos (por prioridade)\n"
         "  /pool capturada                      filtra por estado\n"
@@ -90,33 +87,28 @@ def texto_ajuda() -> str:
         "  /pool 3 edit novo texto              edita corpo\n"
         "  /pool 3 done                         marca como ativado\n"
         "  /pool 3 archive | drop               arquiva ou descarta\n\n"
-
         "📈  Trackers  (registro por micro-sintaxe)\n"
         "  /track                               lista trackers ativos + último valor\n"
         "  /track new peso kg                   cria tracker 'peso' em kg\n"
         "  /track peso                          histórico + stats\n"
         "  /track peso rm                       desativa\n"
         "  peso: 82.3                           registra direto no chat\n\n"
-
         "🎯  Metas\n"
         "  /goal set peso target=80 unit=kg tracker=peso start=90 direction=down\n"
         "  /goals                               lista todas as metas\n"
         "  /goal status peso                    progresso detalhado\n"
         "  /goal check peso                     recalcula do último tracker\n"
         "  /goal done peso                      marca como atingida\n\n"
-
         "⏱  Timers (cronômetro → registra em activities)\n"
         "  /timer start estudo                  inicia → Kind Timer\n"
         "  /timer finish estudo                 para e grava duração\n"
         "  /timer status estudo                 tempo decorrido\n"
         "  /timers                              lista timers ativos\n\n"
-
         "⏰  Alarmes\n"
         "  /alarm 07:30 bom dia!                lembrete diário\n"
         "  /alarm 23:00 dormir @once            uma vez só\n"
         "  /alarms                              lista alarmes ativos\n"
         "  /alarm 2 remove                      remove alarme #2\n\n"
-
         "🧩  Rotinas\n"
         "  /rotinas  (ou /routines)             lista todas as rotinas\n"
         "  /rotina treino  (ou /routine)        detalhe + estado\n"
@@ -124,7 +116,6 @@ def texto_ajuda() -> str:
         "  /run resumo-diario                   executa agora\n"
         "  /ativar checkin   (/activate)        ativa rotina\n"
         "  /desativar treino (/deactivate)      desativa rotina\n\n"
-
         "⌨️  Atalhos (aliases de verbo + Kind)\n"
         "  /r  → /get     /ls → /list    /cat → /describe    /a → /apply    /rm → /delete\n"
         "  Kind: t=Tracker  g=Goal  al=Alarm  rot=Routine  doc=Doc  rr=RoutineRequest\n"
@@ -140,7 +131,6 @@ def texto_ajuda() -> str:
         "  /docs arch                           visão geral da arquitetura\n"
         "  /docs adr 15                         ADR-0015 (core API de objetos)\n"
         "  /docs spec trackers                  spec técnica de trackers\n\n"
-
         "📊  Sistema\n"
         "  /status                              resumo de hoje\n"
         "  /uso                                 histórico de execuções (últimos 30 dias)\n"
@@ -148,7 +138,6 @@ def texto_ajuda() -> str:
         "  /debug                               diagnóstico (db, runs, env)\n"
         "  /debug runs 10                       últimas 10 execuções (detalhe)\n"
         "  /help                                esta mensagem\n\n"
-
         "Kinds ativos: Idea · Task · RoutineRequest · Tracker · Alarm ·\n"
         "              Timer · Goal · Routine · CheckIn · Repo · Diff\n"
         "Docs: /docs kinds  |  Arquitetura: /docs arch\n"

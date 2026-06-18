@@ -96,7 +96,7 @@ def _listar(db: Database, store: ResourceStore | None) -> str:
             modo = r.spec.get("mode", "daily")
             prox = r.status.get("next_fire", "?")
             linhas.append(
-                f"{r.name}  {r.spec.get('time','?')} ({modo}) → {r.spec.get('message','')}"
+                f"{r.name}  {r.spec.get('time', '?')} ({modo}) → {r.spec.get('message', '')}"
                 f"  · next {prox[:16]}"
             )
         return "⏰ Alarms\n" + "\n".join(linhas) + "\n→ /alarm <id> remove"
@@ -161,7 +161,8 @@ def tick_alarmes(
                 if r is not None:
                     count = r.status.get("fire_count", 0) + 1
                     store.set_status(
-                        "Alarm", name,
+                        "Alarm",
+                        name,
                         {"active": True, "next_fire": prox.isoformat(), "fire_count": count},
                         agora,
                     )

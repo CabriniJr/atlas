@@ -43,9 +43,7 @@ def parse_manifests(text: str) -> list[dict]:
         if not d.get("kind"):
             raise ManifestoInvalido(f"documento {i}: falta 'kind'")
         if not d.get("name"):
-            raise ManifestoInvalido(
-                f"documento {i} ({d['kind']}): falta 'name'"
-            )
+            raise ManifestoInvalido(f"documento {i} ({d['kind']}): falta 'name'")
     return docs
 
 
@@ -121,9 +119,7 @@ def send_http(method: str, url: str, body: bytes, headers: dict[str, str]) -> by
             return resp.read()
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
-            raise RuntimeError(
-                "401 não autorizado — verifique --token / ATLAS_API_TOKEN"
-            ) from exc
+            raise RuntimeError("401 não autorizado — verifique --token / ATLAS_API_TOKEN") from exc
         raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"falha ao conectar em {url}: {exc.reason}") from exc
@@ -139,9 +135,7 @@ def cli_apply(argv: list[str]) -> int:
         default=os.environ.get("ATLAS_API_TOKEN"),
         help="Bearer token (ou ATLAS_API_TOKEN)",
     )
-    p.add_argument(
-        "--dry-run", action="store_true", help="valida e mostra, sem aplicar"
-    )
+    p.add_argument("--dry-run", action="store_true", help="valida e mostra, sem aplicar")
     args = p.parse_args(argv)
 
     try:
@@ -157,9 +151,7 @@ def cli_apply(argv: list[str]) -> int:
         print(f"✗ manifesto inválido: {exc}", file=sys.stderr)
         return 1
 
-    res = apply_manifests(
-        manifests, args.api_url, args.token, dry_run=args.dry_run
-    )
+    res = apply_manifests(manifests, args.api_url, args.token, dry_run=args.dry_run)
 
     prefixo = "[dry-run] " if args.dry_run else ""
     for ref in res.aplicados:

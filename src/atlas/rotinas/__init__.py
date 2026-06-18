@@ -17,9 +17,11 @@ _REGISTRY: dict[str, ColetarFn] = {}
 
 def registrar(nome: str) -> Callable[[ColetarFn], ColetarFn]:
     """Decorator: @registrar('nome-da-rotina')."""
+
     def _dec(fn: ColetarFn) -> ColetarFn:
         _REGISTRY[nome] = fn
         return fn
+
     return _dec
 
 

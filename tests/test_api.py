@@ -18,13 +18,26 @@ _AGORA = datetime(2025, 6, 16, 10, 0)
 @pytest.fixture
 def store(tmp_path):
     s = ResourceStore(str(tmp_path / "test.db"))
-    s.apply(Resource(kind="Tracker", name="peso",
-                     labels={"active": "true", "domain": "fisico"},
-                     spec={"unit": "kg"}, status={"last_value": "82.3"}), _AGORA)
-    s.apply(Resource(kind="Goal", name="emagrecimento",
-                     labels={"state": "active"},
-                     spec={"target": 80, "unit": "kg"},
-                     status={"current": "85", "progress": "25%"}), _AGORA)
+    s.apply(
+        Resource(
+            kind="Tracker",
+            name="peso",
+            labels={"active": "true", "domain": "fisico"},
+            spec={"unit": "kg"},
+            status={"last_value": "82.3"},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Goal",
+            name="emagrecimento",
+            labels={"state": "active"},
+            spec={"target": 80, "unit": "kg"},
+            status={"current": "85", "progress": "25%"},
+        ),
+        _AGORA,
+    )
     return s
 
 
@@ -32,11 +45,13 @@ def store(tmp_path):
 def api_server(store, free_tcp_port):
     """Sobe o servidor em porta aleatória para cada teste."""
     import atlas.api as api_mod
+
     api_mod._store = store
     api_mod._TOKEN = ""  # sem token → aceita qualquer origem nos testes
     from http.server import HTTPServer
 
     from atlas.api import _Handler
+
     server = HTTPServer(("127.0.0.1", free_tcp_port), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
@@ -79,6 +94,7 @@ def _put(port, path, body):
 
 # ── GET /health ───────────────────────────────────────────────────────────────
 
+
 def test_health(api_server):
     status, body = _get(api_server, "/health")
     assert status == 200
@@ -86,6 +102,7 @@ def test_health(api_server):
 
 
 # ── GET /apis/atlas/v1/ ───────────────────────────────────────────────────────
+
 
 def test_list_kinds(api_server):
     status, body = _get(api_server, "/apis/atlas/v1/")
@@ -96,6 +113,7 @@ def test_list_kinds(api_server):
 
 
 # ── GET /apis/atlas/v1/<kind> ─────────────────────────────────────────────────
+
 
 def test_list_resources(api_server):
     status, body = _get(api_server, "/apis/atlas/v1/Tracker")
@@ -112,6 +130,7 @@ def test_list_kind_vazio(api_server):
 
 
 # ── GET /apis/atlas/v1/<kind>/<name> ─────────────────────────────────────────
+
 
 def test_get_resource(api_server):
     status, body = _get(api_server, "/apis/atlas/v1/Tracker/peso")
@@ -131,9 +150,13 @@ def test_get_resource_nao_existe(api_server):
 
 # ── PUT /apis/atlas/v1/<kind>/<name> ─────────────────────────────────────────
 
+
 def test_put_cria_recurso(api_server):
-    status, body = _put(api_server, "/apis/atlas/v1/Tracker/novo",
-                        {"spec": {"unit": "cm"}, "labels": {"active": "true"}})
+    status, body = _put(
+        api_server,
+        "/apis/atlas/v1/Tracker/novo",
+        {"spec": {"unit": "cm"}, "labels": {"active": "true"}},
+    )
     assert status == 200
     assert body["name"] == "novo"
     # verifica que ficou no store
@@ -143,13 +166,13 @@ def test_put_cria_recurso(api_server):
 
 
 def test_put_atualiza_recurso(api_server):
-    status, body = _put(api_server, "/apis/atlas/v1/Tracker/peso",
-                        {"spec": {"unit": "lbs"}})
+    status, body = _put(api_server, "/apis/atlas/v1/Tracker/peso", {"spec": {"unit": "lbs"}})
     assert status == 200
     assert body["spec"]["unit"] == "lbs"
 
 
 # ── DELETE /apis/atlas/v1/<kind>/<name> ──────────────────────────────────────
+
 
 def test_delete_recurso(api_server):
     status, body = _delete(api_server, "/apis/atlas/v1/Tracker/peso")
@@ -166,6 +189,7 @@ def test_delete_nao_existe(api_server):
 
 
 # ── GET / (dashboard HTML) ────────────────────────────────────────────────────
+
 
 def test_dashboard_html(api_server):
     conn = HTTPConnection("127.0.0.1", api_server)

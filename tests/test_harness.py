@@ -22,9 +22,11 @@ _AGORA = datetime(2025, 6, 16, 10, 0)
 
 # ── Fixture de rotina sintética ───────────────────────────────────────────────
 
+
 @registrar("_test_ok")
 def _collect_ok(ctx):
     from atlas.executor import CollectResult
+
     return CollectResult(data={"_saida": f"ok em {ctx.agora.hour}h"})
 
 
@@ -34,6 +36,7 @@ def _collect_err(ctx):
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def db(tmp_path):
@@ -46,6 +49,7 @@ def store(tmp_path):
 
 
 # ── Testes harness.testar_collect ─────────────────────────────────────────────────────
+
 
 def test_harness_collect_rotina_ok(db):
     res = harness.testar_collect("_test_ok", db=db, agora=_AGORA)
@@ -81,13 +85,16 @@ def test_harness_collect_sem_db():
 
 
 def test_harness_collect_com_store(db, store):
-    store.apply(Resource(kind="Tracker", name="peso",
-                         labels={"active": "true"}, spec={"unit": "kg"}), _AGORA)
+    store.apply(
+        Resource(kind="Tracker", name="peso", labels={"active": "true"}, spec={"unit": "kg"}),
+        _AGORA,
+    )
     res = harness.testar_collect("_test_ok", db=db, store=store, agora=_AGORA)
     assert res.erro is None
 
 
 # ── Testes harness.testar_gate ────────────────────────────────────────────────────────
+
 
 def test_harness_gate_true():
     assert harness.testar_gate(lambda data: data.get("_saida") != "", {"_saida": "algo"}) is True
@@ -98,6 +105,7 @@ def test_harness_gate_false():
 
 
 # ── Testes harness.inspecionar ────────────────────────────────────────────────────────
+
 
 def test_inspecionar_formata_saida(db):
     saida = harness.inspecionar("_test_ok", db=db, agora=_AGORA)
@@ -119,9 +127,11 @@ def test_inspecionar_rotina_com_excecao(db):
 
 # ── Teste de rotinas reais ────────────────────────────────────────────────────
 
+
 def test_harness_resumo_diario_roda_sem_crash(db):
     """resumo-diario deve funcionar mesmo com DB vazio."""
     import atlas.rotinas.resumo_diario  # noqa: F401 — registra
+
     res = harness.testar_collect("resumo-diario", db=db, agora=_AGORA)
     assert res.erro is None
     assert "Resumo" in res.saida
@@ -130,8 +140,11 @@ def test_harness_resumo_diario_roda_sem_crash(db):
 def test_harness_checkin_com_store(db, store):
     """checkin deve listar trackers do store."""
     import atlas.rotinas.checkin  # noqa: F401
-    store.apply(Resource(kind="Tracker", name="peso",
-                         labels={"active": "true"}, spec={"unit": "kg"}), _AGORA)
+
+    store.apply(
+        Resource(kind="Tracker", name="peso", labels={"active": "true"}, spec={"unit": "kg"}),
+        _AGORA,
+    )
     res = harness.testar_collect("checkin", db=db, store=store, agora=_AGORA)
     assert res.erro is None
     assert "peso" in res.saida

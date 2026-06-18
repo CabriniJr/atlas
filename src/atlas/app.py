@@ -128,6 +128,7 @@ def run(config: Config | None = None) -> None:
 
     # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon
     from atlas.api import iniciar as iniciar_api
+
     iniciar_api(store)
 
     # Catch-up dos disparos perdidos enquanto esteve fora do ar (ADR-0006).

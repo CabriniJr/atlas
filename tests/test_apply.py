@@ -126,9 +126,7 @@ def test_apply_falha_parcial_continua_e_marca_nao_ok():
 
 def test_cli_apply_dry_run_le_arquivo(tmp_path, capsys):
     arq = tmp_path / "m.yaml"
-    arq.write_text(
-        "kind: Tracker\nname: peso\nlabels:\n  grupo: academia\nspec:\n  unit: kg\n"
-    )
+    arq.write_text("kind: Tracker\nname: peso\nlabels:\n  grupo: academia\nspec:\n  unit: kg\n")
     rc = cli_apply(["-f", str(arq), "--api-url", "http://api", "--dry-run"])
     out = capsys.readouterr().out
     assert rc == 0

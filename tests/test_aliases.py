@@ -6,6 +6,7 @@ import atlas.aliases as aliases
 
 # ── expandir ─────────────────────────────────────────────────────────────────
 
+
 def test_alias_r_expande_para_get():
     assert aliases.expandir("/r Tracker peso") == "/get Tracker peso"
 
@@ -63,6 +64,7 @@ def test_kind_ja_correto_nao_muda():
 
 
 # ── responder_snip ─────────────────────────────────────────────────────────────
+
 
 def test_snip_nao_e_comando_retorna_none():
     assert aliases.responder_snip("/help") is None

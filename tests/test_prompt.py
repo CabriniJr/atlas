@@ -48,9 +48,16 @@ def test_prompt_sem_resource_avisa(store, db):
 
 
 def test_prompt_invoca_ia_com_template(store, db):
-    store.apply(Resource(kind="Prompt", name="resumo-ia", labels={},
-        spec={"template": "Resuma: {dados}", "model": "claude-haiku-4-5-20251001"},
-        status={}), _AGORA)
+    store.apply(
+        Resource(
+            kind="Prompt",
+            name="resumo-ia",
+            labels={},
+            spec={"template": "Resuma: {dados}", "model": "claude-haiku-4-5-20251001"},
+            status={},
+        ),
+        _AGORA,
+    )
     with patch("atlas.rotinas.prompt.invocar", return_value="resumo gerado") as m:
         out = obter("prompt")(_ctx(store, db)).data["_saida"]
     assert "resumo gerado" in out
@@ -60,20 +67,35 @@ def test_prompt_invoca_ia_com_template(store, db):
 
 
 def test_prompt_monta_contexto_grupo(store, db):
-    store.apply(Resource(kind="Tracker", name="peso", labels={"grupo": "saude"},
-        spec={"unit": "kg"}, status={}), _AGORA)
-    store.apply(Resource(kind="Prompt", name="p", labels={},
-        spec={"template": "Dados: {dados}", "fonte": "grupo:saude"}, status={}), _AGORA)
+    store.apply(
+        Resource(
+            kind="Tracker", name="peso", labels={"grupo": "saude"}, spec={"unit": "kg"}, status={}
+        ),
+        _AGORA,
+    )
+    store.apply(
+        Resource(
+            kind="Prompt",
+            name="p",
+            labels={},
+            spec={"template": "Dados: {dados}", "fonte": "grupo:saude"},
+            status={},
+        ),
+        _AGORA,
+    )
     enviado = {}
-    with patch("atlas.rotinas.prompt.invocar",
-               side_effect=lambda prompt, **kw: enviado.update(p=prompt) or "ok"):
+    with patch(
+        "atlas.rotinas.prompt.invocar",
+        side_effect=lambda prompt, **kw: enviado.update(p=prompt) or "ok",
+    ):
         obter("prompt")(_ctx(store, db, label="p"))
     assert "peso" in enviado["p"]
 
 
 def test_prompt_persiste_status(store, db):
-    store.apply(Resource(kind="Prompt", name="p", labels={},
-        spec={"template": "x"}, status={}), _AGORA)
+    store.apply(
+        Resource(kind="Prompt", name="p", labels={}, spec={"template": "x"}, status={}), _AGORA
+    )
     with patch("atlas.rotinas.prompt.invocar", return_value="saida ia"):
         obter("prompt")(_ctx(store, db, label="p"))
     p = store.get("Prompt", "p")
@@ -82,8 +104,9 @@ def test_prompt_persiste_status(store, db):
 
 
 def test_prompt_ia_indisponivel_nao_quebra(store, db):
-    store.apply(Resource(kind="Prompt", name="p", labels={},
-        spec={"template": "x"}, status={}), _AGORA)
+    store.apply(
+        Resource(kind="Prompt", name="p", labels={}, spec={"template": "x"}, status={}), _AGORA
+    )
     with patch("atlas.rotinas.prompt.invocar", side_effect=InvocarErro("claude off")):
         out = obter("prompt")(_ctx(store, db, label="p")).data["_saida"]
     assert "indispon" in out.lower() or "claude off" in out

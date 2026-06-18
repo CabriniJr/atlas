@@ -27,12 +27,14 @@ def _ctx(db):
 def test_collect_treino_registrado(db):
     """Deve retornar collect registrado no registry."""
     import atlas.rotinas.treino  # noqa: F401
+
     fn = obter("treino")
     assert fn is not None
 
 
 def test_collect_treino_sem_atividades_hoje(db):
     import atlas.rotinas.treino  # noqa: F401
+
     fn = obter("treino")
     result = fn(_ctx(db))
     saida = result.data["_saida"]
@@ -41,6 +43,7 @@ def test_collect_treino_sem_atividades_hoje(db):
 
 def test_collect_treino_com_registro_fisico(db):
     import atlas.rotinas.treino  # noqa: F401
+
     db.insert(
         "activities",
         ts=_AGORA.isoformat(),
@@ -56,6 +59,7 @@ def test_collect_treino_com_registro_fisico(db):
 
 def test_collect_treino_com_tracker_fisico(db):
     import atlas.rotinas.treino  # noqa: F401
+
     db.insert(
         "activities",
         ts=_AGORA.isoformat(),
@@ -73,6 +77,7 @@ def test_collect_treino_com_tracker_fisico(db):
 
 def test_collect_treino_ignora_atividades_de_outros_dias(db):
     import atlas.rotinas.treino  # noqa: F401
+
     db.insert(
         "activities",
         ts="2020-01-01T10:00:00",

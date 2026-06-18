@@ -129,6 +129,7 @@ def _run(db: Database, partes: list[str], agora: datetime, store: object = None)
     # /run <nome> --test → harness sem executor completo
     if "--test" in partes[2:]:
         from atlas.harness import inspecionar
+
         return inspecionar(nome, db=db, store=store, agora=agora)
 
     rot = _achar(db, nome)

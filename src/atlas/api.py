@@ -2975,6 +2975,7 @@ class _Handler(BaseHTTPRequestHandler):
         # /_complete?q=<text> → sugestões de autocomplete
         if path == _API_PREFIX + "/_complete":
             from urllib.parse import parse_qs, urlparse
+
             q = parse_qs(urlparse(self.path).query).get("q", [""])[0]
             self._json(200, _autocomplete(q, _store))
             return
@@ -2984,7 +2985,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, _status_payload())
             return
 
-        rest = path[len(_API_PREFIX):].strip("/")
+        rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
 
         if len(parts) == 1:
@@ -3027,11 +3028,14 @@ class _Handler(BaseHTTPRequestHandler):
 
         # Insight por IA (sob demanda) — sistema ou repositório.
         if path == _API_PREFIX + "/_insight":
-            self._json(200, _ai_insight(
-                body.get("scope", "system"),
-                body.get("name", ""),
-                body.get("model", "claude-haiku-4-5-20251001"),
-            ))
+            self._json(
+                200,
+                _ai_insight(
+                    body.get("scope", "system"),
+                    body.get("name", ""),
+                    body.get("model", "claude-haiku-4-5-20251001"),
+                ),
+            )
             return
 
         if path != _API_PREFIX + "/_cmd":
@@ -3055,7 +3059,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         path = self.path.split("?")[0].rstrip("/")
-        rest = path[len(_API_PREFIX):].strip("/")
+        rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
         if len(parts) != 2:
             self._json(400, {"error": "PUT requires /apis/atlas/v1/<kind>/<name>"})
@@ -3083,7 +3087,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         path = self.path.split("?")[0].rstrip("/")
-        rest = path[len(_API_PREFIX):].strip("/")
+        rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
         if len(parts) != 2:
             self._json(400, {"error": "DELETE requires /apis/atlas/v1/<kind>/<name>"})
@@ -3098,11 +3102,36 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 _CMD_VERBS = [
-    "/list", "/get", "/describe", "/apply", "/delete", "/resources",
-    "/docs", "/snip", "/help", "/uso",
-    "/ls", "/r", "/cat", "/d", "/a", "/rm",
+    "/list",
+    "/get",
+    "/describe",
+    "/apply",
+    "/delete",
+    "/resources",
+    "/docs",
+    "/snip",
+    "/help",
+    "/uso",
+    "/ls",
+    "/r",
+    "/cat",
+    "/d",
+    "/a",
+    "/rm",
 ]
-_VERBS_KIND = {"/list", "/get", "/describe", "/apply", "/delete", "/ls", "/r", "/cat", "/d", "/a", "/rm"}
+_VERBS_KIND = {
+    "/list",
+    "/get",
+    "/describe",
+    "/apply",
+    "/delete",
+    "/ls",
+    "/r",
+    "/cat",
+    "/d",
+    "/a",
+    "/rm",
+}
 _VERBS_NAME = {"/get", "/describe", "/delete", "/r", "/cat", "/d", "/rm"}
 
 
@@ -3125,6 +3154,7 @@ def _cmd_router(text: str, store: ResourceStore) -> str:
     # /uso tem renderização própria (histórico de execuções).
     try:
         from atlas.uso import responder_uso
+
         uso = responder_uso(text, _db, agora)
         if uso is not None:
             return uso
@@ -3153,7 +3183,11 @@ def _autocomplete(q: str, store: ResourceStore) -> list[str]:
         return [f"{verb} {k}" for k in matches]
 
     # completando name
-    if verb in _VERBS_NAME and kind and (len(parts) == 2 or (len(parts) == 3 and not q.endswith(" "))):
+    if (
+        verb in _VERBS_NAME
+        and kind
+        and (len(parts) == 2 or (len(parts) == 3 and not q.endswith(" ")))
+    ):
         frag = name_frag.lower()
         try:
             resources = store.list(kind)
@@ -3185,8 +3219,14 @@ def _status_payload() -> dict:
 
     agora = datetime.now()
     out: dict = {
-        "now": agora.isoformat(), "kinds": {}, "total": 0,
-        "routines": [], "running": [], "alarms": [], "repos": [], "recent_runs": [],
+        "now": agora.isoformat(),
+        "kinds": {},
+        "total": 0,
+        "routines": [],
+        "running": [],
+        "alarms": [],
+        "repos": [],
+        "recent_runs": [],
     }
     if _store is None:
         return out
@@ -3217,46 +3257,60 @@ def _status_payload() -> dict:
                 nxt = None
         coletar = r.spec.get("coletar", "") or ""
         grupo = r.spec.get("label", "") or ""
-        out["routines"].append({
-            "name": r.name, "active": ativa, "schedule": agenda,
-            "model": r.spec.get("model", "none"),
-            "description": r.spec.get("description", ""),
-            "last_run": ultimo.isoformat() if ultimo else None,
-            "next_run": nxt.isoformat() if nxt else None,
-            "coletar": coletar, "grupo": grupo,
-            # check-in visual: a rotina coleta valores de tracker de um grupo
-            "checkin": bool(grupo) and coletar in ("coletar-por-label",),
-        })
+        out["routines"].append(
+            {
+                "name": r.name,
+                "active": ativa,
+                "schedule": agenda,
+                "model": r.spec.get("model", "none"),
+                "description": r.spec.get("description", ""),
+                "last_run": ultimo.isoformat() if ultimo else None,
+                "next_run": nxt.isoformat() if nxt else None,
+                "coletar": coletar,
+                "grupo": grupo,
+                # check-in visual: a rotina coleta valores de tracker de um grupo
+                "checkin": bool(grupo) and coletar in ("coletar-por-label",),
+            }
+        )
 
     for t in _store.list("Timer"):
         if (t.status or {}).get("state") == "running":
-            out["running"].append({
-                "name": t.name, "since": t.status.get("started_at", ""),
-                "domain": (t.labels or {}).get("domain", ""),
-            })
+            out["running"].append(
+                {
+                    "name": t.name,
+                    "since": t.status.get("started_at", ""),
+                    "domain": (t.labels or {}).get("domain", ""),
+                }
+            )
 
     for a in _store.list("Alarm"):
         if a.spec.get("active", True):
-            out["alarms"].append({
-                "name": a.name, "hora": a.spec.get("hora", ""),
-                "mensagem": a.spec.get("mensagem", "") or a.spec.get("message", ""),
-                "once": bool(a.spec.get("once", False)),
-            })
+            out["alarms"].append(
+                {
+                    "name": a.name,
+                    "hora": a.spec.get("hora", ""),
+                    "mensagem": a.spec.get("mensagem", "") or a.spec.get("message", ""),
+                    "once": bool(a.spec.get("once", False)),
+                }
+            )
 
     for rp in _store.list("Repo"):
         st = rp.status or {}
-        out["repos"].append({
-            "name": rp.name, "url": rp.spec.get("url", ""),
-            "last_commit": st.get("last_commit"),
-            "last_commit_msg": st.get("last_commit_msg"),
-            "last_author": st.get("last_author"),
-            "last_summary": st.get("last_summary"),
-            "last_sync": st.get("last_sync"),
-            "last_check": st.get("last_check"),
-            "files_changed": st.get("files_changed"),
-            "insertions": st.get("insertions"),
-            "deletions": st.get("deletions"),
-        })
+        out["repos"].append(
+            {
+                "name": rp.name,
+                "url": rp.spec.get("url", ""),
+                "last_commit": st.get("last_commit"),
+                "last_commit_msg": st.get("last_commit_msg"),
+                "last_author": st.get("last_author"),
+                "last_summary": st.get("last_summary"),
+                "last_sync": st.get("last_sync"),
+                "last_check": st.get("last_check"),
+                "files_changed": st.get("files_changed"),
+                "insertions": st.get("insertions"),
+                "deletions": st.get("deletions"),
+            }
+        )
 
     if db is not None:
         try:
@@ -3265,8 +3319,13 @@ def _status_payload() -> dict:
                 "FROM runs ORDER BY id DESC LIMIT 15"
             ).fetchall()
             out["recent_runs"] = [
-                {"rotina": row[0], "status": row[1], "camada": row[2],
-                 "iniciado_em": row[3], "terminado_em": row[4]}
+                {
+                    "rotina": row[0],
+                    "status": row[1],
+                    "camada": row[2],
+                    "iniciado_em": row[3],
+                    "terminado_em": row[4],
+                }
                 for row in rows
             ]
         except Exception:  # noqa: BLE001
@@ -3380,8 +3439,14 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
         return {"ok": False, "error": str(exc)}
 
     doc_name = _salvar_insight_doc(scope, name, resposta, model)
-    return {"ok": True, "scope": scope, "name": name, "model": model,
-            "insight": resposta, "doc": doc_name}
+    return {
+        "ok": True,
+        "scope": scope,
+        "name": name,
+        "model": model,
+        "insight": resposta,
+        "doc": doc_name,
+    }
 
 
 def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | None:
@@ -3398,19 +3463,26 @@ def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | 
         doc_name = f"insight-sistema-{ts}"
         labels = {"topic": "insight", "tipo": "sistema"}
         titulo = f"sistema · insight ({agora.strftime('%d/%m %H:%M')})"
-    body = "\n".join([
-        f"# {titulo}",
-        "",
-        f"_via {model} · {agora.isoformat(timespec='seconds')}_",
-        "",
-        texto or "",
-    ])
+    body = "\n".join(
+        [
+            f"# {titulo}",
+            "",
+            f"_via {model} · {agora.isoformat(timespec='seconds')}_",
+            "",
+            texto or "",
+        ]
+    )
     try:
-        _store.apply(Resource(
-            kind="Doc", name=doc_name, labels=labels,
-            spec={"title": titulo, "body": body},
-            status={"gerado_em": agora.isoformat()},
-        ), agora)
+        _store.apply(
+            Resource(
+                kind="Doc",
+                name=doc_name,
+                labels=labels,
+                spec={"title": titulo, "body": body},
+                status={"gerado_em": agora.isoformat()},
+            ),
+            agora,
+        )
         return doc_name
     except Exception:  # noqa: BLE001
         return None
@@ -3424,7 +3496,11 @@ def iniciar(store: ResourceStore, port: int = _PORT) -> None:
     server = HTTPServer(("0.0.0.0", port), _Handler)
 
     def _run() -> None:
-        _log.info("API HTTP no ar: http://0.0.0.0:%d  (token=%s)", port, "sim" if _TOKEN else "loopback-only")
+        _log.info(
+            "API HTTP no ar: http://0.0.0.0:%d  (token=%s)",
+            port,
+            "sim" if _TOKEN else "loopback-only",
+        )
         server.serve_forever()
 
     t = threading.Thread(target=_run, daemon=True, name="atlas-api")

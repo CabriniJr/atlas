@@ -206,7 +206,11 @@ def _parse_cron(expr: str) -> dict | None:
     if 7 in dia_sem:  # 7 e 0 são ambos domingo
         dia_sem = (dia_sem - {7}) | {0}
     return {
-        "minuto": minuto, "hora": hora, "dia_mes": dia_mes, "mes": mes, "dia_sem": dia_sem,
+        "minuto": minuto,
+        "hora": hora,
+        "dia_mes": dia_mes,
+        "mes": mes,
+        "dia_sem": dia_sem,
         "dia_mes_star": campos[2].strip() == "*",
         "dia_sem_star": campos[4].strip() == "*",
     }

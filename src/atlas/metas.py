@@ -158,11 +158,16 @@ def _check(db: Database, store: ResourceStore, nome: str, agora: datetime) -> st
     progress_str = _calcular_progresso(current, target, start_val, direction)
     unit = r.spec.get("unit", "")
 
-    store.set_status("Goal", nome, {
-        "current": str(current),
-        "progress": progress_str,
-        "checked_at": agora.isoformat(),
-    }, agora)
+    store.set_status(
+        "Goal",
+        nome,
+        {
+            "current": str(current),
+            "progress": progress_str,
+            "checked_at": agora.isoformat(),
+        },
+        agora,
+    )
 
     return (
         f"🎯 {nome}\n"
@@ -175,8 +180,13 @@ def _done(store: ResourceStore, nome: str, agora: datetime) -> str:
     r = store.get("Goal", nome)
     if r is None:
         return f"❓ goal '{nome}' not found. See /goals"
-    updated = Resource(kind="Goal", name=nome, labels={"state": "done"},
-                       spec=r.spec, status={**r.status, "done_at": agora.isoformat()})
+    updated = Resource(
+        kind="Goal",
+        name=nome,
+        labels={"state": "done"},
+        spec=r.spec,
+        status={**r.status, "done_at": agora.isoformat()},
+    )
     store.apply(updated, agora)
     return f"✅ goal '{nome}' marked done 🎉"
 

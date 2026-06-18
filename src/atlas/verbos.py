@@ -59,10 +59,7 @@ def _cmd_list(partes: list[str], store: ResourceStore) -> str:
         todos_kinds = store.kinds()
         sugestoes = [k for k in todos_kinds if k.lower().startswith(kind.lower()[:3])]
         if sugestoes and kind not in todos_kinds:
-            return (
-                f"No {kind} objects found{filtro}.\n"
-                f"Did you mean: {', '.join(sugestoes)}?"
-            )
+            return f"No {kind} objects found{filtro}.\nDid you mean: {', '.join(sugestoes)}?"
         return f"No {kind} objects found{filtro}."
     linhas = [f"  {r.name}" + (f"  [{_status_resumo(r)}]" if r.status else "") for r in recursos]
     return f"{kind} ({len(recursos)})\n" + "\n".join(linhas)
@@ -117,7 +114,7 @@ def _cmd_describe(partes: list[str], store: ResourceStore) -> str:
         if body.startswith("---"):
             fim = body.find("\n---", 3)
             if fim != -1:
-                body = body[fim + 4:].lstrip("\n")
+                body = body[fim + 4 :].lstrip("\n")
         total = len(body)
         if total > _DOC_MAX_CHARS:
             body = body[:_DOC_MAX_CHARS]
@@ -171,9 +168,9 @@ def _cmd_apply(partes: list[str], store: ResourceStore, agora: datetime) -> str:
     spec: dict[str, str] = {}
     for k, v in kv.items():
         if k.startswith("labels."):
-            labels[k[len("labels."):]] = v
+            labels[k[len("labels.") :]] = v
         elif k.startswith("spec."):
-            spec[k[len("spec."):]] = v
+            spec[k[len("spec.") :]] = v
         else:
             spec[k] = v
 
@@ -182,8 +179,9 @@ def _cmd_apply(partes: list[str], store: ResourceStore, agora: datetime) -> str:
     if existente is not None:
         merged_labels = {**existente.labels, **labels}
         merged_spec = {**existente.spec, **spec}
-        r = Resource(kind=kind, name=name, labels=merged_labels, spec=merged_spec,
-                     status=existente.status)
+        r = Resource(
+            kind=kind, name=name, labels=merged_labels, spec=merged_spec, status=existente.status
+        )
     else:
         r = Resource(kind=kind, name=name, labels=labels, spec=spec)
     store.apply(r, agora)

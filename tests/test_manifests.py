@@ -21,7 +21,10 @@ def test_academia():
     peso = objs["peso"]
     assert peso["kind"] == "Tracker"
     assert peso["spec"] == {
-        "unit": "kg", "type": "number", "syntax": "peso:", "aggregation": "last"
+        "unit": "kg",
+        "type": "number",
+        "syntax": "peso:",
+        "aggregation": "last",
     }
     assert objs["treino"]["spec"]["type"] == "text"
     assert objs["peso-alvo"]["kind"] == "Goal"
@@ -33,7 +36,10 @@ def test_saude():
     assert set(objs) == {"agua", "sono"}
     assert all(o["labels"]["grupo"] == "saude" for o in objs.values())
     assert objs["agua"]["spec"] == {
-        "unit": "copos", "type": "count", "syntax": "agua:", "aggregation": "sum"
+        "unit": "copos",
+        "type": "count",
+        "syntax": "agua:",
+        "aggregation": "sum",
     }
     assert objs["sono"]["spec"]["aggregation"] == "mean"
 
@@ -43,6 +49,9 @@ def test_produtividade():
     assert set(objs) == {"estudo", "foco"}
     assert all(o["labels"]["grupo"] == "produtividade" for o in objs.values())
     assert objs["estudo"]["spec"] == {
-        "unit": "h", "type": "duration", "syntax": "estudo:", "aggregation": "sum"
+        "unit": "h",
+        "type": "duration",
+        "syntax": "estudo:",
+        "aggregation": "sum",
     }
     assert objs["foco"]["kind"] == "Timer"

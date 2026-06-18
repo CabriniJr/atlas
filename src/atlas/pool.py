@@ -99,8 +99,14 @@ def atualizar_prioridade(
         row = obter_ideia(db, ideia_id)
         if row:
             _store_upsert(
-                store, ideia_id, row["tipo"], row["titulo"],
-                row["corpo"], prioridade, row["estado"], agora
+                store,
+                ideia_id,
+                row["tipo"],
+                row["titulo"],
+                row["corpo"],
+                prioridade,
+                row["estado"],
+                agora,
             )
 
 
@@ -118,8 +124,7 @@ def editar_corpo(
         row = obter_ideia(db, ideia_id)
         if row:
             _store_upsert(
-                store, ideia_id, row["tipo"], titulo,
-                texto, row["prioridade"], row["estado"], agora
+                store, ideia_id, row["tipo"], titulo, texto, row["prioridade"], row["estado"], agora
             )
 
 
@@ -182,7 +187,7 @@ def responder_pool(
 
     if cmd in _CAPTURA_CMD:
         tipo = _CAPTURA_CMD[cmd]
-        corpo = texto[len(cmd):].strip()
+        corpo = texto[len(cmd) :].strip()
         if not corpo:
             return f"Usage: {cmd} <text>"
         ideia_id = capturar_ideia(db, tipo=tipo, texto=corpo, agora=agora, store=store)
@@ -241,8 +246,7 @@ def _cmd_pool(
         descartar_ideia(db, ideia_id, agora=agora, store=store)
         return f"🗑 #{ideia_id} dropped"
     return (
-        f"❓ unknown op '{op}'.\n"
-        f"   /pool {ideia_id} prio <n> | edit <text> | done | archive | drop"
+        f"❓ unknown op '{op}'.\n   /pool {ideia_id} prio <n> | edit <text> | done | archive | drop"
     )
 
 
@@ -302,16 +306,18 @@ def _listar_do_store(store: ResourceStore, db: Database) -> list[dict]:
             estado = r.status.get("state", "capturada")
             if estado in _ESTADOS_OK:
                 id_num = int(r.name.replace("idea-", "") or 0)
-                resultado.append({
-                    "id": id_num,
-                    "tipo": r.labels.get("tipo", kind.lower()),
-                    "titulo": r.spec.get("title", r.name),
-                    "corpo": r.spec.get("body", ""),
-                    "prioridade": r.spec.get("priority", 100),
-                    "estado": estado,
-                    "criado_em": r.criado_em,
-                    "rotina_alvo": None,
-                })
+                resultado.append(
+                    {
+                        "id": id_num,
+                        "tipo": r.labels.get("tipo", kind.lower()),
+                        "titulo": r.spec.get("title", r.name),
+                        "corpo": r.spec.get("body", ""),
+                        "prioridade": r.spec.get("priority", 100),
+                        "estado": estado,
+                        "criado_em": r.criado_em,
+                        "rotina_alvo": None,
+                    }
+                )
     resultado.sort(key=lambda x: (x["prioridade"], x["id"]))
     return resultado
 

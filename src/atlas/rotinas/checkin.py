@@ -22,12 +22,14 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     trackers = [r for r in store.list("Tracker") if r.spec.get("active", True)]
 
     if not trackers:
-        return CollectResult(data={
-            "_saida": (
-                "⏰ Check-in!\nNenhum tracker configurado. "
-                "Crie um com /track new <nome> [unidade]"
-            )
-        })
+        return CollectResult(
+            data={
+                "_saida": (
+                    "⏰ Check-in!\nNenhum tracker configurado. "
+                    "Crie um com /track new <nome> [unidade]"
+                )
+            }
+        )
 
     linhas = ["⏰ Check-in! Registre agora:"]
     for t in trackers:

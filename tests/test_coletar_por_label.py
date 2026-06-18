@@ -32,22 +32,34 @@ def db(tmp_path):
 @pytest.fixture
 def store_com_treino(tmp_path):
     s = ResourceStore(str(tmp_path / "t.db"))
-    s.apply(Resource(
-        kind="Tracker", name="peso",
-        labels={"grupo": "treino", "domain": "fisico"},
-        spec={"unit": "kg", "syntax": "peso:", "active": True},
-    ), _AGORA)
-    s.apply(Resource(
-        kind="Tracker", name="carga-supino",
-        labels={"grupo": "treino", "domain": "fisico"},
-        spec={"unit": "kg", "syntax": "carga-supino:", "active": True},
-    ), _AGORA)
-    s.apply(Resource(
-        kind="Goal", name="emagrecimento",
-        labels={"grupo": "treino", "state": "active"},
-        spec={"target": 80, "start": 90, "unit": "kg", "tracker": "peso", "direction": "down"},
-        status={"atual": 85.5, "progresso": "54%"},
-    ), _AGORA)
+    s.apply(
+        Resource(
+            kind="Tracker",
+            name="peso",
+            labels={"grupo": "treino", "domain": "fisico"},
+            spec={"unit": "kg", "syntax": "peso:", "active": True},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Tracker",
+            name="carga-supino",
+            labels={"grupo": "treino", "domain": "fisico"},
+            spec={"unit": "kg", "syntax": "carga-supino:", "active": True},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Goal",
+            name="emagrecimento",
+            labels={"grupo": "treino", "state": "active"},
+            spec={"target": 80, "start": 90, "unit": "kg", "tracker": "peso", "direction": "down"},
+            status={"atual": 85.5, "progresso": "54%"},
+        ),
+        _AGORA,
+    )
     return s
 
 
@@ -113,11 +125,15 @@ def test_coletar_por_label_usa_rotina_label(db, store_com_treino):
     import atlas.rotinas.coletar_por_label  # noqa: F401
 
     # Adiciona tracker de outro grupo
-    store_com_treino.apply(Resource(
-        kind="Tracker", name="livros-lidos",
-        labels={"grupo": "estudos", "domain": "leitura"},
-        spec={"unit": "", "syntax": "livros-lidos:", "active": True},
-    ), _AGORA)
+    store_com_treino.apply(
+        Resource(
+            kind="Tracker",
+            name="livros-lidos",
+            labels={"grupo": "estudos", "domain": "leitura"},
+            spec={"unit": "", "syntax": "livros-lidos:", "active": True},
+        ),
+        _AGORA,
+    )
 
     fn = obter("coletar-por-label")
     result = fn(_ctx(db, store_com_treino))
@@ -157,7 +173,7 @@ def test_routines_carrega_label_do_toml(tmp_path):
         'descricao = "Coleta de treino"\n'
         'label = "treino"\n'
         'modelo = "none"\n'
-        'ativa = true\n'
+        "ativa = true\n"
     )
     resultado = carregar_rotinas(tmp_path)
     assert len(resultado.rotinas) == 1
@@ -172,10 +188,7 @@ def test_routines_label_none_se_ausente(tmp_path):
     pasta = tmp_path / "sem-label"
     pasta.mkdir()
     (pasta / "routine.toml").write_text(
-        'nome = "sem-label"\n'
-        'descricao = "Rotina sem label"\n'
-        'modelo = "none"\n'
-        'ativa = true\n'
+        'nome = "sem-label"\ndescricao = "Rotina sem label"\nmodelo = "none"\nativa = true\n'
     )
     resultado = carregar_rotinas(tmp_path)
     assert len(resultado.rotinas) == 1

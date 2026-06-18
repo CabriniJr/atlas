@@ -91,6 +91,7 @@ def test_apply_label_nao_sobrescreve_spec(store):
 
 def test_store_list_com_selector(tmp_path):
     from atlas.core.store import ResourceStore
+
     s = ResourceStore(str(tmp_path / "s.db"))
     s.apply(Resource(kind="Tracker", name="a", labels={"t": "x"}), _AGORA)
     s.apply(Resource(kind="Tracker", name="b", labels={"t": "y"}), _AGORA)

@@ -29,53 +29,53 @@ from __future__ import annotations
 
 _VERB_ALIASES: dict[str, str] = {
     # get
-    "/r":    "/get",
+    "/r": "/get",
     "/read": "/get",
     # list
-    "/ls":   "/list",
-    "/l":    "/list",
+    "/ls": "/list",
+    "/l": "/list",
     # describe
-    "/cat":  "/describe",
-    "/d":    "/describe",
+    "/cat": "/describe",
+    "/d": "/describe",
     # apply
-    "/a":    "/apply",
+    "/a": "/apply",
     # delete
-    "/rm":   "/delete",
-    "/del":  "/delete",
+    "/rm": "/delete",
+    "/del": "/delete",
 }
 
 _KIND_ALIASES: dict[str, str] = {
-    "tracker":        "Tracker",
-    "trackers":       "Tracker",
-    "track":          "Tracker",
-    "t":              "Tracker",
-    "alarm":          "Alarm",
-    "alarms":         "Alarm",
-    "al":             "Alarm",
-    "timer":          "Timer",
-    "timers":         "Timer",
-    "goal":           "Goal",
-    "goals":          "Goal",
-    "g":              "Goal",
-    "idea":           "Idea",
-    "ideas":          "Idea",
-    "task":           "Task",
-    "tasks":          "Task",
-    "routine":        "Routine",
-    "routines":       "Routine",
-    "rot":            "Routine",
-    "doc":            "Doc",
-    "docs":           "Doc",
-    "rr":             "RoutineRequest",
+    "tracker": "Tracker",
+    "trackers": "Tracker",
+    "track": "Tracker",
+    "t": "Tracker",
+    "alarm": "Alarm",
+    "alarms": "Alarm",
+    "al": "Alarm",
+    "timer": "Timer",
+    "timers": "Timer",
+    "goal": "Goal",
+    "goals": "Goal",
+    "g": "Goal",
+    "idea": "Idea",
+    "ideas": "Idea",
+    "task": "Task",
+    "tasks": "Task",
+    "routine": "Routine",
+    "routines": "Routine",
+    "rot": "Routine",
+    "doc": "Doc",
+    "docs": "Doc",
+    "rr": "RoutineRequest",
     "routinerequest": "RoutineRequest",
-    "checkin":        "CheckIn",
-    "repo":           "Repo",
-    "repos":          "Repo",
-    "diff":           "Diff",
-    "diffs":          "Diff",
-    "prompt":         "Prompt",
-    "prompts":        "Prompt",
-    "ia":             "Prompt",
+    "checkin": "CheckIn",
+    "repo": "Repo",
+    "repos": "Repo",
+    "diff": "Diff",
+    "diffs": "Diff",
+    "prompt": "Prompt",
+    "prompts": "Prompt",
+    "ia": "Prompt",
 }
 
 _SNIPS: dict[str, str] = {
@@ -166,12 +166,12 @@ _SNIPS: dict[str, str] = {
         "  /apply Repo <nome> spec.url=https://github.com/user/repo\n"
         "  /apply Repo nora spec.url=https://github.com/sys0xFF/nora\n\n"
         "Routine TOML para monitorar:\n"
-        "  nome     = \"<nome>-sync\"\n"
-        "  label    = \"<nome>\"          # = nome do Repo Resource\n"
-        "  coletar  = \"repo-sync\"\n"
-        "  agenda   = \"0 9 * * *\"\n"
-        "  modelo   = \"none\"\n"
-        "  saida    = \"telegram\"\n"
+        '  nome     = "<nome>-sync"\n'
+        '  label    = "<nome>"          # = nome do Repo Resource\n'
+        '  coletar  = "repo-sync"\n'
+        '  agenda   = "0 9 * * *"\n'
+        '  modelo   = "none"\n'
+        '  saida    = "telegram"\n'
         "  ativa    = false\n\n"
         "Inspecionar:\n"
         "  /list Repo\n"

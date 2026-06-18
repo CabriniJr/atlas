@@ -25,10 +25,24 @@ def db(tmp_path):
 @pytest.fixture
 def store(tmp_path):
     s = ResourceStore(str(tmp_path / "test.db"))
-    s.apply(Resource(kind="Tracker", name="peso", labels={"active": "true"},
-                     spec={"unit": "kg", "syntax": "peso:", "active": True}), _AGORA)
-    s.apply(Resource(kind="Tracker", name="sono", labels={"active": "true"},
-                     spec={"unit": "h", "syntax": "sono:", "active": True}), _AGORA)
+    s.apply(
+        Resource(
+            kind="Tracker",
+            name="peso",
+            labels={"active": "true"},
+            spec={"unit": "kg", "syntax": "peso:", "active": True},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Tracker",
+            name="sono",
+            labels={"active": "true"},
+            spec={"unit": "h", "syntax": "sono:", "active": True},
+        ),
+        _AGORA,
+    )
     return s
 
 
@@ -40,12 +54,14 @@ def _ctx(db, store):
 
 def test_checkin_registrado(db):
     import atlas.rotinas.checkin  # noqa: F401
+
     fn = obter("checkin")
     assert fn is not None
 
 
 def test_checkin_pergunta_trackers(db, store):
     import atlas.rotinas.checkin  # noqa: F401
+
     fn = obter("checkin")
     result = fn(_ctx(db, store))
     saida = result.data["_saida"]
@@ -54,6 +70,7 @@ def test_checkin_pergunta_trackers(db, store):
 
 def test_checkin_sem_trackers_mostra_mensagem(db):
     import atlas.rotinas.checkin  # noqa: F401
+
     fn = obter("checkin")
     ctx = ContextoExecucao(agora=_AGORA, rotina=_ROTINA, origem="agenda", db=db)
     ctx.store = ResourceStore(":memory:")
@@ -64,6 +81,7 @@ def test_checkin_sem_trackers_mostra_mensagem(db):
 
 def test_checkin_inclui_instrucoes_de_registro(db, store):
     import atlas.rotinas.checkin  # noqa: F401
+
     fn = obter("checkin")
     result = fn(_ctx(db, store))
     saida = result.data["_saida"]

@@ -39,24 +39,24 @@ _DOCS_ROOT = Path(os.environ.get("ATLAS_DOCS_DIR", "docs"))
 
 # Alias de conveniência slug → nome no store
 _ALIASES: dict[str, str] = {
-    "kinds":         "kinds",
-    "arch":          "arch",
-    "arquitetura":   "arch",
-    "constituicao":  "constituicao",
-    "backlog":       "backlog",
-    "amadurecimento":"amadurecimento",
-    "planejamento":  "planejamento",
+    "kinds": "kinds",
+    "arch": "arch",
+    "arquitetura": "arch",
+    "constituicao": "constituicao",
+    "backlog": "backlog",
+    "amadurecimento": "amadurecimento",
+    "planejamento": "planejamento",
 }
 
 _SPEC_ALIASES: dict[str, str] = {
-    "trackers":  "spec-trackers",
-    "alarmes":   "spec-alarmes",
-    "pool":      "spec-pool",
+    "trackers": "spec-trackers",
+    "alarmes": "spec-alarmes",
+    "pool": "spec-pool",
     "scheduler": "spec-scheduler",
-    "executor":  "spec-executor",
+    "executor": "spec-executor",
     "interface": "spec-interface",
-    "barreira":  "spec-barreira",
-    "core-api":  "spec-core-api",
+    "barreira": "spec-barreira",
+    "core-api": "spec-core-api",
     "meta-loop": "spec-meta-loop",
 }
 
@@ -175,7 +175,7 @@ def _listar_por_label(store: ResourceStore | None, seletor: dict[str, str]) -> s
     docs = store.list("Doc", labels=seletor)
     if not docs:
         return f"Nenhum Doc com labels {seletor}."
-    linhas = [f"📚 Doc -l {','.join(f'{k}={v}' for k,v in seletor.items())} ({len(docs)})"]
+    linhas = [f"📚 Doc -l {','.join(f'{k}={v}' for k, v in seletor.items())} ({len(docs)})"]
     for d in docs:
         chars = d.status.get("chars", "?")
         linhas.append(f"  {d.name:<30} {chars} chars  → /docs {d.name}")
@@ -200,7 +200,7 @@ def _formatar_doc(r: Resource) -> str:
     if body.startswith("---"):
         fim = body.find("\n---", 3)
         if fim != -1:
-            body = body[fim + 4:].lstrip("\n")
+            body = body[fim + 4 :].lstrip("\n")
 
     chars_total = len(body)
     if chars_total > _MAX_CHARS:
@@ -252,23 +252,23 @@ def _listar_adrs(store: ResourceStore | None) -> str:
 # ---------------------------------------------------------------------------
 
 _SLUG_TO_PATH: dict[str, str] = {
-    "kinds":          "arquitetura/kinds.md",
-    "arch":           "arquitetura/visao-geral.md",
-    "constituicao":   "arquitetura/constituicao.md",
-    "modelo-dados":   "arquitetura/modelo-de-dados.md",
-    "seguranca":      "arquitetura/seguranca.md",
-    "ciclo":          "arquitetura/ciclo-de-vida-rotina.md",
-    "backlog":        "roadmap/backlog.md",
+    "kinds": "arquitetura/kinds.md",
+    "arch": "arquitetura/visao-geral.md",
+    "constituicao": "arquitetura/constituicao.md",
+    "modelo-dados": "arquitetura/modelo-de-dados.md",
+    "seguranca": "arquitetura/seguranca.md",
+    "ciclo": "arquitetura/ciclo-de-vida-rotina.md",
+    "backlog": "roadmap/backlog.md",
     "amadurecimento": "roadmap/amadurecimento.md",
-    "planejamento":   "roadmap/planejamento.md",
-    "spec-trackers":  "specs/trackers-via-chat.md",
-    "spec-alarmes":   "specs/alarmes.md",
-    "spec-pool":      "specs/pool-de-ideias.md",
+    "planejamento": "roadmap/planejamento.md",
+    "spec-trackers": "specs/trackers-via-chat.md",
+    "spec-alarmes": "specs/alarmes.md",
+    "spec-pool": "specs/pool-de-ideias.md",
     "spec-scheduler": "specs/scheduler.md",
-    "spec-executor":  "specs/executor-e-notificacao.md",
+    "spec-executor": "specs/executor-e-notificacao.md",
     "spec-interface": "specs/interface-config-chat.md",
-    "spec-barreira":  "specs/barreira-entrada.md",
-    "spec-core-api":  "specs/core-api-objetos.md",
+    "spec-barreira": "specs/barreira-entrada.md",
+    "spec-core-api": "specs/core-api-objetos.md",
     "spec-meta-loop": "specs/meta-loop-chat.md",
 }
 
@@ -291,7 +291,7 @@ def _fallback_filesystem(rel_path: str, label: str) -> str:
     if body.startswith("---"):
         fim = body.find("\n---", 3)
         if fim != -1:
-            body = body[fim + 4:].lstrip("\n")
+            body = body[fim + 4 :].lstrip("\n")
     if len(body) > _MAX_CHARS:
         body = body[:_MAX_CHARS]
         nl = body.rfind("\n")

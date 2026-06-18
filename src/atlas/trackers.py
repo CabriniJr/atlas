@@ -179,7 +179,7 @@ def registrar_por_sintaxe(
         for r in trackers:
             sintaxe = r.spec.get("syntax", f"{r.name}:").lower()
             if low.startswith(sintaxe):
-                bruto = texto[len(r.spec.get("syntax", f"{r.name}:")):].strip()
+                bruto = texto[len(r.spec.get("syntax", f"{r.name}:")) :].strip()
                 return _registrar_resource(db, r, bruto, texto, agora)
         return None
 
@@ -191,14 +191,12 @@ def registrar_por_sintaxe(
     for t in rows:
         sintaxe = t["sintaxe"].lower()
         if low.startswith(sintaxe):
-            bruto = texto[len(t["sintaxe"]):].strip()
+            bruto = texto[len(t["sintaxe"]) :].strip()
             return _registrar(db, t, bruto, texto, agora)
     return None
 
 
-def _registrar_resource(
-    db: Database, r: Resource, bruto: str, texto: str, agora: datetime
-) -> str:
+def _registrar_resource(db: Database, r: Resource, bruto: str, texto: str, agora: datetime) -> str:
     valor: object = bruto
     if r.spec.get("type") == "number":
         try:

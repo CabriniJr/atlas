@@ -49,9 +49,15 @@ def test_goal_set_sem_nome_mostra_usage(db, store):
 
 
 def test_goals_lista(db, store):
-    store.apply(Resource(kind="Goal", name="peso",
-                         spec={"target": "80", "unit": "kg", "tracker": "peso"},
-                         status={"current": "85", "progress": "62%"}), _AGORA)
+    store.apply(
+        Resource(
+            kind="Goal",
+            name="peso",
+            spec={"target": "80", "unit": "kg", "tracker": "peso"},
+            status={"current": "85", "progress": "62%"},
+        ),
+        _AGORA,
+    )
     resp = responder("/goals", db, _AGORA, store=store)
     assert "peso" in resp.lower()
 
@@ -67,10 +73,15 @@ def test_goal_list_vazio(db, store):
 
 
 def test_goal_status_mostra_progresso(db, store):
-    store.apply(Resource(kind="Goal", name="peso",
-                         spec={"target": "80", "unit": "kg", "tracker": "peso",
-                               "direction": "down"},
-                         status={"current": "85", "progress": "62%"}), _AGORA)
+    store.apply(
+        Resource(
+            kind="Goal",
+            name="peso",
+            spec={"target": "80", "unit": "kg", "tracker": "peso", "direction": "down"},
+            status={"current": "85", "progress": "62%"},
+        ),
+        _AGORA,
+    )
     resp = responder("/goal status peso", db, _AGORA, store=store)
     assert "peso" in resp.lower()
     assert "80" in resp or "85" in resp
@@ -88,12 +99,28 @@ def test_goal_status_nao_encontrado(db, store):
 
 def test_goal_check_atualiza_status(db, store):
     # tracker com último valor
-    db.insert("activities", ts=_AGORA.isoformat(), dominio="fisico",
-               rotina="tracking", texto_cru="peso: 83",
-               dados_json={"tracker": "peso", "valor": 83, "unidade": "kg"})
-    store.apply(Resource(kind="Goal", name="peso",
-                         spec={"target": "80", "unit": "kg", "tracker": "peso",
-                               "start": "90", "direction": "down"}), _AGORA)
+    db.insert(
+        "activities",
+        ts=_AGORA.isoformat(),
+        dominio="fisico",
+        rotina="tracking",
+        texto_cru="peso: 83",
+        dados_json={"tracker": "peso", "valor": 83, "unidade": "kg"},
+    )
+    store.apply(
+        Resource(
+            kind="Goal",
+            name="peso",
+            spec={
+                "target": "80",
+                "unit": "kg",
+                "tracker": "peso",
+                "start": "90",
+                "direction": "down",
+            },
+        ),
+        _AGORA,
+    )
     resp = responder("/goal check peso", db, _AGORA, store=store)
     assert "83" in resp or "%" in resp
     r = store.get("Goal", "peso")

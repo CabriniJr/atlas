@@ -102,9 +102,9 @@ def test_cron_lista_de_dias():
 
 
 def test_cron_invalido_retorna_none():
-    assert proxima_execucao("0 9 * *", None, _AGORA) is None       # 4 campos
-    assert proxima_execucao("99 9 * * *", None, _AGORA) is None     # minuto inválido
-    assert proxima_execucao("0 25 * * *", None, _AGORA) is None     # hora inválida
+    assert proxima_execucao("0 9 * *", None, _AGORA) is None  # 4 campos
+    assert proxima_execucao("99 9 * * *", None, _AGORA) is None  # minuto inválido
+    assert proxima_execucao("0 25 * * *", None, _AGORA) is None  # hora inválida
 
 
 def test_tick_dispara_rotina_cron(monkeypatch):

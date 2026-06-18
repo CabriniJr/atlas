@@ -44,8 +44,8 @@ _log = logging.getLogger(__name__)
 
 _MODELO_PADRAO = "claude-haiku-4-5-20251001"
 _TIMEOUT_PADRAO = 90
-_MAX_OUTPUT_STORE = 2000   # chars do output gravados no status
-_MAX_CONTEXTO = 6000       # chars de {dados} enviados à IA
+_MAX_OUTPUT_STORE = 2000  # chars do output gravados no status
+_MAX_CONTEXTO = 6000  # chars de {dados} enviados à IA
 
 
 @registrar("prompt")
@@ -58,17 +58,21 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
 
     p = store.get("Prompt", label)
     if p is None:
-        return CollectResult(data={"_saida": (
-            f"❓ prompt/{label}: Prompt não configurado.\n"
-            f"Crie com: /apply Prompt {label} "
-            'spec.template="Analise: {dados}" spec.fonte=grupo:saude'
-        )})
+        return CollectResult(
+            data={
+                "_saida": (
+                    f"❓ prompt/{label}: Prompt não configurado.\n"
+                    f"Crie com: /apply Prompt {label} "
+                    'spec.template="Analise: {dados}" spec.fonte=grupo:saude'
+                )
+            }
+        )
 
     template = (p.spec.get("template") or "").strip()
     if not template:
-        return CollectResult(data={
-            "_saida": f"❓ prompt/{label}: spec.template ausente no Prompt/{label}."
-        })
+        return CollectResult(
+            data={"_saida": f"❓ prompt/{label}: spec.template ausente no Prompt/{label}."}
+        )
 
     modelo = p.spec.get("model") or _MODELO_PADRAO
     try:
@@ -77,10 +81,8 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         timeout = _TIMEOUT_PADRAO
 
     dados = _montar_contexto(p.spec.get("fonte", "") or "", store)[:_MAX_CONTEXTO]
-    prompt_final = (
-        template
-        .replace("{dados}", dados)
-        .replace("{agora}", ctx.agora.strftime("%d/%m/%Y %H:%M"))
+    prompt_final = template.replace("{dados}", dados).replace(
+        "{agora}", ctx.agora.strftime("%d/%m/%Y %H:%M")
     )
 
     try:
@@ -139,14 +141,19 @@ def _montar_contexto(fonte: str, store: ResourceStore) -> str:
     return f"(fonte desconhecida: {fonte})"
 
 
-def _persistir(p: Resource, resposta: str, ok: bool,
-               store: ResourceStore, ctx: ContextoExecucao) -> None:
+def _persistir(
+    p: Resource, resposta: str, ok: bool, store: ResourceStore, ctx: ContextoExecucao
+) -> None:
     updated = Resource(
-        kind="Prompt", name=p.name,
-        labels=p.labels, spec=p.spec,
-        status={**(p.status or {}),
-                "last_run": ctx.agora.isoformat(),
-                "last_ok": ok,
-                "last_output": resposta[:_MAX_OUTPUT_STORE]},
+        kind="Prompt",
+        name=p.name,
+        labels=p.labels,
+        spec=p.spec,
+        status={
+            **(p.status or {}),
+            "last_run": ctx.agora.isoformat(),
+            "last_ok": ok,
+            "last_output": resposta[:_MAX_OUTPUT_STORE],
+        },
     )
     store.apply(updated, ctx.agora)

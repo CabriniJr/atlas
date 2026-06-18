@@ -35,8 +35,8 @@ from atlas.rotinas import registrar
 _log = logging.getLogger(__name__)
 
 _HAIKU = "claude-haiku-4-5-20251001"
-_MAX_DIFF_PROMPT = 5000   # chars enviados ao Haiku
-_MAX_DIFF_STORE  = 8000   # chars gravados no Diff Resource
+_MAX_DIFF_PROMPT = 5000  # chars enviados ao Haiku
+_MAX_DIFF_STORE = 8000  # chars gravados no Diff Resource
 
 
 def _data_dir() -> Path:
@@ -47,7 +47,8 @@ def _data_dir() -> Path:
 def _git(args: list[str], cwd: Path | None = None) -> str:
     proc = subprocess.run(
         ["git", *args],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
         cwd=str(cwd) if cwd else None,
         timeout=120,
     )
@@ -57,6 +58,7 @@ def _git(args: list[str], cwd: Path | None = None) -> str:
 
 
 # ── extração de metadados ──────────────────────────────────────────────────────
+
 
 def _parse_diff_stat(diff: str) -> dict:
     """Extrai arquivos/insercoes/delecoes do summary do ``git diff --stat``."""
@@ -87,8 +89,11 @@ def _commit_meta(repo_dir: Path, sha: str) -> dict:
         return p[i].strip() if len(p) > i else ""
 
     return {
-        "subject": g(0), "author": g(1), "author_email": g(2),
-        "date": g(3), "date_rel": g(4),
+        "subject": g(0),
+        "author": g(1),
+        "author_email": g(2),
+        "date": g(3),
+        "date_rel": g(4),
     }
 
 
@@ -102,18 +107,20 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
 
     repo_res = store.get("Repo", label)
     if repo_res is None:
-        return CollectResult(data={
-            "_saida": (
-                f"❓ repo-sync/{label}: Repo não configurado.\n"
-                f"Crie com: /apply Repo {label} spec.url=https://github.com/..."
-            )
-        })
+        return CollectResult(
+            data={
+                "_saida": (
+                    f"❓ repo-sync/{label}: Repo não configurado.\n"
+                    f"Crie com: /apply Repo {label} spec.url=https://github.com/..."
+                )
+            }
+        )
 
     url = repo_res.spec.get("url", "").strip()
     if not url:
-        return CollectResult(data={
-            "_saida": f"❓ repo-sync/{label}: spec.url ausente no Repo/{label}."
-        })
+        return CollectResult(
+            data={"_saida": f"❓ repo-sync/{label}: spec.url ausente no Repo/{label}."}
+        )
 
     repo_dir = _data_dir() / "repos" / label
     try:
@@ -127,20 +134,24 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
 
 # ── clone inicial ─────────────────────────────────────────────────────────────
 
-def _clonar(url: str, repo_dir: Path, label: str,
-            store: ResourceStore, ctx: ContextoExecucao) -> CollectResult:
+
+def _clonar(
+    url: str, repo_dir: Path, label: str, store: ResourceStore, ctx: ContextoExecucao
+) -> CollectResult:
     repo_dir.parent.mkdir(parents=True, exist_ok=True)
     _git(["clone", "--depth=100", url, str(repo_dir)])
     sha = _git(["rev-parse", "HEAD"], cwd=repo_dir).strip()
     meta = _commit_meta(repo_dir, sha)
     _atualizar_repo_status(label, sha[:7], meta, _STAT_ZERO, store, ctx)
     desc = f" — {meta['subject']}" if meta["subject"] else ""
-    return CollectResult(data={
-        "_saida": (
-            f"📦 {label} · repositório clonado (commit {sha[:7]}){desc}.\n"
-            "Próximas execuções reportarão as mudanças."
-        )
-    })
+    return CollectResult(
+        data={
+            "_saida": (
+                f"📦 {label} · repositório clonado (commit {sha[:7]}){desc}.\n"
+                "Próximas execuções reportarão as mudanças."
+            )
+        }
+    )
 
 
 # ── pull + diff ───────────────────────────────────────────────────────────────
@@ -148,8 +159,9 @@ def _clonar(url: str, repo_dir: Path, label: str,
 _STAT_ZERO = {"files": 0, "insertions": 0, "deletions": 0, "files_list": []}
 
 
-def _sincronizar(url: str, repo_dir: Path, label: str,
-                 store: ResourceStore, ctx: ContextoExecucao) -> CollectResult:
+def _sincronizar(
+    url: str, repo_dir: Path, label: str, store: ResourceStore, ctx: ContextoExecucao
+) -> CollectResult:
     old_sha = _git(["rev-parse", "HEAD"], cwd=repo_dir).strip()
     _git(["fetch", "--depth=100", "origin"], cwd=repo_dir)
     diff = _git(["diff", "HEAD..origin/HEAD", "--stat", "-p"], cwd=repo_dir)
@@ -157,9 +169,7 @@ def _sincronizar(url: str, repo_dir: Path, label: str,
     if not diff.strip():
         meta = _commit_meta(repo_dir, old_sha)
         _marcar_check(label, old_sha[:7], meta, store, ctx)
-        return CollectResult(data={
-            "_saida": f"✅ {label} · sem mudanças (HEAD {old_sha[:7]})."
-        })
+        return CollectResult(data={"_saida": f"✅ {label} · sem mudanças (HEAD {old_sha[:7]})."})
 
     _git(["merge", "--ff-only", "origin/HEAD"], cwd=repo_dir)
     sha = _git(["rev-parse", "HEAD"], cwd=repo_dir).strip()
@@ -170,10 +180,18 @@ def _sincronizar(url: str, repo_dir: Path, label: str,
 
 # ── persistência e notificação ────────────────────────────────────────────────
 
-def _reportar(diff: str, sha: str, meta: dict, stat: dict, label: str,
-              store: ResourceStore, ctx: ContextoExecucao) -> CollectResult:
+
+def _reportar(
+    diff: str,
+    sha: str,
+    meta: dict,
+    stat: dict,
+    label: str,
+    store: ResourceStore,
+    ctx: ContextoExecucao,
+) -> CollectResult:
     sha7 = sha[:7]
-    diff_store  = diff[:_MAX_DIFF_STORE]
+    diff_store = diff[:_MAX_DIFF_STORE]
     diff_prompt = diff[:_MAX_DIFF_PROMPT]
 
     repo_res = store.get("Repo", label)
@@ -208,9 +226,16 @@ def _reportar(diff: str, sha: str, meta: dict, stat: dict, label: str,
     return CollectResult(data={"_saida": "\n".join(linhas)})
 
 
-def _salvar_diff(label: str, sha7: str, diff_raw: str, explicacao: str | None,
-                 meta: dict, stat: dict,
-                 store: ResourceStore, ctx: ContextoExecucao) -> None:
+def _salvar_diff(
+    label: str,
+    sha7: str,
+    diff_raw: str,
+    explicacao: str | None,
+    meta: dict,
+    stat: dict,
+    store: ResourceStore,
+    ctx: ContextoExecucao,
+) -> None:
     name = f"{label}-{sha7}"
     res = Resource(
         kind="Diff",
@@ -233,37 +258,41 @@ def _salvar_diff(label: str, sha7: str, diff_raw: str, explicacao: str | None,
     store.apply(res, ctx.agora)
 
 
-def _atualizar_repo_status(label: str, sha7: str, meta: dict, stat: dict,
-                            store: ResourceStore, ctx: ContextoExecucao) -> None:
+def _atualizar_repo_status(
+    label: str, sha7: str, meta: dict, stat: dict, store: ResourceStore, ctx: ContextoExecucao
+) -> None:
     repo_res = store.get("Repo", label)
     if repo_res is None:
         return
     resumo = meta["subject"] or "(sem mensagem)"
     autor = f" · {meta['author']}" if meta["author"] else ""
     updated = Resource(
-        kind="Repo", name=label,
+        kind="Repo",
+        name=label,
         labels=repo_res.labels,
         spec=repo_res.spec,
-        status={**repo_res.status,
-                "last_commit": sha7,
-                "last_commit_msg": meta["subject"],
-                "last_author": meta["author"],
-                "last_commit_date": meta["date"],
-                "last_sync": ctx.agora.isoformat(),
-                "last_check": ctx.agora.isoformat(),
-                "files_changed": stat["files"],
-                "insertions": stat["insertions"],
-                "deletions": stat["deletions"],
-                "last_summary": (
-                    f"{resumo} · {stat['files']} arq "
-                    f"+{stat['insertions']}/-{stat['deletions']}{autor}"
-                )},
+        status={
+            **repo_res.status,
+            "last_commit": sha7,
+            "last_commit_msg": meta["subject"],
+            "last_author": meta["author"],
+            "last_commit_date": meta["date"],
+            "last_sync": ctx.agora.isoformat(),
+            "last_check": ctx.agora.isoformat(),
+            "files_changed": stat["files"],
+            "insertions": stat["insertions"],
+            "deletions": stat["deletions"],
+            "last_summary": (
+                f"{resumo} · {stat['files']} arq +{stat['insertions']}/-{stat['deletions']}{autor}"
+            ),
+        },
     )
     store.apply(updated, ctx.agora)
 
 
-def _marcar_check(label: str, sha7: str, meta: dict,
-                  store: ResourceStore, ctx: ContextoExecucao) -> None:
+def _marcar_check(
+    label: str, sha7: str, meta: dict, store: ResourceStore, ctx: ContextoExecucao
+) -> None:
     """Sem mudanças: registra a verificação e mantém os metadados do HEAD atual."""
     repo_res = store.get("Repo", label)
     if repo_res is None:
@@ -280,7 +309,8 @@ def _marcar_check(label: str, sha7: str, meta: dict,
     if meta.get("date"):
         novo["last_commit_date"] = meta["date"]
     updated = Resource(
-        kind="Repo", name=label,
+        kind="Repo",
+        name=label,
         labels=repo_res.labels,
         spec=repo_res.spec,
         status={**repo_res.status, **novo},
@@ -307,32 +337,41 @@ def _analisar(diff: str, label: str, modelo: str) -> str | None:
         return f"_(IA indisponível: {exc})_"
 
 
-def _salvar_doc(label: str, sha7: str, meta: dict, stat: dict,
-                diff_excerpt: str, analise: str | None,
-                store: ResourceStore, ctx: ContextoExecucao) -> None:
+def _salvar_doc(
+    label: str,
+    sha7: str,
+    meta: dict,
+    stat: dict,
+    diff_excerpt: str,
+    analise: str | None,
+    store: ResourceStore,
+    ctx: ContextoExecucao,
+) -> None:
     """Arquiva a atualização como Doc (histórico represado), rotulado p/ hierarquia."""
     titulo = meta.get("subject") or sha7
     arquivos = ", ".join(stat.get("files_list", [])[:15]) or "—"
-    body = "\n".join([
-        f"# {label} · {titulo}",
-        "",
-        f"- **commit:** `{sha7}`",
-        f"- **autor:** {meta.get('author') or '—'}",
-        f"- **data:** {meta.get('date') or '—'}",
-        f"- **arquivos:** {stat.get('files', 0)} "
-        f"(+{stat.get('insertions', 0)}/-{stat.get('deletions', 0)})",
-        f"- **lista:** {arquivos}",
-        "",
-        "## Análise + sugestões (IA)",
-        "",
-        analise or "_(sem análise)_",
-        "",
-        "## Diff",
-        "",
-        "```diff",
-        diff_excerpt,
-        "```",
-    ])
+    body = "\n".join(
+        [
+            f"# {label} · {titulo}",
+            "",
+            f"- **commit:** `{sha7}`",
+            f"- **autor:** {meta.get('author') or '—'}",
+            f"- **data:** {meta.get('date') or '—'}",
+            f"- **arquivos:** {stat.get('files', 0)} "
+            f"(+{stat.get('insertions', 0)}/-{stat.get('deletions', 0)})",
+            f"- **lista:** {arquivos}",
+            "",
+            "## Análise + sugestões (IA)",
+            "",
+            analise or "_(sem análise)_",
+            "",
+            "## Diff",
+            "",
+            "```diff",
+            diff_excerpt,
+            "```",
+        ]
+    )
     res = Resource(
         kind="Doc",
         name=f"repo-{label}-{sha7}",

@@ -43,7 +43,7 @@ class Rotina:
     store: str | None = None
     saida: str | None = None
     ativa: bool = True
-    label: str | None = None   # grupo de recursos para coletar-por-label
+    label: str | None = None  # grupo de recursos para coletar-por-label
     coletar: str | None = None  # nome do collect no registry; default = nome da rotina
 
     # Presença de arquivos opcionais na pasta

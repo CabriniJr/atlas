@@ -27,26 +27,31 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     store: ResourceStore | None = getattr(ctx, "store", None)
 
     if store is None:
-        return CollectResult(data={
-            "_saida": f"⏰ {rotina.nome} · store não disponível."
-        })
+        return CollectResult(data={"_saida": f"⏰ {rotina.nome} · store não disponível."})
 
     seletor = {"grupo": label}
     trackers = [r for r in store.list("Tracker", labels=seletor) if r.spec.get("active", True)]
     goals = store.list("Goal", labels=seletor)
 
     if not trackers and not goals:
-        return CollectResult(data={
-            "_saida": (
-                f"⏰ {label.capitalize()} · nenhum recurso configurado com grupo={label}.\n"
-                f"Adicione com: /apply Tracker <nome> labels.grupo={label}"
-            )
-        })
+        return CollectResult(
+            data={
+                "_saida": (
+                    f"⏰ {label.capitalize()} · nenhum recurso configurado com grupo={label}.\n"
+                    f"Adicione com: /apply Tracker <nome> labels.grupo={label}"
+                )
+            }
+        )
 
     dia_semana = ctx.agora.strftime("%A").lower()
     _DIAS = {
-        "monday": "segunda", "tuesday": "terça", "wednesday": "quarta",
-        "thursday": "quinta", "friday": "sexta", "saturday": "sábado", "sunday": "domingo",
+        "monday": "segunda",
+        "tuesday": "terça",
+        "wednesday": "quarta",
+        "thursday": "quinta",
+        "friday": "sexta",
+        "saturday": "sábado",
+        "sunday": "domingo",
     }
     dia_pt = _DIAS.get(dia_semana, dia_semana)
     linhas = [f"⏰ {label.capitalize()} — {dia_pt}"]

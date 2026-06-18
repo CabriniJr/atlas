@@ -22,13 +22,15 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     metas_ativas = [r for r in store.list("Goal") if r.labels.get("state") != "done"]
 
     if not metas_ativas:
-        return CollectResult(data={
-            "_saida": (
-                "🎯 Checkup semanal\n"
-                "Nenhuma meta ativa. Crie uma com:\n"
-                "  /goal set <nome> target=<val> unit=<u> [tracker=<t>]"
-            )
-        })
+        return CollectResult(
+            data={
+                "_saida": (
+                    "🎯 Checkup semanal\n"
+                    "Nenhuma meta ativa. Crie uma com:\n"
+                    "  /goal set <nome> target=<val> unit=<u> [tracker=<t>]"
+                )
+            }
+        )
 
     linhas = ["🎯 Checkup semanal de metas", ""]
     algum_atualizado = False
@@ -55,16 +57,22 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
                 current = float(row["v"])
                 current_str = str(current)
                 progress_str = _progresso(
-                    current, float(target),
+                    current,
+                    float(target),
                     meta.spec.get("start"),
                     meta.spec.get("direction", "down"),
                 )
-                store.set_status("Goal", nome, {
-                    **meta.status,
-                    "current": current_str,
-                    "progress": progress_str,
-                    "checked_at": ctx.agora.isoformat(),
-                }, ctx.agora)
+                store.set_status(
+                    "Goal",
+                    nome,
+                    {
+                        **meta.status,
+                        "current": current_str,
+                        "progress": progress_str,
+                        "checked_at": ctx.agora.isoformat(),
+                    },
+                    ctx.agora,
+                )
                 algum_atualizado = True
 
         barra = _barra(progress_str)

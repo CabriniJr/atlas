@@ -16,8 +16,9 @@ from atlas.rotinas import obter
 from atlas.routines import Rotina
 
 _AGORA = datetime(2026, 6, 17, 9, 0)
-_ROTINA = Rotina(nome="nora-sync", descricao="Monitor nora", label="nora",
-                 coletar="repo-sync", modelo="none")
+_ROTINA = Rotina(
+    nome="nora-sync", descricao="Monitor nora", label="nora", coletar="repo-sync", modelo="none"
+)
 
 
 @pytest.fixture
@@ -28,12 +29,16 @@ def db(tmp_path):
 @pytest.fixture
 def store(tmp_path):
     s = ResourceStore(str(tmp_path / "t.db"))
-    s.apply(Resource(
-        kind="Repo", name="nora",
-        labels={"grupo": "repos"},
-        spec={"url": "https://github.com/sys0xFF/nora", "branch": "HEAD"},
-        status={},
-    ), _AGORA)
+    s.apply(
+        Resource(
+            kind="Repo",
+            name="nora",
+            labels={"grupo": "repos"},
+            spec={"url": "https://github.com/sys0xFF/nora", "branch": "HEAD"},
+            status={},
+        ),
+        _AGORA,
+    )
     return s
 
 
@@ -53,16 +58,20 @@ def _mk(stdout="", rc=0, stderr=""):
 
 # ── registro ──────────────────────────────────────────────────────────────────
 
+
 def test_repo_sync_registrado(db):
     import atlas.rotinas.repo_sync  # noqa: F401
+
     assert obter("repo-sync") is not None
 
 
 # ── sem Repo configurado ──────────────────────────────────────────────────────
 
+
 def test_repo_sync_sem_repo_resource(db, store_sem_repo, tmp_path, monkeypatch):
     """Sem Repo/<label> no store, retorna instrução de setup."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     fn = obter("repo-sync")
@@ -75,6 +84,7 @@ def test_repo_sync_sem_repo_resource(db, store_sem_repo, tmp_path, monkeypatch):
 def test_repo_sync_sem_store_retorna_aviso(db):
     """Sem store injetado, não levanta exceção."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     ctx = ContextoExecucao(agora=_AGORA, rotina=_ROTINA, origem="agenda", db=db)
     fn = obter("repo-sync")
     result = fn(ctx)
@@ -83,9 +93,11 @@ def test_repo_sync_sem_store_retorna_aviso(db):
 
 # ── clone inicial ─────────────────────────────────────────────────────────────
 
+
 def test_repo_sync_clona_primeira_vez(db, store, tmp_path, monkeypatch):
     """Se repo local não existe, clona e retorna mensagem."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     chamadas = []
 
@@ -103,9 +115,11 @@ def test_repo_sync_clona_primeira_vez(db, store, tmp_path, monkeypatch):
 
 # ── sem mudanças ──────────────────────────────────────────────────────────────
 
+
 def test_repo_sync_sem_mudancas(db, store, tmp_path, monkeypatch):
     """Pull sem diff retorna mensagem 'sem mudanças'."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -126,9 +140,11 @@ def test_repo_sync_sem_mudancas(db, store, tmp_path, monkeypatch):
 
 # ── diff + Diff Resource ──────────────────────────────────────────────────────
 
+
 def test_repo_sync_cria_diff_resource_no_store(db, store, tmp_path, monkeypatch):
     """Com diff, cria um Resource Kind=Diff no store."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -163,6 +179,7 @@ def test_repo_sync_cria_diff_resource_no_store(db, store, tmp_path, monkeypatch)
 def test_repo_sync_diff_resource_tem_explicacao(db, store, tmp_path, monkeypatch):
     """O Diff Resource armazena a explicação do Haiku no spec."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -191,13 +208,30 @@ def test_repo_sync_diff_resource_tem_explicacao(db, store, tmp_path, monkeypatch
 def test_repo_sync_label_unica_por_repo(db, tmp_path, monkeypatch):
     """Diffs de repos diferentes ficam em labels separadas."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     s = ResourceStore(str(tmp_path / "t.db"))
-    s.apply(Resource(kind="Repo", name="alpha", labels={},
-                     spec={"url": "https://github.com/x/alpha"}, status={}), _AGORA)
-    s.apply(Resource(kind="Repo", name="beta", labels={},
-                     spec={"url": "https://github.com/x/beta"}, status={}), _AGORA)
+    s.apply(
+        Resource(
+            kind="Repo",
+            name="alpha",
+            labels={},
+            spec={"url": "https://github.com/x/alpha"},
+            status={},
+        ),
+        _AGORA,
+    )
+    s.apply(
+        Resource(
+            kind="Repo",
+            name="beta",
+            labels={},
+            spec={"url": "https://github.com/x/beta"},
+            status={},
+        ),
+        _AGORA,
+    )
 
     db2 = Database(str(tmp_path / "t.db"))
 
@@ -217,27 +251,33 @@ def test_repo_sync_label_unica_por_repo(db, tmp_path, monkeypatch):
 
     with patch("atlas.rotinas.repo_sync.invocar", return_value="ok"):
         for repo_label in ("alpha", "beta"):
-            rotina = Rotina(nome=f"{repo_label}-sync", descricao="x",
-                            label=repo_label, coletar="repo-sync", modelo="none")
-            ctx = ContextoExecucao(agora=_AGORA, rotina=rotina, origem="agenda",
-                                   db=db2, store=s)
+            rotina = Rotina(
+                nome=f"{repo_label}-sync",
+                descricao="x",
+                label=repo_label,
+                coletar="repo-sync",
+                modelo="none",
+            )
+            ctx = ContextoExecucao(agora=_AGORA, rotina=rotina, origem="agenda", db=db2, store=s)
             fn = obter("repo-sync")
             fn(ctx)
 
     alpha_diffs = s.list("Diff", labels={"repo": "alpha"})
-    beta_diffs  = s.list("Diff", labels={"repo": "beta"})
+    beta_diffs = s.list("Diff", labels={"repo": "beta"})
     assert alpha_diffs
     assert beta_diffs
     # não se misturam
     assert all(d.labels["repo"] == "alpha" for d in alpha_diffs)
-    assert all(d.labels["repo"] == "beta"  for d in beta_diffs)
+    assert all(d.labels["repo"] == "beta" for d in beta_diffs)
 
 
 # ── atualiza Repo status ──────────────────────────────────────────────────────
 
+
 def test_repo_sync_atualiza_repo_status(db, store, tmp_path, monkeypatch):
     """Após sync com diff, atualiza Repo/<label>.status.last_commit."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -265,9 +305,11 @@ def test_repo_sync_atualiza_repo_status(db, store, tmp_path, monkeypatch):
 
 # ── IA best-effort ────────────────────────────────────────────────────────────
 
+
 def test_repo_sync_diff_sem_ia_ainda_salva_resource(db, store, tmp_path, monkeypatch):
     """Se Haiku falha, o Diff Resource é criado sem explicação."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -295,6 +337,7 @@ def test_repo_sync_diff_sem_ia_ainda_salva_resource(db, store, tmp_path, monkeyp
 def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch):
     """Diffs enormes são truncados antes de enviar ao Haiku."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -326,6 +369,7 @@ def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch)
 def test_repo_sync_usa_haiku(db, store, tmp_path, monkeypatch):
     """A IA é chamada com modelo Haiku."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
 
     repo_dir = tmp_path / "repos" / "nora"
@@ -341,8 +385,10 @@ def test_repo_sync_usa_haiku(db, store, tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     modelos = []
-    with patch("atlas.rotinas.repo_sync.invocar",
-               side_effect=lambda p, modelo="", **kw: modelos.append(modelo) or "ok"):
+    with patch(
+        "atlas.rotinas.repo_sync.invocar",
+        side_effect=lambda p, modelo="", **kw: modelos.append(modelo) or "ok",
+    ):
         fn = obter("repo-sync")
         fn(_ctx(db, store))
 
@@ -375,22 +421,27 @@ _DIFF_COM_STAT = (
 
 def _fake_run_rico(sha="abc1234"):
     """fake subprocess.run que devolve diff com --stat e metadados de commit."""
+
     def fake_run(args, **kw):
         cmd = " ".join(args)
         if "log" in cmd:  # git log -1 --format=...
-            return _mk(stdout="feat: nova feature\nLuigi\nluigi@ex.com\n"
-                              "2026-06-17T09:00:00-03:00\nhá 2 horas\n")
+            return _mk(
+                stdout="feat: nova feature\nLuigi\nluigi@ex.com\n"
+                "2026-06-17T09:00:00-03:00\nhá 2 horas\n"
+            )
         if "diff" in cmd:
             return _mk(stdout=_DIFF_COM_STAT)
         if "rev-parse" in cmd:
             return _mk(stdout=sha + "\n")
         return _mk()
+
     return fake_run
 
 
 def test_repo_sync_repo_status_metadados_ricos(db, store, tmp_path, monkeypatch):
     """Repo.status ganha mensagem, autor, data e estatísticas do diff."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.mkdir(parents=True)
@@ -412,6 +463,7 @@ def test_repo_sync_repo_status_metadados_ricos(db, store, tmp_path, monkeypatch)
 def test_repo_sync_diff_metadados_ricos(db, store, tmp_path, monkeypatch):
     """Diff.spec guarda subject, author, stats e lista de arquivos."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.mkdir(parents=True)
@@ -433,6 +485,7 @@ def test_repo_sync_diff_metadados_ricos(db, store, tmp_path, monkeypatch):
 def test_repo_sync_saida_descreve_atualizacao(db, store, tmp_path, monkeypatch):
     """A saída traz a descrição da última atualização (mensagem + autor)."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.mkdir(parents=True)
@@ -449,6 +502,7 @@ def test_repo_sync_saida_descreve_atualizacao(db, store, tmp_path, monkeypatch):
 def test_repo_sync_arquiva_diff_como_doc(db, store, tmp_path, monkeypatch):
     """Cada atualização vira um Doc arquivado (histórico represado), rotulado p/ hierarquia."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.mkdir(parents=True)
@@ -461,7 +515,7 @@ def test_repo_sync_arquiva_diff_como_doc(db, store, tmp_path, monkeypatch):
     docs = store.list("Doc", labels={"repo": "nora"})
     assert docs, "deve arquivar a atualização como Doc"
     d = docs[0]
-    assert d.labels.get("topic") == "repo"          # hierarquia: topic > repo
+    assert d.labels.get("topic") == "repo"  # hierarquia: topic > repo
     assert d.labels.get("repo") == "nora"
     assert "feat: nova feature" in d.spec.get("body", "")
     assert "análise e sugestões da IA" in d.spec.get("body", "")
@@ -470,6 +524,7 @@ def test_repo_sync_arquiva_diff_como_doc(db, store, tmp_path, monkeypatch):
 def test_repo_sync_doc_acumula_historico(db, store, tmp_path, monkeypatch):
     """Docs de commits diferentes coexistem (represados, não sobrescrevem)."""
     import atlas.rotinas.repo_sync  # noqa: F401
+
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.mkdir(parents=True)
@@ -498,7 +553,7 @@ def test_routines_carrega_nora_sync_toml(tmp_path):
         'coletar = "repo-sync"\n'
         'agenda = "0 9 * * *"\n'
         'modelo = "none"\n'
-        'ativa = false\n'
+        "ativa = false\n"
     )
     resultado = carregar_rotinas(tmp_path)
     r = resultado.rotinas[0]

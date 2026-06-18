@@ -94,9 +94,7 @@ def coletar(ctx: ContextoExecucao) -> CollectResult:
             if fin and fin >= inicio_dia:
                 timers_hoje.append(t)
         if timers_hoje:
-            total_min = sum(
-                float(t.status.get("duration_min", 0)) for t in timers_hoje
-            )
+            total_min = sum(float(t.status.get("duration_min", 0)) for t in timers_hoje)
             linhas.append(f"⏱ Timers hoje ({len(timers_hoje)}) — {_fmt_min(total_min)} total:")
             for t in timers_hoje:
                 dur = t.status.get("duration_min", 0)

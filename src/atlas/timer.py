@@ -97,12 +97,17 @@ def _finish(db: Database, store: ResourceStore, nome: str, agora: datetime) -> s
         dados_json={"timer": nome, "duration_min": minutos, "started_at": started_at_str},
     )
 
-    store.set_status("Timer", nome, {
-        "state": "done",
-        "started_at": started_at_str,
-        "finished_at": agora.isoformat(),
-        "duration_min": minutos,
-    }, agora)
+    store.set_status(
+        "Timer",
+        nome,
+        {
+            "state": "done",
+            "started_at": started_at_str,
+            "finished_at": agora.isoformat(),
+            "duration_min": minutos,
+        },
+        agora,
+    )
 
     return f"✅ timer '{nome}' done · {duracao_str}"
 
