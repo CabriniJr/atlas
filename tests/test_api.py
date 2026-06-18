@@ -201,6 +201,7 @@ def test_schema_endpoint(api_server):
 
 def test_root_landing_minima(api_server):
     import http.client
+
     conn = http.client.HTTPConnection("127.0.0.1", api_server)
     conn.request("GET", "/")
     resp = conn.getresponse()
