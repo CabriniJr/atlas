@@ -5,7 +5,7 @@ status: aprovado
 versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-16
+atualizado-em: 2026-06-17
 ---
 
 # Architecture Decision Records (ADRs)
@@ -19,6 +19,7 @@ atualizado-em: 2026-06-16
 | 1.3    | 2026-06-17 | Tech Lead | ADR-0016 (IA plugável via Kind Prompt) — aceito | PO/PM |
 | 1.4    | 2026-06-17 | Tech Lead | ADR-0017 (GUI por Kind abstrai a API) — aceito | PO/PM |
 | 1.5    | 2026-06-17 | Tech Lead | ADR-0018 (Manifestos declarativos e `apply -f`) — aceito | PO/PM |
+| 1.6    | 2026-06-17 | Tech Lead | ADR-0019 (Interfaces são clientes da API) — aceito | PO/PM |
 
 ---
 
@@ -58,6 +59,7 @@ atualizado-em: 2026-06-16
 | [0016](ADR-0016-ia-plugavel-kind-prompt.md) | Chamadas de IA plugáveis via Kind `Prompt` | aceito | IA conectável, não hard-coded |
 | [0017](ADR-0017-gui-por-kind-abstrai-api.md) | Todo Kind tem GUI completa que abstrai a API | aceito | Ações + config visual por Kind |
 | [0018](ADR-0018-manifestos-e-apply-f.md) | Manifestos declarativos e `apply -f`; interface como cliente da API | aceito | Manifestos de domínio + loader |
+| [0019](ADR-0019-interfaces-clientes-da-api.md) | Interfaces são clientes da API | aceito | API pura + /_schema (sub-projeto 2) |
 
 ## Lastro
 
