@@ -1,0 +1,36 @@
+"""TDD — metadata de UI por kind servida pela API (/_schema)."""
+
+from __future__ import annotations
+
+from atlas.api_schema import schema_payload
+
+
+def test_payload_tem_kinds_principais():
+    p = schema_payload()
+    kinds = p["kinds"]
+    for k in ("Tracker", "Goal", "Routine", "Timer", "Repo", "Prompt"):
+        assert k in kinds
+
+
+def test_tracker_tem_campos_e_meta():
+    tracker = schema_payload()["kinds"]["Tracker"]
+    assert tracker["meta"]["icon"]
+    campos = {c["k"]: c for c in tracker["spec"]}
+    assert campos["unit"]["type"] == "text"
+    assert campos["type"]["type"] == "select"
+    assert "number" in campos["type"]["opts"]
+
+
+def test_acoes_por_kind():
+    kinds = schema_payload()["kinds"]
+    # Timer expõe start/stop; Routine expõe run; Goal expõe check
+    assert any(a["id"] == "start" for a in kinds["Timer"]["actions"])
+    assert any(a["id"] == "stop" for a in kinds["Timer"]["actions"])
+    assert any(a["id"] == "run" for a in kinds["Routine"]["actions"])
+    assert any(a["id"] == "check" for a in kinds["Goal"]["actions"])
+
+
+def test_serializa_para_json():
+    import json
+
+    json.dumps(schema_payload())  # não levanta
