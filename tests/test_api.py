@@ -188,6 +188,14 @@ def test_delete_nao_existe(api_server):
     assert status == 404
 
 
+def test_schema_endpoint(api_server):
+    status, body = _get(api_server, "/apis/atlas/v1/_schema")
+    assert status == 200
+    assert "kinds" in body
+    assert "Tracker" in body["kinds"]
+    assert body["kinds"]["Timer"]["actions"]
+
+
 # ── GET / (dashboard HTML) ────────────────────────────────────────────────────
 
 

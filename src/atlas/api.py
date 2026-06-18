@@ -2985,6 +2985,13 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, _status_payload())
             return
 
+        # /_schema → metadata de UI por kind (forms + ações)
+        if path == _API_PREFIX + "/_schema":
+            from atlas.api_schema import schema_payload
+
+            self._json(200, schema_payload())
+            return
+
         rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
 

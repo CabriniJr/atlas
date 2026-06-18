@@ -24,14 +24,26 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "opts": ["number", "text", "duration"],
                 "hint": "Tipo do valor",
             },
-            {"k": "active", "type": "bool", "label": "Ativo", "hint": "Desativar para parar de coletar"},
+            {
+                "k": "active",
+                "type": "bool",
+                "label": "Ativo",
+                "hint": "Desativar para parar de coletar",
+            },
         ],
-        "labels": [{"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}],
+        "labels": [
+            {"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}
+        ],
     },
     "Goal": {
         "meta": {"icon": "🎯", "desc": "Meta com progresso calculado"},
         "spec": [
-            {"k": "tracker", "type": "text", "label": "Tracker", "hint": "Nome do Tracker a monitorar"},
+            {
+                "k": "tracker",
+                "type": "text",
+                "label": "Tracker",
+                "hint": "Nome do Tracker a monitorar",
+            },
             {"k": "target", "type": "number", "label": "Meta (target)", "hint": "Valor alvo"},
             {"k": "start", "type": "number", "label": "Valor inicial", "hint": "Baseline para %"},
             {"k": "unit", "type": "text", "label": "Unidade", "hint": "Ex: kg, dias, pontos"},
@@ -50,7 +62,12 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         "spec": [
             {"k": "hora", "type": "time", "label": "Horário", "hint": "Quando dispara"},
             {"k": "mensagem", "type": "text", "label": "Mensagem", "hint": "Texto enviado"},
-            {"k": "once", "type": "bool", "label": "Uma vez só", "hint": "false = repete diariamente"},
+            {
+                "k": "once",
+                "type": "bool",
+                "label": "Uma vez só",
+                "hint": "false = repete diariamente",
+            },
         ],
         "labels": [],
     },
@@ -73,19 +90,30 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "hint": "Destino do resultado",
             },
             {"k": "label", "type": "text", "label": "Label grupo", "hint": "coletar-por-label"},
-            {"k": "coletar", "type": "text", "label": "Collect fn", "hint": "default = nome da rotina"},
+            {
+                "k": "coletar",
+                "type": "text",
+                "label": "Collect fn",
+                "hint": "default = nome da rotina",
+            },
         ],
-        "labels": [{"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}],
+        "labels": [
+            {"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}
+        ],
     },
     "Repo": {
         "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync)"},
-        "spec": [{"k": "url", "type": "text", "label": "URL", "hint": "https://github.com/user/repo"}],
+        "spec": [
+            {"k": "url", "type": "text", "label": "URL", "hint": "https://github.com/user/repo"}
+        ],
         "labels": [],
     },
     "Idea": {
         "meta": {"icon": "💡", "desc": "Ideia capturada para o pool"},
         "spec": [{"k": "body", "type": "area", "label": "Corpo", "hint": "Descrição completa"}],
-        "labels": [{"k": "estado", "label": "Estado", "hint": "capturada · ativo · arquivada · descartada"}],
+        "labels": [
+            {"k": "estado", "label": "Estado", "hint": "capturada · ativo · arquivada · descartada"}
+        ],
     },
     "Task": {
         "meta": {"icon": "✅", "desc": "Tarefa do pool"},
