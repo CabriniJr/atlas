@@ -196,19 +196,15 @@ def test_schema_endpoint(api_server):
     assert body["kinds"]["Timer"]["actions"]
 
 
-# ── GET / (landing mínima) ───────────────────────────────────────────────────
+# ── GET / (dashboard HTML) ────────────────────────────────────────────────────
 
 
-def test_root_landing_minima(api_server):
-    import http.client
-
-    conn = http.client.HTTPConnection("127.0.0.1", api_server)
+def test_dashboard_html(api_server):
+    conn = HTTPConnection("127.0.0.1", api_server)
     conn.request("GET", "/")
     resp = conn.getresponse()
     body = resp.read().decode()
     conn.close()
     assert resp.status == 200
-    # landing mínima, não o dashboard antigo
-    assert "renderTree" not in body
-    assert "_KIND_SCHEMA" not in body
-    assert "Atlas API" in body
+    assert "ATLAS" in body
+    assert "apis/atlas/v1" in body

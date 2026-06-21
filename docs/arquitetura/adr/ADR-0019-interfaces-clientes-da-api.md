@@ -16,9 +16,18 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-17 | Tech Lead | Proposta + aceite | PO/PM |
+| 1.1    | 2026-06-21 | Tech Lead | Dashboard embutido **restaurado temporariamente** por decisão do PO (ver Status) | PO/PM |
 
 ## Status
-`aceito`.
+`aceito` — porém **parcialmente revertido na prática (transitório)**.
+
+O `api.py` voltou a servir o dashboard embutido em `GET /` (mesma UI que rodava na
+Pi), por decisão do PO em 2026-06-21: a versão standalone (SPA em `web/`) ainda não
+tem paridade visual/funcional, então o front embutido segue sendo a interface de
+uso enquanto a aplicação web separada amadurece. O endpoint `GET /_schema` foi
+mantido. A direção de longo prazo do ADR (interfaces são clientes da API; web/
+standalone no Vercel) **continua válida** — apenas adiada. Quando o SPA atingir
+paridade, o dashboard embutido volta a sair.
 
 ## Contexto
 O Atlas tem múltiplas formas de interação (CLI, Telegram, web) e planeja outras
