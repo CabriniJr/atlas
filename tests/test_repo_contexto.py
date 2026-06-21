@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import subprocess as _sp
+from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
-from atlas.rotinas.repo_sync import _coletar_contexto, _spec_int
 from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
+from atlas.db import Database
+from atlas.executor import ContextoExecucao
+from atlas.rotinas.repo_sync import (
+    _analisar,
+    _coletar_contexto,
+    _contexto_atual,
+    _contexto_obsoleto,
+    _gerar_contexto,
+    _spec_int,
+    collect,
+)
+from atlas.routines import Rotina
 
 
 def _montar_repo(tmp: Path) -> Path:
@@ -44,17 +59,6 @@ def test_spec_int_le_e_faz_fallback():
     assert _spec_int(r, "diff_prompt_max", 10) == 50
     assert _spec_int(r, "ausente", 7) == 7
     assert _spec_int(Resource(kind="Repo", name="y", spec={"k": "abc"}), "k", 9) == 9
-
-
-from datetime import datetime, timedelta
-from unittest.mock import patch
-
-from atlas.core.store import ResourceStore
-from atlas.rotinas.repo_sync import (
-    _contexto_atual,
-    _contexto_obsoleto,
-    _gerar_contexto,
-)
 
 
 class _Ctx:
@@ -114,9 +118,6 @@ def test_contexto_obsoleto_e_atual(tmp_path):
     assert _contexto_atual("ausente", store) == ""
 
 
-from atlas.rotinas.repo_sync import _analisar
-
-
 def test_analisar_injeta_contexto_e_diff_no_prompt():
     capturado = {}
 
@@ -139,17 +140,16 @@ def test_analisar_sem_contexto_ainda_roda():
     assert out == "ok"
 
 
-import subprocess as _sp
-
-from atlas.executor import ContextoExecucao
-from atlas.db import Database
-from atlas.routines import Rotina
-from atlas.rotinas.repo_sync import collect
-
-
 def _rotina():
-    return Rotina(nome="nora-sync", descricao="x", label="nora", agenda="@daily 09:00",
-                  modelo="none", saida="telegram", coletar="repo-sync")
+    return Rotina(
+        nome="nora-sync",
+        descricao="x",
+        label="nora",
+        agenda="@daily 09:00",
+        modelo="none",
+        saida="telegram",
+        coletar="repo-sync",
+    )
 
 
 def test_clone_gera_contexto(tmp_path, monkeypatch):
@@ -159,8 +159,6 @@ def test_clone_gera_contexto(tmp_path, monkeypatch):
     store.apply(Resource(kind="Repo", name="nora", spec={"url": "https://x/y"}), agora)
 
     # fake git: 'clone' cria o diretório com docs; demais comandos retornam vazio
-    real_run = _sp.run
-
     def fake_run(args, **kw):
         if args[:2] == ["git", "clone"]:
             dest = Path(args[-1])

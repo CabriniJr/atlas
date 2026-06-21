@@ -46,7 +46,12 @@ _DEF_DIFF_PROMPT_MAX = 120_000  # diff enviado ao insight
 _DEF_DIFF_STORE_MAX = 200_000  # diff guardado no Resource Diff
 
 _METADATA_FILES = {
-    "pyproject.toml", "package.json", "Cargo.toml", "go.mod", "pom.xml", "composer.json",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+    "composer.json",
 }
 _DOC_EXTS = {".md", ".mdx", ".rst"}
 
@@ -333,7 +338,9 @@ def _reportar(
     sha7 = sha[:7]
     repo_res = store.get("Repo", label)
     diff_store_max = (
-        _spec_int(repo_res, "diff_store_max", _DEF_DIFF_STORE_MAX) if repo_res else _DEF_DIFF_STORE_MAX
+        _spec_int(repo_res, "diff_store_max", _DEF_DIFF_STORE_MAX)
+        if repo_res
+        else _DEF_DIFF_STORE_MAX
     )
     diff_prompt_max = (
         _spec_int(repo_res, "diff_prompt_max", _DEF_DIFF_PROMPT_MAX)
@@ -468,9 +475,7 @@ def _marcar_check(
 
 def _analisar(diff: str, label: str, modelo: str, contexto: str = "") -> str | None:
     """IA explica o que mudou e sugere — usando o contexto do projeto + o diff."""
-    bloco_ctx = (
-        f"## Contexto do projeto (resumo represado)\n{contexto}\n\n" if contexto else ""
-    )
+    bloco_ctx = f"## Contexto do projeto (resumo represado)\n{contexto}\n\n" if contexto else ""
     prompt = (
         f"Você é um revisor técnico do repositório '{label}'. "
         + bloco_ctx
