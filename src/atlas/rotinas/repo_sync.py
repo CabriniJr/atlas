@@ -101,6 +101,78 @@ def _coletar_contexto(repo_dir: Path, corpus_max: int = _DEF_CORPUS_MAX) -> tupl
     return corpus.strip(), arquivos
 
 
+def _gerar_contexto(repo_res, repo_dir: Path, store: ResourceStore, ctx) -> None:
+    """Gera (Opus) e represa o resumo de contexto do projeto num Doc. Degrada em falha."""
+    label = repo_res.name
+    corpus_max = _spec_int(repo_res, "context_corpus_max", _DEF_CORPUS_MAX)
+    corpus, arquivos = _coletar_contexto(repo_dir, corpus_max)
+    if not corpus:
+        return
+    modelo = repo_res.spec.get("context_model") or _DEF_CONTEXT_MODEL
+    prompt = (
+        f"Crie um RESUMO DE CONTEXTO do projeto '{label}' para servir de base a "
+        "futuras revisões de código (entender o que muda e sugerir melhorias). "
+        "Seja rico e abrangente — sem limite de tamanho. Cubra: propósito, "
+        "arquitetura e módulos principais, fluxos importantes, convenções/estilo, "
+        "domínio/termos e pontos de atenção. Responda em PT-BR.\n\n"
+        f"Documentação e metadados do projeto:\n{corpus}"
+    )
+    try:
+        resumo = invocar(prompt, modelo=modelo, timeout=180)
+    except Exception as exc:  # noqa: BLE001 — degrada (ADR-0006)
+        _log.warning("contexto/%s: IA indisponível: %s", label, exc)
+        return
+    store.apply(
+        Resource(
+            kind="Doc",
+            name=f"repo-{label}-contexto",
+            labels={"topic": "repo", "repo": label, "tipo": "contexto"},
+            spec={"title": f"{label} · contexto do projeto", "body": resumo},
+            status={
+                "generated_at": ctx.agora.isoformat(),
+                "model": modelo,
+                "source_files": arquivos,
+            },
+        ),
+        ctx.agora,
+    )
+    atual = store.get("Repo", label)
+    if atual is not None:
+        store.apply(
+            Resource(
+                kind="Repo",
+                name=label,
+                labels=atual.labels,
+                spec=atual.spec,
+                status={**atual.status, "last_context_at": ctx.agora.isoformat()},
+            ),
+            ctx.agora,
+        )
+
+
+def _contexto_obsoleto(label: str, store: ResourceStore, agora: datetime, ttl_days: int) -> bool:
+    """True se o Doc de contexto não existe ou é mais antigo que ttl_days."""
+    doc = store.get("Doc", f"repo-{label}-contexto")
+    if doc is None:
+        return True
+    ts = doc.status.get("generated_at") if doc.status else None
+    if not ts:
+        return True
+    try:
+        gerado = datetime.fromisoformat(ts)
+    except ValueError:
+        return True
+    return agora - gerado > timedelta(days=ttl_days)
+
+
+def _contexto_atual(label: str, store: ResourceStore) -> str:
+    """Body do Doc de contexto (integral, sem truncar) ou string vazia."""
+    doc = store.get("Doc", f"repo-{label}-contexto")
+    if doc is None:
+        return ""
+    return str(doc.spec.get("body", ""))
+
+
 def _data_dir() -> Path:
     db = os.environ.get("ATLAS_DB_PATH", "atlas.sqlite")
     return Path(db).resolve().parent

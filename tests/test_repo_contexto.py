@@ -44,3 +44,71 @@ def test_spec_int_le_e_faz_fallback():
     assert _spec_int(r, "diff_prompt_max", 10) == 50
     assert _spec_int(r, "ausente", 7) == 7
     assert _spec_int(Resource(kind="Repo", name="y", spec={"k": "abc"}), "k", 9) == 9
+
+
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
+from atlas.core.store import ResourceStore
+from atlas.rotinas.repo_sync import (
+    _contexto_atual,
+    _contexto_obsoleto,
+    _gerar_contexto,
+)
+
+
+class _Ctx:
+    def __init__(self, agora):
+        self.agora = agora
+
+
+def _store(tmp_path):
+    return ResourceStore(str(tmp_path / "s.db"))
+
+
+def test_gerar_contexto_cria_doc_tipo_contexto(tmp_path):
+    repo_dir = _montar_repo(tmp_path / "repo")
+    store = _store(tmp_path)
+    agora = datetime(2026, 6, 21, 9, 0)
+    store.apply(Resource(kind="Repo", name="nora", spec={"url": "x"}), agora)
+    with patch("atlas.rotinas.repo_sync.invocar", return_value="RESUMO RICO DO PROJETO") as inv:
+        _gerar_contexto(store.get("Repo", "nora"), repo_dir, store, _Ctx(agora))
+    doc = store.get("Doc", "repo-nora-contexto")
+    assert doc is not None
+    assert doc.labels["tipo"] == "contexto"
+    assert doc.spec["body"] == "RESUMO RICO DO PROJETO"
+    assert doc.status["generated_at"] == agora.isoformat()
+    # usou o modelo de contexto (Opus por default)
+    assert inv.call_args.kwargs["modelo"] == "claude-opus-4-8"
+    # marcou no Repo
+    assert store.get("Repo", "nora").status["last_context_at"] == agora.isoformat()
+
+
+def test_gerar_contexto_degrada_se_ia_falha(tmp_path):
+    repo_dir = _montar_repo(tmp_path / "repo")
+    store = _store(tmp_path)
+    agora = datetime(2026, 6, 21, 9, 0)
+    store.apply(Resource(kind="Repo", name="nora", spec={"url": "x"}), agora)
+    with patch("atlas.rotinas.repo_sync.invocar", side_effect=RuntimeError("sem ia")):
+        _gerar_contexto(store.get("Repo", "nora"), repo_dir, store, _Ctx(agora))
+    assert store.get("Doc", "repo-nora-contexto") is None  # não grava
+
+
+def test_contexto_obsoleto_e_atual(tmp_path):
+    store = _store(tmp_path)
+    agora = datetime(2026, 6, 21, 9, 0)
+    assert _contexto_obsoleto("nora", store, agora, 7) is True  # ausente
+    store.apply(
+        Resource(
+            kind="Doc",
+            name="repo-nora-contexto",
+            labels={"tipo": "contexto"},
+            spec={"body": "CTX"},
+            status={"generated_at": (agora - timedelta(days=2)).isoformat()},
+        ),
+        agora,
+    )
+    assert _contexto_obsoleto("nora", store, agora, 7) is False  # fresco
+    assert _contexto_obsoleto("nora", store, agora, 1) is True  # vencido
+    assert _contexto_atual("nora", store) == "CTX"
+    assert _contexto_atual("ausente", store) == ""
