@@ -17,10 +17,19 @@ describe("ConnectionOverlay", () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
-  it("exige https:// na URL", async () => {
+  it("rejeita http:// em host não-local", async () => {
     render(<ConnectionOverlay onSaved={vi.fn()} />);
     await userEvent.type(screen.getByLabelText(/URL da API/i), "http://inseguro");
     await userEvent.click(screen.getByRole("button", { name: /conectar/i }));
     expect(screen.getByText(/https/i)).toBeInTheDocument();
+  });
+
+  it("permite http:// em localhost (dev)", async () => {
+    const onSaved = vi.fn();
+    render(<ConnectionOverlay onSaved={onSaved} />);
+    await userEvent.type(screen.getByLabelText(/URL da API/i), "http://127.0.0.1:8080");
+    await userEvent.click(screen.getByRole("button", { name: /conectar/i }));
+    expect(getConnection().apiUrl).toBe("http://127.0.0.1:8080");
+    expect(onSaved).toHaveBeenCalled();
   });
 });

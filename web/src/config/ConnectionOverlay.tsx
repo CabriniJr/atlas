@@ -9,8 +9,10 @@ export function ConnectionOverlay({ onSaved }: { onSaved: () => void }) {
 
   function conectar() {
     const url = apiUrl.trim();
-    if (!/^https:\/\//.test(url)) {
-      setErro("A URL deve começar com https:// (mixed-content bloqueia http).");
+    const ehLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(url);
+    const ehHttps = /^https:\/\//.test(url);
+    if (!ehHttps && !ehLocal) {
+      setErro("Use https:// (http só é permitido em localhost/127.0.0.1).");
       return;
     }
     setConnection({ apiUrl: url, token });
