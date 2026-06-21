@@ -34,3 +34,6 @@ build/
 
 # Sistema
 .DS_Store
+
+# Dados do repo-sync (clones de repositórios monitorados)
+repos/
