@@ -2,15 +2,17 @@ import { describe, it, expect } from "vitest";
 import type { Resource, SchemaPayload } from "./types";
 
 describe("tipos do contrato", () => {
-  it("Resource aceita o shape K8s", () => {
+  it("Resource é flat (name/labels no topo)", () => {
     const r: Resource = {
-      apiVersion: "atlas/v1",
+      api_version: "atlas/v1",
       kind: "Tracker",
-      metadata: { name: "peso", labels: { grupo: "academia" } },
+      name: "peso",
+      labels: { grupo: "academia" },
       spec: { unit: "kg" },
       status: {},
     };
-    expect(r.metadata.name).toBe("peso");
+    expect(r.name).toBe("peso");
+    expect(r.labels.grupo).toBe("academia");
   });
 
   it("SchemaPayload mapeia kinds", () => {

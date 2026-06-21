@@ -43,11 +43,12 @@ atualizado-em: 2026-06-17
 
 ## Formato do recurso
 ```json
-{ "apiVersion": "atlas/v1", "kind": "...", "metadata": {"name": "...",
-  "labels": {}, "criado_em": "...", "atualizado_em": "..."},
-  "spec": {}, "status": {} }
+{ "api_version": "atlas/v1", "kind": "...", "name": "...",
+  "labels": {}, "spec": {}, "status": {},
+  "criado_em": "...", "atualizado_em": "..." }
 ```
 `status` é somente-leitura (escrito pelo motor). `PUT` aceita `labels` e `spec`.
+A serialização HTTP é **flat** (não usa `metadata`).
 
 ## `/_schema`
 ```json

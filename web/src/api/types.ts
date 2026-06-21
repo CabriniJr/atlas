@@ -1,16 +1,14 @@
 // Espelha docs/specs/api-http-contrato.md
 
 export interface Resource {
-  apiVersion: string;
+  api_version: string;
   kind: string;
-  metadata: {
-    name: string;
-    labels?: Record<string, string>;
-    criado_em?: string;
-    atualizado_em?: string;
-  };
+  name: string;
+  labels: Record<string, string>;
   spec: Record<string, unknown>;
   status: Record<string, unknown>;
+  criado_em?: string;
+  atualizado_em?: string;
 }
 
 export type FieldType = "text" | "area" | "number" | "bool" | "select" | "time" | "cron";
