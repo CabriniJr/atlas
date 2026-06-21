@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from atlas.core.resource import Resource
@@ -34,9 +35,70 @@ from atlas.rotinas import registrar
 
 _log = logging.getLogger(__name__)
 
-_HAIKU = "claude-haiku-4-5-20251001"
-_MAX_DIFF_PROMPT = 5000  # chars enviados ao Haiku
-_MAX_DIFF_STORE = 8000  # chars gravados no Diff Resource
+# Modelos
+_DEF_DIFF_MODEL = "claude-sonnet-4-6"  # insight por diff
+_DEF_CONTEXT_MODEL = "claude-opus-4-8"  # resumo de contexto do projeto
+# Política de frescor do contexto
+_DEF_CONTEXT_TTL_DAYS = 7
+# Tetos de caracteres (altos, perto da janela do modelo; configuráveis por Repo)
+_DEF_CORPUS_MAX = 600_000  # corpus enviado ao Opus
+_DEF_DIFF_PROMPT_MAX = 120_000  # diff enviado ao insight
+_DEF_DIFF_STORE_MAX = 200_000  # diff guardado no Resource Diff
+
+_METADATA_FILES = {
+    "pyproject.toml", "package.json", "Cargo.toml", "go.mod", "pom.xml", "composer.json",
+}
+_DOC_EXTS = {".md", ".mdx", ".rst"}
+
+
+def _spec_int(repo_res, key: str, default: int) -> int:
+    """Lê um inteiro do spec do Repo, com fallback no default."""
+    try:
+        return int(repo_res.spec.get(key, default))
+    except (TypeError, ValueError, AttributeError):
+        return default
+
+
+def _ler_arquivo(p: Path) -> str:
+    try:
+        return p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _coletar_contexto(repo_dir: Path, corpus_max: int = _DEF_CORPUS_MAX) -> tuple[str, list[str]]:
+    """Monta o corpus de contexto do clone: README + docs/** + metadados.
+
+    Prioriza README e docs/ (metadados por último ao truncar). Devolve
+    ``(corpus, arquivos_incluidos)``.
+    """
+    prioritarios: list[tuple[str, str]] = []
+    for p in sorted(repo_dir.glob("README*")):
+        if p.is_file():
+            prioritarios.append((p.name, _ler_arquivo(p)))
+    docs = repo_dir / "docs"
+    if docs.is_dir():
+        for p in sorted(docs.rglob("*")):
+            if p.is_file() and p.suffix.lower() in _DOC_EXTS:
+                prioritarios.append((str(p.relative_to(repo_dir)), _ler_arquivo(p)))
+    metadados: list[tuple[str, str]] = []
+    for p in sorted(repo_dir.iterdir()):
+        if p.is_file() and (p.name in _METADATA_FILES or p.suffix == ".csproj"):
+            metadados.append((p.name, _ler_arquivo(p)))
+
+    corpus = ""
+    arquivos: list[str] = []
+    truncado = False
+    for rel, conteudo in [*prioritarios, *metadados]:
+        bloco = f"\n\n===== {rel} =====\n{conteudo}"
+        if corpus and len(corpus) + len(bloco) > corpus_max:
+            truncado = True
+            break
+        corpus += bloco
+        arquivos.append(rel)
+    if truncado:
+        corpus += "\n\n[corpus truncado: excedeu o limite configurado]"
+    return corpus.strip(), arquivos
 
 
 def _data_dir() -> Path:
