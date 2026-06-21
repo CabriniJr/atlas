@@ -325,12 +325,20 @@ def _reportar(
     ctx: ContextoExecucao,
 ) -> CollectResult:
     sha7 = sha[:7]
-    diff_store = diff[:_MAX_DIFF_STORE]
-    diff_prompt = diff[:_MAX_DIFF_PROMPT]
-
     repo_res = store.get("Repo", label)
-    modelo = (repo_res.spec.get("model") if repo_res else None) or _HAIKU
-    explicacao = _analisar(diff_prompt, label, modelo)
+    diff_store_max = (
+        _spec_int(repo_res, "diff_store_max", _DEF_DIFF_STORE_MAX) if repo_res else _DEF_DIFF_STORE_MAX
+    )
+    diff_prompt_max = (
+        _spec_int(repo_res, "diff_prompt_max", _DEF_DIFF_PROMPT_MAX)
+        if repo_res
+        else _DEF_DIFF_PROMPT_MAX
+    )
+    diff_store = diff[:diff_store_max]
+    diff_prompt = diff[:diff_prompt_max]
+    modelo = (repo_res.spec.get("model") if repo_res else None) or _DEF_DIFF_MODEL
+    contexto = _contexto_atual(label, store)
+    explicacao = _analisar(diff_prompt, label, modelo, contexto)
     _salvar_diff(label, sha7, diff_store, explicacao, meta, stat, store, ctx)
     _salvar_doc(label, sha7, meta, stat, diff_store, explicacao, store, ctx)
     _atualizar_repo_status(label, sha7, meta, stat, store, ctx)
@@ -350,7 +358,7 @@ def _reportar(
     linhas += [
         "",
         "```diff",
-        diff_store + ("…[truncado]" if len(diff) > _MAX_DIFF_STORE else ""),
+        diff_store + ("…[truncado]" if len(diff) > diff_store_max else ""),
         "```",
     ]
     if explicacao:
@@ -452,16 +460,20 @@ def _marcar_check(
     store.apply(updated, ctx.agora)
 
 
-def _analisar(diff: str, label: str, modelo: str) -> str | None:
-    """IA avalia as mudanças e sugere o que dá para propor (insights acionáveis)."""
+def _analisar(diff: str, label: str, modelo: str, contexto: str = "") -> str | None:
+    """IA explica o que mudou e sugere — usando o contexto do projeto + o diff."""
+    bloco_ctx = (
+        f"## Contexto do projeto (resumo represado)\n{contexto}\n\n" if contexto else ""
+    )
     prompt = (
-        f"Você é um revisor técnico do repositório '{label}'. Analise o diff e "
-        "responda em PT-BR, conciso (máximo 220 palavras), em duas seções com bullets:\n\n"
+        f"Você é um revisor técnico do repositório '{label}'. "
+        + bloco_ctx
+        + "Analise o diff e responda em PT-BR, em duas seções com bullets:\n\n"
         "## O que mudou\n"
-        "- o que mudou e por quê (infira do contexto)\n"
+        "- o que mudou e por quê (use o contexto do projeto para inferir)\n"
         "- pontos de atenção ou risco\n\n"
         "## Sugestões\n"
-        "- o que eu poderia sugerir/propor (melhorias, testes, refactors, próximos passos)\n\n"
+        "- melhorias, testes, refactors, próximos passos acionáveis\n\n"
         f"```diff\n{diff}\n```"
     )
     try:

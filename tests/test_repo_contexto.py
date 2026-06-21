@@ -112,3 +112,28 @@ def test_contexto_obsoleto_e_atual(tmp_path):
     assert _contexto_obsoleto("nora", store, agora, 1) is True  # vencido
     assert _contexto_atual("nora", store) == "CTX"
     assert _contexto_atual("ausente", store) == ""
+
+
+from atlas.rotinas.repo_sync import _analisar
+
+
+def test_analisar_injeta_contexto_e_diff_no_prompt():
+    capturado = {}
+
+    def fake_invocar(prompt, modelo, timeout):
+        capturado["prompt"] = prompt
+        capturado["modelo"] = modelo
+        return "analise"
+
+    with patch("atlas.rotinas.repo_sync.invocar", side_effect=fake_invocar):
+        out = _analisar("DIFF_AQUI", "nora", "claude-sonnet-4-6", "CONTEXTO_DO_PROJETO")
+    assert out == "analise"
+    assert "CONTEXTO_DO_PROJETO" in capturado["prompt"]
+    assert "DIFF_AQUI" in capturado["prompt"]
+    assert capturado["modelo"] == "claude-sonnet-4-6"
+
+
+def test_analisar_sem_contexto_ainda_roda():
+    with patch("atlas.rotinas.repo_sync.invocar", return_value="ok"):
+        out = _analisar("DIFF", "nora", "claude-sonnet-4-6", "")
+    assert out == "ok"

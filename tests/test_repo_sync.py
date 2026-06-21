@@ -334,8 +334,8 @@ def test_repo_sync_diff_sem_ia_ainda_salva_resource(db, store, tmp_path, monkeyp
     assert diffs  # Resource criado mesmo sem Haiku
 
 
-def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch):
-    """Diffs enormes são truncados antes de enviar ao Haiku."""
+def test_repo_sync_trunca_diff_grande_no_ia(db, store, tmp_path, monkeypatch):
+    """Diffs enormes são truncados antes de enviar à IA (acima de diff_prompt_max)."""
     import atlas.rotinas.repo_sync  # noqa: F401
 
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
@@ -344,7 +344,8 @@ def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch)
     repo_dir.mkdir(parents=True)
     (repo_dir / ".git").mkdir()
 
-    DIFF_GRANDE = "+linha\n" * 5000
+    # diff que excede o diff_prompt_max default (120_000 chars)
+    DIFF_GRANDE = "+linha\n" * 20_000  # ~140_000 chars
 
     def fake_run(args, **kw):
         if "diff" in " ".join(args):
@@ -366,8 +367,8 @@ def test_repo_sync_trunca_diff_grande_no_haiku(db, store, tmp_path, monkeypatch)
     assert len(prompts[0]) < len(DIFF_GRANDE)
 
 
-def test_repo_sync_usa_haiku(db, store, tmp_path, monkeypatch):
-    """A IA é chamada com modelo Haiku."""
+def test_repo_sync_usa_sonnet(db, store, tmp_path, monkeypatch):
+    """A IA é chamada com modelo Sonnet (default a partir do contexto de projeto)."""
     import atlas.rotinas.repo_sync  # noqa: F401
 
     monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
@@ -392,7 +393,7 @@ def test_repo_sync_usa_haiku(db, store, tmp_path, monkeypatch):
         fn = obter("repo-sync")
         fn(_ctx(db, store))
 
-    assert modelos and "haiku" in modelos[0].lower()
+    assert modelos and "sonnet" in modelos[0].lower()
 
 
 # ── TOML ─────────────────────────────────────────────────────────────────────
