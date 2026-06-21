@@ -137,3 +137,43 @@ def test_analisar_sem_contexto_ainda_roda():
     with patch("atlas.rotinas.repo_sync.invocar", return_value="ok"):
         out = _analisar("DIFF", "nora", "claude-sonnet-4-6", "")
     assert out == "ok"
+
+
+import subprocess as _sp
+
+from atlas.executor import ContextoExecucao
+from atlas.db import Database
+from atlas.routines import Rotina
+from atlas.rotinas.repo_sync import collect
+
+
+def _rotina():
+    return Rotina(nome="nora-sync", descricao="x", label="nora", agenda="@daily 09:00",
+                  modelo="none", saida="telegram", coletar="repo-sync")
+
+
+def test_clone_gera_contexto(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
+    store = ResourceStore(str(tmp_path / "atlas.sqlite"))
+    agora = datetime(2026, 6, 21, 9, 0)
+    store.apply(Resource(kind="Repo", name="nora", spec={"url": "https://x/y"}), agora)
+
+    # fake git: 'clone' cria o diretório com docs; demais comandos retornam vazio
+    real_run = _sp.run
+
+    def fake_run(args, **kw):
+        if args[:2] == ["git", "clone"]:
+            dest = Path(args[-1])
+            _montar_repo(dest)
+            return _sp.CompletedProcess(args, 0, "", "")
+        if args[1] == "rev-parse":
+            return _sp.CompletedProcess(args, 0, "abc1234\n", "")
+        return _sp.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+    ctx = ContextoExecucao(rotina=_rotina(), db=Database(str(tmp_path / "m.db")), agora=agora)
+    ctx.store = store
+    with patch("atlas.rotinas.repo_sync.invocar", return_value="CTX RICO"):
+        collect(ctx)
+    doc = store.get("Doc", "repo-nora-contexto")
+    assert doc is not None and doc.spec["body"] == "CTX RICO"

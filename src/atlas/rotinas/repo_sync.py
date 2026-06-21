@@ -260,6 +260,9 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     try:
         if not repo_dir.exists():
             return _clonar(url, repo_dir, label, store, ctx)
+        ttl = _spec_int(repo_res, "context_ttl_days", _DEF_CONTEXT_TTL_DAYS)
+        if _contexto_obsoleto(label, store, ctx.agora, ttl):
+            _gerar_contexto(repo_res, repo_dir, store, ctx)
         return _sincronizar(url, repo_dir, label, store, ctx)
     except Exception as exc:  # noqa: BLE001
         _log.warning("repo-sync/%s falhou: %s", label, exc)
@@ -277,6 +280,9 @@ def _clonar(
     sha = _git(["rev-parse", "HEAD"], cwd=repo_dir).strip()
     meta = _commit_meta(repo_dir, sha)
     _atualizar_repo_status(label, sha[:7], meta, _STAT_ZERO, store, ctx)
+    repo_res = store.get("Repo", label)
+    if repo_res is not None:
+        _gerar_contexto(repo_res, repo_dir, store, ctx)
     desc = f" — {meta['subject']}" if meta["subject"] else ""
     return CollectResult(
         data={
