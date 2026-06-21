@@ -1,9 +1,10 @@
 nome      = "nora-sync"
-descricao = "Monitora o repo sys0xFF/nora e reporta diffs com explicação Haiku."
-label     = "nora"             # corresponde ao Resource Repo/nora no store
-coletar   = "repo-sync"        # collect genérico — compartilhado por qualquer repo
-agenda    = "@daily 09:00"     # diário 09h (scheduler usa @daily/@every)
+descricao = "Monitora sys0xFF/nora: gera contexto rico do projeto (Opus) e reporta diffs com análise contextual (Sonnet)."
+label     = "nora"
+coletar   = "repo-sync"
+agenda    = "@daily 09:00"
 modelo    = "none"
 saida     = "telegram"
-ativa     = false              # ative: /ativar nora-sync
-                               # antes configure: /apply Repo nora spec.url=https://github.com/sys0xFF/nora
+ativa     = false
+# Configure o Repo: /apply Repo nora spec.url=https://github.com/sys0xFF/nora
+# (opcional) spec.model, spec.context_model, spec.context_ttl_days, spec.diff_prompt_max …

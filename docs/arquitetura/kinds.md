@@ -2,7 +2,7 @@
 titulo: Kinds do Atlas — catálogo e padrão de definição
 id: ARQ-KINDS
 status: aprovado
-versao: 1.2
+versao: 1.3
 dono: Tech Lead
 revisado-por: PO/PM
 atualizado-em: 2026-06-17
@@ -20,6 +20,7 @@ atualizado-em: 2026-06-17
 | 1.0    | 2026-06-16 | Tech Lead | Criação       | PO/PM        |
 | 1.1    | 2026-06-17 | Tech Lead | Kinds `Repo`, `Diff`, `Prompt`; arquivo de diffs em `Doc`; hierarquia por labels | PO/PM |
 | 1.2    | 2026-06-17 | Tech Lead | Manifestos declarativos (`apply -f`) e grupos seed | PO/PM |
+| 1.3 | 2026-06-21 | Tech Lead | Repo: contexto de projeto (Doc tipo=contexto) e campos de modelo/budget | PO/PM |
 
 ---
 
@@ -102,7 +103,12 @@ Repositório git monitorado. Credencial de repos privados via `secrets/git-crede
 | Campo spec | Tipo | Descrição |
 |------------|------|-----------|
 | `url` | string | URL (`https://github.com/user/repo`) |
-| `model` | string | (opcional) modelo da IA na análise (default haiku) |
+| `model` | string | modelo do insight por diff (default `claude-sonnet-4-6`) |
+| `context_model` | string | modelo do resumo de contexto (default `claude-opus-4-8`) |
+| `context_ttl_days` | int | frescor do contexto em dias (default 7) |
+| `context_corpus_max` | int | teto de chars do corpus do contexto (default 600000) |
+| `diff_prompt_max` | int | teto de chars do diff enviado ao insight (default 120000) |
+| `diff_store_max` | int | teto de chars do diff guardado no `Diff` (default 200000) |
 
 Status: `last_commit`, `last_commit_msg`, `last_author`, `last_commit_date`,
 `last_sync`, `last_check`, `files_changed`, `insertions`, `deletions`, `last_summary`.
@@ -115,6 +121,11 @@ Snapshot estruturado de uma atualização. `spec`: `commit`, `subject`, `author`
 > Cada atualização também é **arquivada como `Doc`** (`Doc/repo-<label>-<sha7>`,
 > `labels: topic=repo, repo=<label>, tipo=diff`) — histórico represado, navegável
 > na hierarquia de Docs (agrupada por labels).
+
+> **`Doc` especializado `tipo=contexto`:** `Doc/repo-<label>-contexto`
+> (`labels: topic=repo, repo=<label>, tipo=contexto`) guarda o **resumo de
+> contexto do projeto** (gerado por Opus na criação/TTL). É injetado integral no
+> insight de cada diff. Ver [spec](../specs/2026-06-21-repo-contexto-projeto-design.md).
 
 #### `Prompt` (IA plugável — [ADR-0016](adr/ADR-0016-ia-plugavel-kind-prompt.md))
 Chamada de IA reutilizável que qualquer rotina invoca via `coletar = "prompt"`.
