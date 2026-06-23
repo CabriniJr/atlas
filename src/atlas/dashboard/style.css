@@ -224,6 +224,7 @@ body[data-view="status"] #status-view{display:flex}
 .sv-pill.ia{border-color:var(--purple);color:var(--purple)}
 /* repo card */
 .sv-repo{padding:9px 12px;border-bottom:1px solid var(--bg3)}
+.sv-clickable{cursor:pointer;transition:background .1s}.sv-clickable:hover{background:var(--bg3)}
 .sv-repo:last-child{border-bottom:none}
 .sv-repo .rp-top{display:flex;align-items:center;gap:7px}
 .sv-repo .rp-name{font-size:13px;color:var(--text);font-weight:600}

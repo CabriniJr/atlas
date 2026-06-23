@@ -1555,11 +1555,11 @@ function _svRepos(s){
   const cards=s.repos.map(r=>{
     const stat=(r.files_changed!=null)?
       `<span>🗂 ${r.files_changed} arq</span><span class="rp-add">+${r.insertions||0}</span><span class="rp-del">-${r.deletions||0}</span>`:'';
-    return `<div class="sv-repo">
+    return `<div class="sv-repo sv-clickable" onclick="openResource('Repo','${escJs(r.name)}');setView('explorer')">
       <div class="rp-top"><span class="rp-name">${esc(r.name)}</span>
         ${r.last_commit?`<span class="rp-commit">${esc(r.last_commit)}</span>`:''}
         <span style="flex:1"></span>
-        <button class="sv-runbtn" style="color:var(--purple);width:auto;padding:0 8px" title="Insight por IA" onclick="aiInsight('repo','${escJs(r.name)}')">🧠</button>
+        <button class="sv-runbtn" style="color:var(--purple);width:auto;padding:0 8px" title="Insight por IA" onclick="event.stopPropagation();aiInsight('repo','${escJs(r.name)}')">🧠</button>
         <span class="sv-sub">${r.last_sync?_ago(r.last_sync):(r.last_check?'verif. '+_ago(r.last_check):'nunca')}</span></div>
       ${r.last_commit_msg?`<div class="rp-msg">📝 ${esc(r.last_commit_msg)}</div>`:''}
       <div class="rp-meta">${r.last_author?`<span>👤 ${esc(r.last_author)}</span>`:''}${stat}</div>
