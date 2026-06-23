@@ -69,35 +69,37 @@ e nas fichas de [`docs/agentes/`](docs/agentes/README.md).
 **Dois ambientes:**
 
 ### Local (Dev — sua máquina)
-- **URL:** `http://localhost:8080` (ou `http://atlas:8080` com alias)
+- **URL:** `http://atlas.local:8080`
 - **Rodado via:** `python -m atlas` 
 - **Propósito:** desenvolvimento, testes, iteração rápida
 
 ### Rasp (Pseudo-Prod — Tailnet)
-- **URL:** `http://atlas:8080` (após alias em `/etc/hosts`)
-- **Completo:** `http://guaxinimserver.tail25c9d8.ts.net:8080`
+- **URL:** `http://atlas:8080`
 - **IP Tailscale:** `100.74.97.24`
 - **SSH:** `ssh guaxinim@guaxinimserver.tail25c9d8.ts.net` (senha: `xa942006`)
 - **Repo:** `/home/guaxinim/atlas` com venv em `.venv/`
 
-### Setup do alias local (seu computador)
+### Setup de aliases (seu computador — rode uma vez)
 ```bash
-# Adicione uma linha ao /etc/hosts:
-sudo bash -c 'echo "100.74.97.24 atlas" >> /etc/hosts'
+# Adicione duas linhas ao /etc/hosts:
+sudo bash -c 'cat >> /etc/hosts << EOF
+127.0.0.1 atlas.local
+100.74.97.24 atlas
+EOF'
 
 # Valide
 grep atlas /etc/hosts
-# Deve mostrar: 100.74.97.24 atlas
-
-# Agora acesse ambos via http://atlas:8080 (Rasp) e http://localhost:8080 (local)
+# Deve mostrar:
+# 127.0.0.1 atlas.local
+# 100.74.97.24 atlas
 ```
 
 **Workflow de desenvolvimento:**
-1. **Aqui** (seu computador): `python -m atlas` → testa em `http://localhost:8080`
+1. **Aqui** (seu computador): `python -m atlas` → testa em `http://atlas.local:8080`
 2. **Branch + commit** → push
 3. **PR no GitHub** → valida CI
 4. **Merge em main** → Rasp: `git pull && restart atlas`
-5. **Validação final:** testa em `http://atlas:8080` (Rasp)
+5. **Validação final:** testa em `http://atlas:8080` (Rasp via Tailnet)
 
 **Documentação completa:** ver [`RASP.md`](RASP.md)
 

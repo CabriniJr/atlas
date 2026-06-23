@@ -2,17 +2,23 @@
 
 ## Acesso
 
-### Local (sua máquina)
+### Local (Dev — sua máquina)
 ```bash
 python -m atlas
-# Acesse: http://localhost:8080 (ou http://atlas:8080 com alias)
+# Acesse: http://atlas.local:8080
 ```
 
-### Rasp (Pseudo-Prod)
+### Rasp (Pseudo-Prod — Tailnet)
 ```
-http://atlas:8080       # (após alias em /etc/hosts)
-ou
-http://guaxinimserver.tail25c9d8.ts.net:8080
+http://atlas:8080
+```
+
+### Setup de aliases (rode uma vez)
+```bash
+sudo bash -c 'cat >> /etc/hosts << EOF
+127.0.0.1 atlas.local
+100.74.97.24 atlas
+EOF'
 ```
 
 ## Configuração de Produção
