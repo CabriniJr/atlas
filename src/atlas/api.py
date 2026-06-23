@@ -1677,13 +1677,82 @@ function _genericCard(r){
   return html;
 }
 
+function _mi(k,v){ return `<div class="meta-item"><div class="mi-key">${esc(k)}</div><div class="mi-val">${esc(String(v))}</div></div>`; }
+
 // ── Kind-card stubs (replaced in Tasks 2–4) ───────────────────────────────────
 function _repoCard(r){ return ''; }
-function _goalCard(r){ return ''; }
-function _timerCard(r){ return ''; }
-function _trackerCard(r){ return ''; }
-function _routineCard(r){ return ''; }
-function _alarmCard(r){ return ''; }
+
+function _goalCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  const target=s.target, atual=(st.atual!=null?st.atual:st.current);
+  const unit=s.unit||'';
+  let pct=null;
+  const m=String(st.progresso||st.progress||'').match(/(\d+)/); if(m) pct=Math.min(100,+m[1]);
+  const bar = pct!=null ? `<div style="background:var(--bg3);border-radius:6px;height:14px;overflow:hidden;margin:8px 0"><div style="width:${pct}%;height:100%;background:var(--green)"></div></div><div style="font-size:11px;color:var(--muted)">${pct}%</div>` : '';
+  return `<div class="r-section">
+    <div class="sec-title">🎯 progresso</div>
+    <div style="font-size:18px">${esc(String(atual??'?'))}${esc(unit)} <span style="color:var(--muted)">→ ${esc(String(target??'?'))}${esc(unit)}</span></div>
+    ${bar}
+    ${s.direction?`<div style="font-size:11px;color:var(--muted)">direção: ${esc(s.direction)}</div>`:''}
+  </div>`;
+}
+
+function _timerCard(r){
+  const st=r.status||{};
+  const rodando = st.running===true || st.state==='running' || !!st.started_at;
+  const cor = rodando?'var(--green)':'var(--muted)';
+  const desde = st.started_at?` desde ${fmtDt(st.started_at)}`:'';
+  const ult = st.last_duration||st.ultima_duracao;
+  return `<div class="r-section">
+    <div class="sec-title">⏱ estado</div>
+    <div style="font-size:18px;color:${cor}">${rodando?'▶ rodando'+esc(desde):'⏹ parado'}</div>
+    ${ult?`<div style="font-size:11px;color:var(--muted)">última duração: ${esc(String(ult))}</div>`:''}
+  </div>`;
+}
+
+function _trackerCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  const syn=s.syntax||r.name+':';
+  const unit=s.unit?' ('+esc(s.unit)+')':'';
+  const last=(st.ultimo_valor!=null?st.ultimo_valor:(st.last_value!=null?st.last_value:null));
+  const hoje=(st.count_today!=null?st.count_today:null);
+  return `<div class="r-section">
+    <div class="sec-title">📊 ${esc(s.unit||s.type||'tracker')}</div>
+    <div style="font-size:18px">${last!=null?esc(String(last))+(s.unit?' '+esc(s.unit):''):'<span style="color:var(--muted)">sem registro</span>'}</div>
+    ${hoje!=null?`<div style="font-size:11px;color:var(--muted)">hoje: ${esc(String(hoje))}</div>`:''}
+    <div class="tk-input" style="margin-top:8px">
+      <input id="tk-val" type="text" inputmode="decimal" autocomplete="off" placeholder="${esc(syn)} valor${unit}" onkeydown="if(event.key==='Enter')_tkLog('${escJs(syn)}')">
+      <button class="btn" style="border-color:var(--green);color:var(--green)" onclick="_tkLog('${escJs(syn)}')">registrar</button>
+    </div>
+  </div>`;
+}
+
+function _routineCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  const ativo = s.active===true || s.ativa===true;
+  return `<div class="r-section">
+    <div class="sec-title">🧩 rotina</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
+      ${_mi('agenda', s.schedule||s.agenda||'-')}
+      ${_mi('modelo', s.model||s.modelo||'none')}
+      ${_mi('ativo', ativo?'on':'off')}
+      ${_mi('último run', fmtDt(st.last_run)||'-')}
+      ${_mi('status', st.last_status||'-')}
+      ${_mi('execuções', st.run_count!=null?st.run_count:'-')}
+    </div>
+  </div>`;
+}
+
+function _alarmCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  return `<div class="r-section">
+    <div class="sec-title">⏰ alarme</div>
+    <div style="font-size:18px">${esc(String(s.time||s.hora||'--:--'))}</div>
+    <div style="margin:4px 0">${esc(String(s.message||s.mensagem||''))}</div>
+    <div style="font-size:11px;color:var(--muted)">${s.once?'uma vez':'diário'} · ${(s.active!==false)?'ativo':'inativo'}${st.last_fired?' · disparou '+fmtDt(st.last_fired):''}</div>
+  </div>`;
+}
+
 function _diffCard(r){ return ''; }
 function _docCard(r){ return ''; }
 function _promptCard(r){ return ''; }
