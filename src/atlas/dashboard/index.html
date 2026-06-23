@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atlas</title>
+<link rel="stylesheet" href="/dashboard/style.css">
+</head>
+<body>
+
+<!-- Token overlay -->
+<div id="token-overlay" style="display:none">
+  <div id="token-box">
+    <h2>⚡ Atlas</h2>
+    <p>Configure <code>ATLAS_API_TOKEN</code> no .env e cole aqui:</p>
+    <input id="token-input" type="password" placeholder="token…" autocomplete="off">
+    <button id="token-submit">Entrar</button>
+  </div>
+</div>
+
+<!-- Titlebar -->
+<div id="titlebar">
+  <button id="sb-toggle" onclick="toggleSidebar()" title="Menu">☰</button>
+  <span class="logo">⚡ ATLAS</span>
+  <span class="sep">/</span>
+  <input id="filter" type="text" placeholder="filtrar…" autocomplete="off">
+  <span class="spacer"></span>
+  <button class="btn" onclick="newResource()" title="Novo recurso  Ctrl+N" style="padding:3px 10px;font-size:11px">＋ Novo</button>
+  <button class="view-btn active" id="btn-status" onclick="setView('status')">◉ Status</button>
+  <button class="view-btn" id="btn-explorer" onclick="setView('explorer')">≡ Explorer</button>
+  <button class="view-btn" id="btn-graph" onclick="setView('graph')">⬡ Graph</button>
+  <span style="font-size:11px;color:var(--muted);margin-left:6px" id="status-bar">—</span>
+</div>
+
+<!-- Main workspace: sidebar + editor -->
+<div id="workspace">
+
+  <!-- Sidebar: árvore -->
+  <div id="sidebar">
+    <div id="sidebar-head">EXPLORER</div>
+    <div id="tree"></div>
+  </div>
+  <div id="sb-resize"></div>
+  <div id="sb-backdrop" onclick="toggleSidebar(false)"></div>
+
+  <!-- Editor: tabbar + content -->
+  <div id="editor">
+    <div id="tabbar">
+      <div class="tab tab-welcome active" data-id="welcome">
+        <span class="tab-icon">⚡</span>
+        <span class="tab-name">Bem-vindo</span>
+      </div>
+      <div class="tab-add" onclick="newResource()" title="Novo recurso">＋</div>
+    </div>
+    <div id="editor-content">
+      <div class="welcome">
+        <div class="w-logo">⚡</div>
+        <h2>Atlas Resource Explorer</h2>
+        <p>Clique em um recurso na árvore para abrir.<br>
+        <kbd>Ctrl+K</kbd> foca o terminal · <kbd>Tab</kbd> completa comandos<br>
+        <kbd>↑↓</kbd> histórico · <kbd>Ctrl+L</kbd> limpa terminal</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /workspace -->
+
+<!-- Graph builder view -->
+<div id="graph-view">
+  <div id="gv-toolbar">
+    <span class="gv-ttl">Graph · Resource Builder</span>
+    <select id="gv-kind-filter"><option value="">Todos os Kinds</option></select>
+    <span style="flex:1"></span>
+    <button class="btn" onclick="gvAutoLayout()" title="Reorganizar em colunas por Kind">⊞ Auto-layout</button>
+    <button class="btn" onclick="gvNew()">＋ Novo Recurso</button>
+    <button class="btn" onclick="loadGraph()" style="min-width:70px">↻ Refresh</button>
+  </div>
+  <div style="flex:1;display:flex;overflow:hidden;position:relative">
+    <div id="gv-palette">
+      <div class="gv-pal-ttl">＋ Blocos</div>
+    </div>
+    <div id="gv-canvas-wrap">
+      <svg id="gv-canvas"></svg>
+    </div>
+    <!-- Edit/create panel (slides from right) -->
+    <div id="ep">
+      <div id="ep-resize"></div>
+      <div id="ep-head">
+        <span id="ep-ttl" class="ep-ttl">Novo Recurso</span>
+        <span class="ep-x" onclick="epClose()">✕</span>
+      </div>
+      <div id="ep-body">
+        <div class="ep-field">
+          <label>Kind</label>
+          <select id="ep-kind" onchange="epKindTpl()"></select>
+        </div>
+        <div class="ep-field">
+          <label>Name</label>
+          <input id="ep-name" type="text" placeholder="nome único">
+        </div>
+        <div class="ep-sec">Labels</div>
+        <div id="ep-labels" class="ep-kvlist"></div>
+        <button class="ep-add" onclick="epAddKV('labels')">＋ label</button>
+        <div class="ep-sec">Spec</div>
+        <div id="ep-spec" class="ep-kvlist"></div>
+        <button class="ep-add" onclick="epAddKV('spec')">＋ campo spec</button>
+        <div class="ep-sec">Status</div>
+        <div id="ep-status" class="ep-kvlist"></div>
+        <button class="ep-add" onclick="epAddKV('status')">＋ campo status</button>
+      </div>
+      <div id="ep-foot">
+        <button class="btn" onclick="epSave()" style="flex:1">💾 Salvar</button>
+        <button class="btn danger" id="ep-del" onclick="epDelete()" style="display:none" title="Deletar">🗑</button>
+        <button class="btn" onclick="epClose()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status / overview view -->
+<div id="status-view">
+  <div id="sv-head">
+    <span class="sv-ttl">◉ Status do sistema</span>
+    <span style="flex:1"></span>
+    <span class="sv-clock" id="sv-clock">—</span>
+    <button class="btn" style="border-color:var(--purple);color:var(--purple)" onclick="aiInsight('system')">🧠 Insight IA</button>
+    <button class="btn" onclick="loadStatus()">↻</button>
+  </div>
+  <div id="sv-body"><div class="sv-empty">carregando…</div></div>
+</div>
+
+<!-- Bottom resize handle -->
+<div id="bot-resize"></div>
+
+<!-- Bottom panel: terminal -->
+<div id="bottom">
+  <div id="bot-tabbar">
+    <div class="bot-tab active">TERMINAL</div>
+  </div>
+  <div id="cli-wrap">
+    <div id="cli-output"></div>
+    <div id="cli-bar">
+      <span id="cli-prompt">$</span>
+      <div id="cli-suggestions"></div>
+      <input id="cli-input" type="text" placeholder="/ para comandos…" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="/dashboard/main.js"></script>
+<script src="/dashboard/kinds/repo.js"></script>
+</body>
+</html>

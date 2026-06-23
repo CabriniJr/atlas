@@ -207,4 +207,33 @@ def test_dashboard_html(api_server):
     conn.close()
     assert resp.status == 200
     assert "ATLAS" in body
-    assert "apis/atlas/v1" in body
+    assert "/dashboard/main.js" in body
+
+
+def test_dashboard_static_js(api_server):
+    conn = HTTPConnection("127.0.0.1", api_server)
+    conn.request("GET", "/dashboard/main.js")
+    resp = conn.getresponse()
+    body = resp.read().decode()
+    conn.close()
+    assert resp.status == 200
+    assert "apiFetch" in body
+
+
+def test_dashboard_static_css(api_server):
+    conn = HTTPConnection("127.0.0.1", api_server)
+    conn.request("GET", "/dashboard/style.css")
+    resp = conn.getresponse()
+    body = resp.read().decode()
+    conn.close()
+    assert resp.status == 200
+    assert "box-sizing" in body
+
+
+def test_dashboard_static_404(api_server):
+    conn = HTTPConnection("127.0.0.1", api_server)
+    conn.request("GET", "/dashboard/naoexiste.js")
+    resp = conn.getresponse()
+    resp.read()
+    conn.close()
+    assert resp.status == 404
