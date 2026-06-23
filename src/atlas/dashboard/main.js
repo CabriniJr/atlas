@@ -62,6 +62,20 @@ function updateStatus() {
     Object.keys(allKinds).length + ' kinds · ' + total + ' resources';
 }
 
+// ── Fullscreen (aba destacável) ──
+function toggleFullscreen() {
+  const isFs = document.body.classList.toggle('rk-fullscreen');
+  document.querySelectorAll('.rk-fullscreen-btn').forEach(b => {
+    b.textContent = isFs ? '⤡' : '⤢';
+    b.title = isFs ? 'Sair da tela cheia (Esc)' : 'Tela cheia';
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('rk-fullscreen')) {
+    toggleFullscreen();
+  }
+});
+
 // ── State ──
 let _curRes = null;   // currently rendered resource object
 let subTab  = {};     // tabId → 'card' | 'manifest'

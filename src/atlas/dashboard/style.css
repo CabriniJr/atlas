@@ -569,3 +569,39 @@ body[data-view="status"] #status-view{display:flex}
 .ag-input:focus{outline:none;border-color:var(--blue)}
 .ag-send{align-self:flex-end;padding:6px 14px;white-space:nowrap}
 .ag-spin{display:inline-block;width:10px;height:10px;border:2px solid var(--muted);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px}
+
+/* ── Fullscreen / aba destacável ─────────────────────────────────────────── */
+body.rk-fullscreen #titlebar,
+body.rk-fullscreen #bottom,
+body.rk-fullscreen #bot-resize,
+body.rk-fullscreen #sidebar,
+body.rk-fullscreen #sb-resize,
+body.rk-fullscreen #tabbar
+{ display:none!important }
+body.rk-fullscreen #workspace
+{ position:fixed;inset:0;z-index:200;height:100dvh }
+body.rk-fullscreen #editor
+{ border-radius:0 }
+
+/* ── Repo: log de execução ───────────────────────────────────────────────── */
+.rk-log{display:flex;flex-direction:column;height:100%;font-family:monospace;font-size:12px}
+.rk-log-spinner{display:flex;align-items:center;gap:8px;padding:10px 16px;color:var(--muted);border-bottom:1px solid var(--border);flex-shrink:0}
+.rk-log-lines{flex:1;overflow:auto;padding:8px 16px;display:flex;flex-direction:column;gap:2px}
+.rk-log-line{white-space:pre-wrap;word-break:break-word;padding:1px 0;color:var(--text)}
+.rk-log-line.ok{color:var(--green)}
+.rk-log-line.err{color:var(--red)}
+
+/* ── Repo: config form ───────────────────────────────────────────────────── */
+.rk-cfg-form{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.rk-cfg-form .rk-section{flex:1;overflow-y:auto}
+.rk-cfg-footer{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg2)}
+.rk-cfg-status{font-size:11px}.rk-cfg-status.ok{color:var(--green)}.rk-cfg-status.err{color:var(--red)}
+.rk-cfg-row{display:grid;grid-template-columns:160px 1fr;column-gap:12px;row-gap:3px;padding:8px 0;border-bottom:1px solid var(--bg3);align-items:start}
+.rk-cfg-row:last-child{border-bottom:none}
+.rk-cfg-label{font-size:12px;color:var(--muted);padding-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-cfg-hint{font-size:10px;color:var(--muted);grid-column:2;margin-top:2px}
+.rk-cfg-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;padding:4px 8px;font-family:inherit;box-sizing:border-box}
+.rk-cfg-input:focus{outline:none;border-color:var(--blue)}
+textarea.rk-cfg-input{resize:vertical;line-height:1.4}
+.rk-cfg-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text);padding-top:3px}
+.rk-cfg-toggle input[type=checkbox]{accent-color:var(--blue);width:14px;height:14px}

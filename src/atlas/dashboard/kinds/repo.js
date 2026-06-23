@@ -1,34 +1,15 @@
 /* Repo render especializada (ADR-0020 / E7-08).
- * Registra-se no RENDER_REGISTRY e substitui o card genérico quando se abre
- * um recurso do Kind Repo. Lê apenas da API e chama verbos — sem lógica de
- * domínio no front.
+ * Features: 5 abas (Overview/Branches/Commits/Graph/Config), log de execução
+ * em tempo real, fullscreen destacável, edição de spec via formulário.
  */
+
+// Estado de log por repo: name → {lines:[], running:bool}
+const _repoLogs = {};
 
 registerRender('Repo', async function renderRepo(r, container) {
   const name = r.name;
-  const s = r.spec || {};
-  const st = r.status || {};
-
   container.innerHTML = _repoShell(r);
-
-  // wire action buttons
-  container.querySelector('[data-action="edit"]')
-    ?.addEventListener('click', () => switchSubTab('manifest'));
-  container.querySelector('[data-action="backfill"]')
-    ?.addEventListener('click', () => _runBackfill(name));
-  container.querySelector('[data-action="sync"]')
-    ?.addEventListener('click', () => _runSync(name));
-
-  // wire tabs
-  container.querySelectorAll('.rk-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.rk-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      _loadRepoTab(name, btn.dataset.tab, container);
-    });
-  });
-
-  // load default tab
+  _wireRepo(name, container);
   _loadRepoTab(name, 'overview', container);
 });
 
@@ -52,9 +33,9 @@ function _repoShell(r) {
           style="font-size:11px;color:var(--blue)">${esc(s.url)}</a>` : ''}
       </div>
       <div class="rk-actions">
-        <button class="btn" data-action="sync" title="Executar repo-sync">↻ Sync</button>
+        <button class="btn" data-action="sync" title="Executar nora-sync">↻ Sync</button>
         <button class="btn" data-action="backfill" title="/repo backfill">⏮ Backfill</button>
-        <button class="btn" data-action="edit">✏️ Editar</button>
+        <button class="btn rk-fullscreen-btn" onclick="toggleFullscreen()" title="Tela cheia">⤢</button>
       </div>
     </div>
     <div class="rk-meta-bar">
@@ -67,11 +48,28 @@ function _repoShell(r) {
       <button class="rk-tab" data-tab="branches">🌿 Branches</button>
       <button class="rk-tab" data-tab="commits">📝 Commits</button>
       <button class="rk-tab" data-tab="graph">⬡ Graph</button>
+      <button class="rk-tab" data-tab="log" id="rk-log-tab-${esc(r.name)}">📋 Log</button>
+      <button class="rk-tab" data-tab="config">⚙️ Config</button>
     </div>
     <div class="rk-body" id="rk-body-${esc(r.name)}">
       <div style="padding:20px;color:var(--muted)">carregando…</div>
     </div>
   </div>`;
+}
+
+function _wireRepo(name, container) {
+  container.querySelector('[data-action="backfill"]')
+    ?.addEventListener('click', () => _runBackfill(name, container));
+  container.querySelector('[data-action="sync"]')
+    ?.addEventListener('click', () => _runSync(name, container));
+
+  container.querySelectorAll('.rk-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.rk-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _loadRepoTab(name, btn.dataset.tab, container);
+    });
+  });
 }
 
 // ── Tab dispatcher ────────────────────────────────────────────────────────────
@@ -85,6 +83,8 @@ async function _loadRepoTab(name, tab, container) {
       case 'branches':  await _tabBranches(name, body); break;
       case 'commits':   await _tabCommits(name, body); break;
       case 'graph':     await _tabGraph(name, body); break;
+      case 'log':       _tabLog(name, body); break;
+      case 'config':    await _tabConfig(name, body); break;
     }
   } catch (e) {
     body.innerHTML = `<div style="padding:16px;color:var(--red)">erro: ${esc(e.message)}</div>`;
@@ -108,7 +108,6 @@ async function _tabOverview(name, el) {
     el.querySelector(`#rk-diffs-${CSS.escape(name)}`),
   ];
 
-  // context doc
   apiFetch(`${API}/Doc/repo-${encodeURIComponent(name)}-contexto`)
     .then(doc => {
       const md = doc.spec?.body ? markdownToHtml(String(doc.spec.body))
@@ -123,7 +122,6 @@ async function _tabOverview(name, el) {
     })
     .catch(() => { if (ctxEl) ctxEl.textContent = 'contexto ainda não gerado'; });
 
-  // recent diffs
   apiFetch(`${API}/Diff`)
     .then(all => {
       const mine = (all || [])
@@ -154,7 +152,6 @@ async function _tabBranches(name, el) {
     return;
   }
 
-  // sort: default first, then alphabetical
   branches.sort((a, b) => {
     const ad = a.status?.is_default ? 0 : 1;
     const bd = b.status?.is_default ? 0 : 1;
@@ -195,7 +192,6 @@ async function _tabCommits(name, el) {
     return;
   }
 
-  // sort by date desc
   commits.sort((a, b) =>
     String(b.spec?.date || '').localeCompare(String(a.spec?.date || '')));
 
@@ -204,7 +200,8 @@ async function _tabCommits(name, el) {
       const sp = c.spec || {};
       const isMerge = sp.is_merge;
       const adds = sp.insertions ?? 0, dels = sp.deletions ?? 0;
-      const bLabel = (c.labels?.branch) ? `<span class="rk-badge branch">${esc(c.labels.branch)}</span>` : '';
+      const bLabel = c.labels?.branch
+        ? `<span class="rk-badge branch">${esc(c.labels.branch)}</span>` : '';
       return `<div class="rk-commit-row${isMerge ? ' merge' : ''}">
         <code class="rk-sha">${esc(sp.sha ? sp.sha.slice(0, 7) : c.name.split('-').pop())}</code>
         <div class="rk-commit-body">
@@ -232,23 +229,19 @@ async function _tabGraph(name, el) {
     return;
   }
 
-  // Build sha7 → commit map
   const byShа = {};
   commits.forEach(c => {
     const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
     byShа[sha7] = c;
   });
 
-  // Sort commits by date desc for display
   const sorted = [...commits].sort((a, b) =>
     String(b.spec?.date || '').localeCompare(String(a.spec?.date || '')));
 
-  // Lane assignment (greedy): sha7 → lane index
   const lanes = {};
-  const activeLanes = []; // each slot: sha7 of the "tip" or null
+  const activeLanes = [];
   sorted.forEach(c => {
     const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
-    // pick first free lane or first parent's lane
     const parents = (c.spec?.parents || []).filter(p => byShа[p]);
     let lane = parents.length
       ? (lanes[parents[0]] ?? activeLanes.findIndex(s => s === null))
@@ -262,12 +255,10 @@ async function _tabGraph(name, el) {
   const maxLane = Math.max(...Object.values(lanes), 0);
   const W = (maxLane + 1) * COL + 200;
   const H = sorted.length * ROW + 8;
-
   const LANE_COLORS = ['#58a6ff','#3fb950','#f78166','#d2a8ff','#ffa657','#79c0ff','#56d364'];
   const lc = l => LANE_COLORS[l % LANE_COLORS.length];
 
   let edges = '', nodes = '', labels = '';
-
   sorted.forEach((c, i) => {
     const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
     const lane = lanes[sha7] ?? 0;
@@ -275,7 +266,6 @@ async function _tabGraph(name, el) {
     const cy = i * ROW + ROW / 2 + 4;
     const color = lc(lane);
 
-    // draw edges to parents
     (c.spec?.parents || []).forEach(psha => {
       if (!byShа[psha]) return;
       const pidx = sorted.findIndex(x =>
@@ -288,10 +278,8 @@ async function _tabGraph(name, el) {
         fill="none" stroke="${lc(lane)}" stroke-width="1.5" opacity=".7"/>`;
     });
 
-    // draw node
     nodes += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${color}"/>`;
 
-    // label
     const sp = c.spec || {};
     const subj = (sp.subject || '').slice(0, 60);
     const meta = `${esc(sp.author?.split(' ')[0] || '')} ${sp.date ? _ago(sp.date) : ''}`;
@@ -305,11 +293,141 @@ async function _tabGraph(name, el) {
 
   el.innerHTML = `<div style="overflow:auto;height:100%;padding:8px">
     <svg width="${W}" height="${H}" style="min-width:${W}px">
-      <g>${edges}</g>
-      <g>${nodes}</g>
-      <g>${labels}</g>
+      <g>${edges}</g><g>${nodes}</g><g>${labels}</g>
     </svg>
   </div>`;
+}
+
+// ── Tab: Log (progresso/resultado de operações) ───────────────────────────────
+function _tabLog(name, el) {
+  const state = _repoLogs[name];
+  if (!state) {
+    el.innerHTML = `<div style="padding:24px 16px;color:var(--muted);font-size:13px">
+      Nenhuma operação registrada. Use ↻ Sync ou ⏮ Backfill para iniciar.</div>`;
+    return;
+  }
+  const spin = state.running
+    ? `<div class="rk-log-spinner"><span class="ag-spin"></span>em execução…</div>` : '';
+  const lines = (state.lines || []).map(l => {
+    const cls = l.startsWith('❌') || l.startsWith('⚠') ? 'err'
+               : l.startsWith('✅') || l.startsWith('📦') || l.startsWith('↻') ? 'ok'
+               : '';
+    return `<div class="rk-log-line ${cls}">${esc(l)}</div>`;
+  }).join('');
+  el.innerHTML = `<div class="rk-log">
+    ${spin}
+    <div class="rk-log-lines">${lines || '<span style="color:var(--muted)">sem saída</span>'}</div>
+  </div>`;
+}
+
+// ── Tab: Config (formulário de spec do Repo) ──────────────────────────────────
+async function _tabConfig(name, el) {
+  const repoSchema = (allSchema && allSchema['Repo']?.spec) || [];
+  let res;
+  try {
+    res = await apiFetch(`${API}/Repo/${encodeURIComponent(name)}`);
+  } catch (e) {
+    el.innerHTML = `<div style="padding:16px;color:var(--red)">Erro ao carregar: ${esc(e.message)}</div>`;
+    return;
+  }
+  const spec = res.spec || {};
+  const fields = repoSchema.length ? repoSchema : _repoDefaultFields();
+
+  el.innerHTML = `<div class="rk-cfg-form">
+    <div class="rk-section">
+      <div class="rk-sec-title">⚙️ Configuração — ${esc(name)}</div>
+      ${fields.map(f => _cfgField(f, spec[f.k])).join('')}
+    </div>
+    <div class="rk-cfg-footer">
+      <button class="btn" id="rk-cfg-save-${esc(name)}" style="color:var(--green);border-color:var(--green)">💾 Salvar</button>
+      <button class="btn" id="rk-cfg-reset-${esc(name)}">↺ Resetar</button>
+      <span class="rk-cfg-status" id="rk-cfg-status-${esc(name)}"></span>
+    </div>
+  </div>`;
+
+  const saveBtn = el.querySelector(`#rk-cfg-save-${CSS.escape(name)}`);
+  const resetBtn = el.querySelector(`#rk-cfg-reset-${CSS.escape(name)}`);
+  const statusEl = el.querySelector(`#rk-cfg-status-${CSS.escape(name)}`);
+
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    statusEl.textContent = 'salvando…';
+    statusEl.className = 'rk-cfg-status';
+    try {
+      const newSpec = _readCfgForm(el, fields, spec);
+      await apiFetch(`${API}/Repo/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          kind: 'Repo', name,
+          spec: newSpec,
+          labels: res.labels || {},
+          status: res.status || {},
+        }),
+      });
+      statusEl.textContent = '✅ Salvo';
+      statusEl.className = 'rk-cfg-status ok';
+    } catch (e) {
+      statusEl.textContent = '❌ ' + e.message;
+      statusEl.className = 'rk-cfg-status err';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  resetBtn.addEventListener('click', () => _tabConfig(name, el));
+}
+
+function _cfgField(f, value) {
+  const v = value ?? '';
+  const hint = f.hint ? `<div class="rk-cfg-hint">${esc(f.hint)}</div>` : '';
+  let inp;
+  if (f.type === 'bool') {
+    inp = `<label class="rk-cfg-toggle">
+      <input type="checkbox" data-k="${f.k}" ${v ? 'checked' : ''}>
+      <span>${esc(f.label)}</span>
+    </label>`;
+    return `<div class="rk-cfg-row">${inp}${hint}</div>`;
+  }
+  if (f.type === 'select') {
+    inp = `<select data-k="${f.k}" class="rk-cfg-input">
+      ${(f.opts || []).map(o => `<option${o === String(v) ? ' selected' : ''}>${esc(o)}</option>`).join('')}
+    </select>`;
+  } else if (f.type === 'area') {
+    inp = `<textarea data-k="${f.k}" class="rk-cfg-input" rows="3">${esc(String(v))}</textarea>`;
+  } else {
+    inp = `<input type="${f.type === 'number' ? 'number' : 'text'}" data-k="${f.k}" class="rk-cfg-input" value="${esc(String(v))}">`;
+  }
+  return `<div class="rk-cfg-row">
+    <label class="rk-cfg-label">${esc(f.label)}</label>
+    ${inp}
+    ${hint}
+  </div>`;
+}
+
+function _readCfgForm(el, fields, existingSpec) {
+  const spec = Object.assign({}, existingSpec);
+  fields.forEach(f => {
+    const inp = el.querySelector(`[data-k="${f.k}"]`);
+    if (!inp) return;
+    if (f.type === 'bool') spec[f.k] = inp.checked;
+    else if (f.type === 'number') spec[f.k] = inp.value !== '' ? Number(inp.value) : undefined;
+    else spec[f.k] = inp.value;
+    if (spec[f.k] === '' || spec[f.k] === undefined) delete spec[f.k];
+  });
+  return spec;
+}
+
+function _repoDefaultFields() {
+  return [
+    {k:'url', type:'text', label:'URL', hint:'https://github.com/user/repo'},
+    {k:'default_branch', type:'text', label:'Branch default', hint:'Vazio = detecta do remoto'},
+    {k:'serialize', type:'select', label:'Serializar arquivos', opts:['off','docs','docs+code'], hint:'Extrai texto dos arquivos alterados'},
+    {k:'analyze_branches', type:'text', label:'Analisar branches', hint:'default · all · lista por vírgula'},
+    {k:'analyze_skip_merges', type:'bool', label:'Pular merges na análise', hint:''},
+    {k:'analyze_min_lines', type:'number', label:'Mín. linhas p/ analisar', hint:'Ignora diffs menores'},
+    {k:'analyze_max_per_run', type:'number', label:'Máx. análises por run', hint:'Disjuntor de budget IA'},
+    {k:'stale_days', type:'number', label:'Dias p/ branch stale', hint:'Sem atividade além disso = stale'},
+  ];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -318,25 +436,58 @@ async function _fetchByLabel(kind, labelKey, labelVal) {
   return (all || []).filter(r => r.labels?.[labelKey] === labelVal);
 }
 
-async function _runBackfill(name) {
-  toast(`⏮ backfill ${name}…`);
+function _activateLogTab(name, container) {
+  container.querySelectorAll('.rk-tab').forEach(b => b.classList.remove('active'));
+  const logTab = container.querySelector('#rk-log-tab-' + CSS.escape(name));
+  if (logTab) logTab.classList.add('active');
+  const body = container.querySelector(`#rk-body-${CSS.escape(name)}`);
+  if (body) _tabLog(name, body);
+}
+
+function _appendLog(name, line) {
+  if (!_repoLogs[name]) _repoLogs[name] = {lines: [], running: false};
+  _repoLogs[name].lines.push(line);
+}
+
+async function _runBackfill(name, container) {
+  _repoLogs[name] = {lines: [`⏮ backfill ${name}…`], running: true};
+  _activateLogTab(name, container);
   try {
     const r = await apiFetch(`${API}/_cmd`, {
       method: 'POST',
       body: JSON.stringify({text: `/repo backfill ${name}`}),
     });
-    toast(r.output || 'ok');
-  } catch (e) { toast('erro: ' + e.message, true); }
+    const out = r.output || (r.ok ? '✅ ok' : '❌ sem saída');
+    out.split('\n').forEach(l => l && _appendLog(name, l));
+    if (!r.ok && !out.includes('❌')) _appendLog(name, '❌ falhou');
+  } catch (e) {
+    _appendLog(name, `❌ ${e.message}`);
+  } finally {
+    _repoLogs[name].running = false;
+    _activateLogTab(name, container);
+  }
 }
 
-async function _runSync(name) {
+async function _runSync(name, container) {
   const jobName = name + '-sync';
-  toast(`↻ sync ${name}…`);
+  _repoLogs[name] = {lines: [`↻ iniciando ${jobName}…`], running: true};
+  _activateLogTab(name, container);
   try {
     const r = await apiFetch(`${API}/_run`, {
       method: 'POST',
       body: JSON.stringify({routine: jobName}),
     });
-    toast(r.ok ? 'sync ok' : 'sync: ' + (r.output || 'erro'), !r.ok);
-  } catch (e) { toast('erro: ' + e.message, true); }
+    if (r.ok) {
+      _appendLog(name, '✅ sync concluído');
+      const out = r.output || '';
+      out.split('\n').forEach(l => l.trim() && _appendLog(name, l));
+    } else {
+      _appendLog(name, `❌ ${r.error || r.output || 'falhou'}`);
+    }
+  } catch (e) {
+    _appendLog(name, `❌ ${e.message}`);
+  } finally {
+    _repoLogs[name].running = false;
+    _activateLogTab(name, container);
+  }
 }
