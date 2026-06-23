@@ -5,7 +5,7 @@ status: aprovado
 versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-16
+atualizado-em: 2026-06-23
 ---
 
 # Backlog
@@ -18,6 +18,7 @@ atualizado-em: 2026-06-16
 | 1.2    | 2026-06-16 | Tech Lead | Pool de ideias (ADR-0014, prioridade máxima) = épico E6; alarmes (E5-07) | PO/PM |
 | 1.3    | 2026-06-16 | Tech Lead | Atualização de estados: E0-01/03/04 feitos; E1-11/E5-06/E2-01 feitos; E5-03/E3-01 feitos | — |
 | 1.4    | 2026-06-16 | Tech Lead | E1-05 scaffold feito; E4-07 feito; kinds Timer+CheckIn+labels adicionados ao core | — |
+| 1.5    | 2026-06-23 | Tech Lead | Épico E7 (carro-chefe Repo) + ADR-0023 proposto; ADRs irmãos 0020/0021/0022/0024; estado atual do repo-sync marcado como feito | — |
 
 ---
 
@@ -86,6 +87,44 @@ atualizado-em: 2026-06-16
 | E6-02 | Captura via Telegram (`/ideia`, `/tarefa`/`/licao`, `/rotina_nova`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
 | E6-03 | CRUD/priorização (`/ideias`, `/ideia <id>`, `prio`, `editar`, `feito`, `arquivar`, `remover`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
 | E6-04 | Laço de desenvolvimento: agente livre + item `rotina` → dispara meta-loop (gera inativo) + notifica | bloqueado (depende de E1-10 + E2) | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec meta-loop](../specs/meta-loop-chat.md) |
+
+## ⭐ Épico E7 — Repo como carro-chefe (multi-branch, git-graph, progresso) — **PRIORIDADE ALTA**
+> Especializar a capacidade mais importante do produto. Decisão: [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md).
+> Depende dos ADRs irmãos 0020 (quadro branco), 0022 (motor plugável) e 0024 (Agente)
+> para a experiência completa; o Repo materializa dados e degrada sem eles.
+
+### Já feito (estado atual do `repo-sync`)
+| ID | História | Estado | ADR/doc |
+|---|---|---|---|
+| E7-00a | Kind **Repo** + rotina `repo-sync`: clone raso, pull de `origin/HEAD`, diff single-branch | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
+| E7-00b | Kind **Diff** por commit com explicação de IA (Sonnet) | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
+| E7-00c | **Doc** de contexto do projeto (Opus, corpus README+docs+metadados, TTL) + **Doc** por commit | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
+| E7-00d | `Repo.status` com metadados do HEAD (last_commit/autor/data/stat) + schema/ações no `/_schema` | **feito** | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
+| E7-00e | Card de Repo no dashboard (contexto + diffs recentes) | **feito** | [api.py](../../src/atlas/api.py) |
+
+### A fazer (ADR-0023)
+| ID | História | Estado | ADR/doc |
+|---|---|---|---|
+| E7-01 | Kinds **`Branch`** e **`Commit`** (ocultos), agregados por label `repo=<label>` | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-02 | Pull **multi-branch**: fetch de todas as branches remotas + materialização de `Branch`/`Commit` leves | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-03 | **Git-graph híbrido**: grafo reconstruído de `Commit.parents`+ponteiros (store, offline); `Diff` pesado sob demanda | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-04 | **Serialização incremental por preset** (`off`/`docs`/`docs+code`) dos arquivos alterados → `Doc`; nunca binário compilado | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md) |
+| E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
+| E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) · ADR-0020 (reservado) |
+| E7-09 | **Progresso vs. meta**: amarrar Repo a um `Goal` (label) e mostrar avanço | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) · ADR-0020 (reservado) |
+| E7-11 | **Telegram do Repo**: notificações ricas (pool), prompts stateful opt-in, comandos simples, digest periódico | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0019](../arquitetura/adr/ADR-0019-interfaces-clientes-da-api.md) |
+
+### ADRs irmãos (mesmo brainstorm; a escrever/decidir)
+| ID | História | Estado | ADR/doc |
+|---|---|---|---|
+| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | proposto (a escrever) | ADR-0020 |
+| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | proposto (a escrever) | ADR-0021 |
+| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | proposto (a escrever) | ADR-0022 |
+| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | proposto (a escrever) | ADR-0024 |
+| E7-24 | **Agente Builder**: prompt → configura o Kind nos conformes do projeto → curadoria (gate humano) | proposto | ADR-0024, [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [revisor-curador](../agentes/revisor-curador.md) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |

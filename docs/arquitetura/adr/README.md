@@ -5,7 +5,7 @@ status: aprovado
 versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-17
+atualizado-em: 2026-06-23
 ---
 
 # Architecture Decision Records (ADRs)
@@ -20,6 +20,7 @@ atualizado-em: 2026-06-17
 | 1.4    | 2026-06-17 | Tech Lead | ADR-0017 (GUI por Kind abstrai a API) — aceito | PO/PM |
 | 1.5    | 2026-06-17 | Tech Lead | ADR-0018 (Manifestos declarativos e `apply -f`) — aceito | PO/PM |
 | 1.6    | 2026-06-17 | Tech Lead | ADR-0019 (Interfaces são clientes da API) — aceito | PO/PM |
+| 1.7    | 2026-06-23 | Tech Lead | ADR-0023 (Especialização do Kind Repo) — proposto; ADRs irmãos 0020/0021/0022/0024 reservados | — |
 
 ---
 
@@ -60,6 +61,19 @@ atualizado-em: 2026-06-17
 | [0017](ADR-0017-gui-por-kind-abstrai-api.md) | Todo Kind tem GUI completa que abstrai a API | aceito | Ações + config visual por Kind |
 | [0018](ADR-0018-manifestos-e-apply-f.md) | Manifestos declarativos e `apply -f`; interface como cliente da API | aceito | Manifestos de domínio + loader |
 | [0019](ADR-0019-interfaces-clientes-da-api.md) | Interfaces são clientes da API | aceito | API pura + /_schema (sub-projeto 2) |
+| [0023](ADR-0023-especializacao-kind-repo.md) | **Especialização do Kind Repo** (multi-branch, git-graph, serialização/análise) | **proposto** | Brainstorm Repo (carro-chefe) |
+
+## ADRs reservados (brainstorm de 2026-06-23)
+
+Números e títulos travados no brainstorm que originou o [ADR-0023](ADR-0023-especializacao-kind-repo.md)
+(épico [E7](../../roadmap/backlog.md) — Repo como carro-chefe). Cada um vira um ADR
+próprio quando entrar na fila e for desenhado; até lá **não há arquivo** (por isso
+sem link):
+
+- **ADR-0020** — Views especializadas por Kind (o "quadro branco" genérico).
+- **ADR-0021** — Renomeação Rotina → Job.
+- **ADR-0022** — Motor de IA selecionável e plugável (Ollama/Gemma local).
+- **ADR-0024** — Kind `Agente` (analisador configurável).
 
 ## Lastro
 
