@@ -1086,6 +1086,7 @@ function _renderSubContent(r, mode) {
     _bindEditorEvents(false);
   } else {
     ec.innerHTML = subtabs + `<div style="padding:20px 24px">${_cardHtml(r)}</div>`;
+    if (r.kind === 'Repo') _hydrateRepoCard(r.name);
   }
 }
 
@@ -1680,7 +1681,58 @@ function _genericCard(r){
 function _mi(k,v){ return `<div class="meta-item"><div class="mi-key">${esc(k)}</div><div class="mi-val">${esc(String(v))}</div></div>`; }
 
 // ── Kind-card stubs (replaced in Tasks 2–4) ───────────────────────────────────
-function _repoCard(r){ return ''; }
+function _repoCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  const commit = st.last_commit ? `<div style="font-size:14px">${esc(st.last_commit_msg||'(sem mensagem)')} <span style="color:var(--muted)">${esc(st.last_commit)}</span></div>
+    <div style="font-size:11px;color:var(--muted)">${st.last_author?esc(st.last_author)+' · ':''}${esc(fmtDt(st.last_commit_date))}</div>` : '<div style="color:var(--muted)">sem sync ainda</div>';
+  const stat = (st.files_changed!=null) ? `<div style="margin-top:6px">🗂 ${esc(String(st.files_changed))} arq · +${esc(String(st.insertions??0))}/-${esc(String(st.deletions??0))}</div>` : '';
+  const sync = `<div style="font-size:11px;color:var(--muted);margin-top:4px">${st.last_sync?'sync '+fmtDt(st.last_sync):''}${st.last_check?' · check '+fmtDt(st.last_check):''}</div>`;
+  const url = s.url ? `<div style="margin-top:6px"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--blue)">${esc(s.url)}</a></div>` : '';
+  const nm = escJs(r.name);
+  return `<div class="r-section">
+    <div class="sec-title">📦 repositório</div>
+    ${commit}${stat}${sync}${url}
+  </div>
+  <div class="r-section">
+    <div class="sec-title">🧠 contexto do projeto</div>
+    <div id="repo-ctx-${nm}" style="color:var(--muted)">carregando contexto…</div>
+  </div>
+  <div class="r-section">
+    <div class="sec-title">🔄 atualizações recentes</div>
+    <div id="repo-diffs-${nm}" style="color:var(--muted)">carregando diffs…</div>
+  </div>`;
+}
+
+async function _hydrateRepoCard(name){
+  const ctxEl = document.getElementById('repo-ctx-'+name);
+  const diffEl = document.getElementById('repo-diffs-'+name);
+  // contexto
+  try {
+    const doc = await apiFetch(API+'/Doc/repo-'+name+'-contexto');
+    const md = doc.spec&&doc.spec.body ? markdownToHtml(String(doc.spec.body)) : '<span style="color:var(--muted)">vazio</span>';
+    const gen = doc.status&&doc.status.generated_at ? `<div style="font-size:10px;color:var(--muted);margin-bottom:6px">modelo: ${esc((doc.status.model)||'-')} · ${esc(fmtDt(doc.status.generated_at))}</div>` : '';
+    if(ctxEl) ctxEl.innerHTML = `${gen}<details open><summary style="cursor:pointer;color:var(--blue);font-size:11px">ver/ocultar</summary><div class="md">${md}</div></details>`;
+  } catch(e){
+    if(ctxEl) ctxEl.innerHTML = '<span style="color:var(--muted)">contexto ainda não gerado</span>';
+  }
+  // diffs recentes do repo
+  try {
+    const all = await apiFetch(API+'/Diff');
+    const meus = (all||[]).filter(d=>d.labels&&d.labels.repo===name)
+      .sort((a,b)=>String(b.criado_em||'').localeCompare(String(a.criado_em||''))).slice(0,8);
+    if(diffEl){
+      diffEl.innerHTML = meus.length ? meus.map(d=>{
+        const sp=d.spec||{};
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openResource('Diff','${escJs(d.name)}')">
+          <div style="font-size:12px">${esc(sp.subject||sp.commit||d.name)}</div>
+          <div style="font-size:10px;color:var(--muted)">${esc(sp.commit||'')} · +${esc(String(sp.insertions??0))}/-${esc(String(sp.deletions??0))}</div>
+        </div>`;
+      }).join('') : '<span style="color:var(--muted)">sem atualizações ainda</span>';
+    }
+  } catch(e){
+    if(diffEl) diffEl.innerHTML = '<span style="color:var(--muted)">diffs indisponíveis</span>';
+  }
+}
 
 function _goalCard(r){
   const s=r.spec||{}, st=r.status||{};
