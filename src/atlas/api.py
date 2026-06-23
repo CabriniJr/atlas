@@ -1688,7 +1688,7 @@ function _repoCard(r){
   const stat = (st.files_changed!=null) ? `<div style="margin-top:6px">🗂 ${esc(String(st.files_changed))} arq · +${esc(String(st.insertions??0))}/-${esc(String(st.deletions??0))}</div>` : '';
   const sync = `<div style="font-size:11px;color:var(--muted);margin-top:4px">${st.last_sync?'sync '+fmtDt(st.last_sync):''}${st.last_check?' · check '+fmtDt(st.last_check):''}</div>`;
   const url = s.url ? `<div style="margin-top:6px"><a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--blue)">${esc(s.url)}</a></div>` : '';
-  const nm = escJs(r.name);
+  const nm = r.name;  // slug; usado em ids — deve casar com getElementById em _hydrateRepoCard
   return `<div class="r-section">
     <div class="sec-title">📦 repositório</div>
     ${commit}${stat}${sync}${url}
@@ -1708,7 +1708,7 @@ async function _hydrateRepoCard(name){
   const diffEl = document.getElementById('repo-diffs-'+name);
   // contexto
   try {
-    const doc = await apiFetch(API+'/Doc/repo-'+name+'-contexto');
+    const doc = await apiFetch(API+'/Doc/repo-'+encodeURIComponent(name)+'-contexto');
     const md = doc.spec&&doc.spec.body ? markdownToHtml(String(doc.spec.body)) : '<span style="color:var(--muted)">vazio</span>';
     const gen = doc.status&&doc.status.generated_at ? `<div style="font-size:10px;color:var(--muted);margin-bottom:6px">modelo: ${esc((doc.status.model)||'-')} · ${esc(fmtDt(doc.status.generated_at))}</div>` : '';
     if(ctxEl) ctxEl.innerHTML = `${gen}<details open><summary style="cursor:pointer;color:var(--blue);font-size:11px">ver/ocultar</summary><div class="md">${md}</div></details>`;

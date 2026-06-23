@@ -175,3 +175,62 @@ def test_clone_gera_contexto(tmp_path, monkeypatch):
         collect(ctx)
     doc = store.get("Doc", "repo-nora-contexto")
     assert doc is not None and doc.spec["body"] == "CTX RICO"
+
+
+def _fake_run_sync_sem_mudancas(args, **kw):
+    """git fake p/ o caminho de sync sem diff (rev-parse ok, diff vazio)."""
+    if args[1] == "rev-parse":
+        return _sp.CompletedProcess(args, 0, "abc1234\n", "")
+    return _sp.CompletedProcess(args, 0, "", "")
+
+
+def _preparar_repo_existente(tmp_path, monkeypatch, agora):
+    """Cria o clone em disco + Repo no store, sem passar pelo clone (caminho de sync)."""
+    monkeypatch.setenv("ATLAS_DB_PATH", str(tmp_path / "atlas.sqlite"))
+    store = ResourceStore(str(tmp_path / "atlas.sqlite"))
+    store.apply(Resource(kind="Repo", name="nora", spec={"url": "https://x/y"}), agora)
+    _montar_repo(tmp_path / "repos" / "nora")  # repo_dir = <ATLAS_DB_PATH dir>/repos/<label>
+    monkeypatch.setattr(_sp, "run", _fake_run_sync_sem_mudancas)
+    ctx = ContextoExecucao(rotina=_rotina(), db=Database(str(tmp_path / "m.db")), agora=agora)
+    ctx.store = store
+    return store, ctx
+
+
+def test_collect_regenera_contexto_obsoleto(tmp_path, monkeypatch):
+    agora = datetime(2026, 6, 21, 9, 0)
+    store, ctx = _preparar_repo_existente(tmp_path, monkeypatch, agora)
+    # contexto velho (10 dias) → obsoleto
+    store.apply(
+        Resource(
+            kind="Doc",
+            name="repo-nora-contexto",
+            labels={"tipo": "contexto"},
+            spec={"body": "ANTIGO"},
+            status={"generated_at": (agora - timedelta(days=10)).isoformat()},
+        ),
+        agora,
+    )
+    with patch("atlas.rotinas.repo_sync.invocar", return_value="CTX NOVO") as inv:
+        collect(ctx)
+    assert inv.called  # regenerou o contexto
+    assert store.get("Doc", "repo-nora-contexto").spec["body"] == "CTX NOVO"
+
+
+def test_collect_nao_regenera_contexto_fresco(tmp_path, monkeypatch):
+    agora = datetime(2026, 6, 21, 9, 0)
+    store, ctx = _preparar_repo_existente(tmp_path, monkeypatch, agora)
+    # contexto fresco (hoje) → não deve regenerar; diff vazio → sem análise
+    store.apply(
+        Resource(
+            kind="Doc",
+            name="repo-nora-contexto",
+            labels={"tipo": "contexto"},
+            spec={"body": "FRESCO"},
+            status={"generated_at": agora.isoformat()},
+        ),
+        agora,
+    )
+    with patch("atlas.rotinas.repo_sync.invocar", return_value="NAO_DEVE") as inv:
+        collect(ctx)
+    assert not inv.called  # contexto fresco + sem mudanças → nenhuma IA
+    assert store.get("Doc", "repo-nora-contexto").spec["body"] == "FRESCO"

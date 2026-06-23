@@ -6,7 +6,7 @@ Configuração via dois recursos no store:
        /apply Repo nora spec.url=https://github.com/sys0xFF/nora
 
   2. **Diff/<label>-<sha7>** — criado automaticamente a cada sync com mudanças;
-     guarda diff_raw, explicação Haiku e status do sync.
+     guarda diff_raw, explicação de IA (Sonnet) e status do sync.
 
 Routine TOML mínimo:
     nome     = "nora-sync"
@@ -165,7 +165,7 @@ def _contexto_obsoleto(label: str, store: ResourceStore, agora: datetime, ttl_da
         return True
     try:
         gerado = datetime.fromisoformat(ts)
-    except ValueError:
+    except (ValueError, TypeError):
         return True
     return agora - gerado > timedelta(days=ttl_days)
 
