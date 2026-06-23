@@ -73,9 +73,20 @@ abstração precisa existir agora para o Agente e o Repo a consumirem.
 - **Impacto na constituição:** estende ADR-0001/0016; reforça "agnóstico e plugável" e
   "economia do recurso escasso". Nenhuma decisão anterior muda.
 
+## Candidato testado (Ollama local)
+
+Em 2026-06-23, validou-se um servidor Ollama na LAN do dono:
+- **Endpoint:** `POST http://192.168.86.22:11434/api/chat`
+- **Modelo:** `gemma4` (gera respostas em PT-BR, expõe campo `thinking`)
+- **Performance:** ~38 tok/s, `load_duration` baixo (modelo residente)
+- **Formato:** API padrão `/api/chat` do Ollama, retorna `{message: {content: "..."}, ...}`
+
+É um candidato viável para o adapter `ollama` (baixa prioridade) e para o render chat do Kind `Agente` (E7 spec b).
+
 ## Pendências
 
 - Contrato exato do adapter (timeout, streaming, formato de saída, mapeamento de modelo).
 - Quais modelos locais suportar e requisitos (liga com o field-test arm64 — E1-05).
 - Política de budget/limites por motor ([ADR-0005](ADR-0005-orcamento-reativo.md)).
+- Integração do endpoint Ollama como adapter (`ollama` em `atlas.ia`, com fallback se indisponível).
 - Estratégia de fallback entre motores (quando e para qual).

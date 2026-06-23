@@ -52,7 +52,12 @@ num objeto configurável.
    pedido, em **modo análise 2a single-turn, sem tools**
    ([ADR-0001](ADR-0001-ia-em-dois-modos.md), [seguranca](../seguranca.md)). O
    `Agente` **não** é o "agente 2b" com ferramentas do meta-loop.
-5. **Agente Builder (evolução futura — backlog E7-24):** dado um prompt em linguagem
+5. **Render: chat de IA interativo** (E7 spec b — ADR-0020). O Kind `Agente` tem uma
+   renderização especializada no quadro branco: um **chat onde o usuário propõe prompts
+   e recebe respostas em tempo real**. Permite desenvolvimento ágil e experimentação com
+   diferentes motores/contextos sem recompilar. Motor plugável (ADR-0022) determina o
+   endpoint usado (Claude via API, Ollama local, etc.).
+6. **Agente Builder (evolução futura — backlog E7-24):** dado um prompt em linguagem
    natural, configura o Kind pedido **nos conformes do projeto** (schema/regras) e
    passa por **curadoria** ([ADR-0013](ADR-0013-barreira-de-entrada.md),
    [revisor-curador](../../agentes/revisor-curador.md)) antes de ativar. Não faz parte
