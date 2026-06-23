@@ -93,6 +93,10 @@ atualizado-em: 2026-06-23
 > Especializar a capacidade mais importante do produto. Decisão: [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md).
 > Depende dos ADRs irmãos 0020 (quadro branco), 0022 (motor plugável) e 0024 (Agente)
 > para a experiência completa; o Repo materializa dados e degrada sem eles.
+>
+> **Ao despachar um modelo desenvolvedor neste épico, aponte-o para o
+> [dossiê de contexto E7](../superpowers/plans/2026-06-23-repo-e7-dossie-contexto.md)** —
+> agrega ADRs, código, plano e padrões de teste em ordem de leitura.
 
 ### Já feito (estado atual do `repo-sync`)
 | ID | História | Estado | ADR/doc |

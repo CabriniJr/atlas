@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3, pytest, `unittest.mock`, git (via subprocess wrapper `_git`).
 
+**Contexto:** Leia antes o [dossiê de contexto E7](2026-06-23-repo-e7-dossie-contexto.md) — agrega ADRs, código e padrões de teste.
+
 **Escopo (backlog):** E7-01 (Kinds Branch/Commit) + a base de E7-02. Fora desta fatia: fetch de todas as remotas, serialização, `analyze_policy`, backfill, front, Telegram (planos seguintes).
 
 ---
