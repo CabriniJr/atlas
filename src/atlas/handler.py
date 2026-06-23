@@ -16,6 +16,7 @@ from datetime import datetime
 from atlas.alarmes import responder_alarmes
 from atlas.aliases import expandir, responder_snip
 from atlas.comandos import texto_ajuda, texto_boas_vindas
+from atlas.comandos_repo import responder_repo
 from atlas.controle import responder_controle
 from atlas.core.store import ResourceStore
 from atlas.db import Database
@@ -116,6 +117,11 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
     resposta_track = responder_trackers(texto, db, agora, store=store)
     if resposta_track is not None:
         return resposta_track
+
+    # Repo (E7-06): /repo backfill <label>
+    resposta_repo = responder_repo(texto, db, agora, store=store)
+    if resposta_repo is not None:
+        return resposta_repo
 
     if texto.startswith("/"):
         return "❓ unknown command. See /help"

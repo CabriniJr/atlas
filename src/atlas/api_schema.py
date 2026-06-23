@@ -102,11 +102,91 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
     },
     "Repo": {
-        "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync)"},
+        "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync, multi-branch)"},
         "spec": [
-            {"k": "url", "type": "text", "label": "URL", "hint": "https://github.com/user/repo"}
+            {"k": "url", "type": "text", "label": "URL", "hint": "https://github.com/user/repo"},
+            {
+                "k": "default_branch",
+                "type": "text",
+                "label": "Branch default",
+                "hint": "Vazio = detecta do remoto (origin/HEAD)",
+            },
+            {
+                "k": "branches_exclude",
+                "type": "text",
+                "label": "Excluir branches",
+                "hint": "Globs por vírgula, ex.: dependabot/*, tmp/*",
+            },
+            {
+                "k": "serialize",
+                "type": "select",
+                "label": "Serializar arquivos",
+                "opts": ["off", "docs", "docs+code"],
+                "hint": "Extrai texto dos arquivos alterados → Doc",
+            },
+            {
+                "k": "serialize_globs",
+                "type": "text",
+                "label": "Serializar (globs extra)",
+                "hint": "Além do preset, ex.: *.cfg",
+            },
+            {
+                "k": "analyze_branches",
+                "type": "text",
+                "label": "Analisar (IA) branches",
+                "hint": "default · all · allowlist por vírgula",
+            },
+            {
+                "k": "analyze_skip_merges",
+                "type": "bool",
+                "label": "Pular merges na análise",
+                "hint": "Não analisa commits de merge",
+            },
+            {
+                "k": "analyze_min_lines",
+                "type": "number",
+                "label": "Mín. linhas p/ analisar",
+                "hint": "Ignora diffs menores",
+            },
+            {
+                "k": "analyze_max_per_run",
+                "type": "number",
+                "label": "Máx. análises por run",
+                "hint": "Disjuntor de orçamento de IA",
+            },
+            {
+                "k": "stale_days",
+                "type": "number",
+                "label": "Dias p/ branch stale",
+                "hint": "Sem atividade além disso = stale",
+            },
         ],
         "labels": [],
+    },
+    "Branch": {
+        "meta": {"icon": "🌿", "desc": "Branch remota (oculto; aninhado no Repo)", "hidden": True},
+        "spec": [{"k": "branch", "type": "text", "label": "Branch", "hint": "Nome da branch"}],
+        "labels": [{"k": "repo", "label": "Repo", "hint": "Label do Repo"}],
+    },
+    "Commit": {
+        "meta": {"icon": "🔘", "desc": "Commit leve (oculto; nó do git-graph)", "hidden": True},
+        "spec": [
+            {"k": "subject", "type": "text", "label": "Assunto", "hint": "Mensagem"},
+            {"k": "author", "type": "text", "label": "Autor", "hint": "Autor"},
+        ],
+        "labels": [{"k": "repo", "label": "Repo", "hint": "Label do Repo"}],
+    },
+    "Diff": {
+        "meta": {
+            "icon": "📝",
+            "desc": "Diff pesado por commit (oculto; sob demanda)",
+            "hidden": True,
+        },
+        "spec": [
+            {"k": "subject", "type": "text", "label": "Assunto", "hint": "Mensagem do commit"},
+            {"k": "explicacao", "type": "area", "label": "Análise (IA)", "hint": "Explicação"},
+        ],
+        "labels": [{"k": "repo", "label": "Repo", "hint": "Label do Repo"}],
     },
     "Idea": {
         "meta": {"icon": "💡", "desc": "Ideia capturada para o pool"},
@@ -183,6 +263,12 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "Repo": [
         {"id": "insight", "label": "🧠 Insight", "verbo": "insight", "template": "{name}"},
+        {
+            "id": "backfill",
+            "label": "⏬ Backfill",
+            "verbo": "cmd",
+            "template": "/repo backfill {name}",
+        },
     ],
 }
 

@@ -45,6 +45,8 @@ COMANDOS: list[tuple[str, str]] = [
     ("ativar", "Alias PT-BR para /activate"),
     ("deactivate", "Deactivate a routine"),
     ("desativar", "Alias PT-BR para /deactivate"),
+    # --- repo ---
+    ("repo", "Repo ops: /repo backfill <label>"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
     ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Repo|Diff|Doc)"),

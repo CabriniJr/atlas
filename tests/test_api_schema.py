@@ -30,6 +30,31 @@ def test_acoes_por_kind():
     assert any(a["id"] == "check" for a in kinds["Goal"]["actions"])
 
 
+def test_repo_tem_campos_de_especializacao():
+    """ADR-0023: Repo ganha config schema-driven de multi-branch/serialize/analyze."""
+    repo = schema_payload()["kinds"]["Repo"]
+    campos = {c["k"]: c for c in repo["spec"]}
+    assert "serialize" in campos and campos["serialize"]["type"] == "select"
+    assert "off" in campos["serialize"]["opts"]
+    assert "docs+code" in campos["serialize"]["opts"]
+    assert "default_branch" in campos
+    assert "analyze_branches" in campos
+    assert "analyze_max_per_run" in campos
+
+
+def test_repo_tem_acao_backfill():
+    repo = schema_payload()["kinds"]["Repo"]
+    assert any(a["id"] == "backfill" for a in repo["actions"])
+
+
+def test_kinds_ocultos_branch_commit_diff():
+    """Branch/Commit/Diff são objetos de primeira classe, mas hidden (ADR-0023 §1)."""
+    kinds = schema_payload()["kinds"]
+    for k in ("Branch", "Commit", "Diff"):
+        assert k in kinds, f"{k} ausente no schema"
+        assert kinds[k]["meta"].get("hidden") is True
+
+
 def test_serializa_para_json():
     import json
 
