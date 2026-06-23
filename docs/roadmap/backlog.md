@@ -20,6 +20,7 @@ atualizado-em: 2026-06-23
 | 1.4    | 2026-06-16 | Tech Lead | E1-05 scaffold feito; E4-07 feito; kinds Timer+CheckIn+labels adicionados ao core | — |
 | 1.5    | 2026-06-23 | Tech Lead | Épico E7 (carro-chefe Repo) + ADR-0023 proposto; ADRs irmãos 0020/0021/0022/0024; estado atual do repo-sync marcado como feito | — |
 | 1.6    | 2026-06-23 | Tech Lead | ADRs irmãos 0020/0021/0022/0024 escritos (proposto); links atualizados | — |
+| 1.7    | 2026-06-23 | Tech Lead | ADR-0023 **aceito**; spec (a) dados/pull ([SPEC-REPO-DADOS](../specs/repo-especializacao-dados.md)) em implementação (E7-01..06 em-andamento) | PO/PM |
 
 ---
 
@@ -110,12 +111,12 @@ atualizado-em: 2026-06-23
 ### A fazer (ADR-0023)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-01 | Kinds **`Branch`** e **`Commit`** (ocultos), agregados por label `repo=<label>` | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-02 | Pull **multi-branch**: fetch de todas as branches remotas + materialização de `Branch`/`Commit` leves | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-03 | **Git-graph híbrido**: grafo reconstruído de `Commit.parents`+ponteiros (store, offline); `Diff` pesado sob demanda | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-04 | **Serialização incremental por preset** (`off`/`docs`/`docs+code`) dos arquivos alterados → `Doc`; nunca binário compilado | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md) |
-| E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
+| E7-01 | Kinds **`Branch`** e **`Commit`** (ocultos), agregados por label `repo=<label>` | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-02 | Pull **multi-branch**: fetch de todas as branches remotas + materialização de `Branch`/`Commit` leves | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-03 | **Git-graph híbrido**: grafo reconstruído de `Commit.parents`+ponteiros (store, offline); `Diff` pesado sob demanda | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-04 | **Serialização incremental por preset** (`off`/`docs`/`docs+code`) dos arquivos alterados → `Doc`; nunca binário compilado | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget — **versão degradada** (sem Kind `Agente` ainda) | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
 | E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
 | E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-09 | **Progresso vs. meta**: amarrar Repo a um `Goal` (label) e mostrar avanço | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |

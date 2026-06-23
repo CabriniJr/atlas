@@ -1,8 +1,8 @@
 ---
 titulo: ADR-0023 — Especialização do Kind Repo (multi-branch, git-graph, serialização e análise profundas)
 id: ADR-0023
-status: proposto
-versao: 0.1
+status: aceito
+versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
 atualizado-em: 2026-06-23
@@ -16,11 +16,14 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-06-23 | Tech Lead | Proposta (brainstorm com PO/PM) | — |
+| 1.0    | 2026-06-23 | Tech Lead | Aceito pelo PO/PM; spec (a) dados/pull em implementação ([SPEC-REPO-DADOS](../../specs/repo-especializacao-dados.md)) | PO/PM |
 
 ---
 
 ## Status
-`proposto` — aguardando aceite do PO/PM.
+`aceito`. A spec (a) **dados/pull** está em implementação
+([repo-especializacao-dados](../../specs/repo-especializacao-dados.md)). A spec (b)
+**front/git-graph** depende do ADR-0020 e fica para depois.
 
 ## Contexto
 
