@@ -107,15 +107,6 @@ def run(config: Config | None = None) -> None:
     db = Database(config.db_path)
     adapter = TelegramAdapter(config.telegram_token, poll_timeout=config.poll_timeout)
 
-    # Remove webhook antes do long-poll (evita HTTP 409 Conflict).
-    adapter.limpar_webhook()
-
-    # Registra o menu de comandos do Telegram (best-effort; não derruba o boot).
-    try:
-        adapter.registrar_comandos(para_telegram())
-    except Exception:  # noqa: BLE001 — sem rede/erro de API não impede operar
-        _log.warning("Não foi possível registrar os comandos no Telegram (segue mesmo assim).")
-
     # Carrega rotinas e prepara o agendador.
     carga = carregar_rotinas(Path(config.routines_dir))
     aplicar_overrides(db, carga.rotinas)  # ativação salva no DB sobrepõe o default (E5-02)
@@ -126,10 +117,22 @@ def run(config: Config | None = None) -> None:
     sincronizar_store(db, store, carga.rotinas)
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
 
-    # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon
+    # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon.
+    # Sobe ANTES do Telegram para não ficar refém da conectividade dele (ADR-0006):
+    # se o Telegram estiver fora, a API/dashboard/scheduler seguem no ar.
     from atlas.api import iniciar as iniciar_api
 
     iniciar_api(store)
+
+    # Setup do Telegram — best-effort; falha de rede não impede a API nem o scheduler.
+    try:
+        adapter.limpar_webhook()  # remove webhook antes do long-poll (evita HTTP 409)
+    except Exception:  # noqa: BLE001 — sem rede não impede operar
+        _log.warning("Telegram indisponível no boot (limpar_webhook); seguindo.")
+    try:
+        adapter.registrar_comandos(para_telegram())
+    except Exception:  # noqa: BLE001 — sem rede/erro de API não impede operar
+        _log.warning("Não foi possível registrar os comandos no Telegram (segue mesmo assim).")
 
     # Catch-up dos disparos perdidos enquanto esteve fora do ar (ADR-0006).
     try:
