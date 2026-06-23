@@ -71,8 +71,8 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [],
     },
-    "Routine": {
-        "meta": {"icon": "🧩", "desc": "Rotina agendada ou por trigger"},
+    "Job": {
+        "meta": {"icon": "🧩", "desc": "Job agendado ou por trigger (ex-Routine, ADR-0021)"},
         "spec": [
             {"k": "agenda", "type": "cron", "label": "Agenda", "hint": "Preset ou cron"},
             {
@@ -94,12 +94,21 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "coletar",
                 "type": "text",
                 "label": "Collect fn",
-                "hint": "default = nome da rotina",
+                "hint": "default = nome do job",
             },
         ],
         "labels": [
             {"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}
         ],
+    },
+    "Routine": {
+        "meta": {
+            "icon": "🧩",
+            "desc": "⚠️ Depreciado — use Job (ADR-0021)",
+            "hidden": True,
+        },
+        "spec": [],
+        "labels": [],
     },
     "Repo": {
         "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync, multi-branch)"},
@@ -296,6 +305,9 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "Tracker": [
         {"id": "register", "label": "📝 Registrar", "verbo": "cmd", "template": "{syntax} {valor}"},
+    ],
+    "Job": [
+        {"id": "run", "label": "▶ Executar", "verbo": "run", "template": "{name}"},
     ],
     "Routine": [
         {"id": "run", "label": "▶ Executar", "verbo": "run", "template": "{name}"},

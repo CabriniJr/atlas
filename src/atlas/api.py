@@ -421,7 +421,7 @@ def _status_payload() -> dict:
     except Exception:  # noqa: BLE001
         db = None
 
-    for r in _store.list("Routine"):
+    for r in _store.list("Job"):
         agenda = r.spec.get("schedule") or ""
         ativa = bool(r.spec.get("active"))
         ultimo = None

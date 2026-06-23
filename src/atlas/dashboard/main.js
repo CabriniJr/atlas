@@ -68,7 +68,8 @@ let subTab  = {};     // tabId → 'card' | 'manifest'
 
 // ── Kind helpers ──
 function kindIcon(k) {
-  const icons = {Doc:'📄',Tracker:'📊',Goal:'🎯',Alarm:'⏰',Timer:'⏱',Routine:'🔄',
+  const icons = {Doc:'📄',Tracker:'📊',Goal:'🎯',Alarm:'⏰',Timer:'⏱',
+    Job:'🧩',Routine:'🧩',  // Routine = alias legado de Job (ADR-0021)
     Idea:'💡',Task:'✅',RoutineRequest:'📋',Repo:'📦',Diff:'🔀',CheckIn:'📍',Agente:'🤖'};
   return icons[k] || '🗂';
 }
@@ -276,16 +277,21 @@ const _KIND_SCHEMA = {
     ],
     labels:[],
   },
-  Routine: {
-    meta: {icon:'🧩', desc:'Rotina agendada ou disparada por trigger'},
+  Job: {
+    meta: {icon:'🧩', desc:'Job agendado ou por trigger (ex-Routine, ADR-0021)'},
     spec: [
       {k:'agenda',  type:'cron',  label:'Agenda',         hint:'Escolha um preset ou edite o cron'},
       {k:'modelo',  type:'select',label:'Modelo IA',      opts:['none','claude-haiku-4-5-20251001','claude-sonnet-4-6'], hint:'none = sem IA'},
       {k:'saida',   type:'select',label:'Saída',          opts:['telegram','none'], hint:'Destino do resultado'},
       {k:'label',   type:'text',  label:'Label grupo',    hint:'Grupo de recursos (coletar-por-label)'},
-      {k:'coletar', type:'text',  label:'Collect fn',     hint:'Nome da função collect; default = nome da rotina'},
+      {k:'coletar', type:'text',  label:'Collect fn',     hint:'Nome da função collect; default = nome do job'},
     ],
     labels: [{k:'domain',label:'Domínio',hint:'fisico · estudo · sono · saude · trabalho'}],
+  },
+  Routine: {  // alias legado — não aparece no explorer (hidden via /_schema)
+    meta: {icon:'🧩', desc:'Depreciado — use Job'},
+    spec: [],
+    labels: [],
   },
   Repo: {
     meta: {icon:'📦', desc:'Repositório git monitorado pelo collect repo-sync'},
@@ -356,7 +362,8 @@ const _MANIFEST_TPL = {
   Goal:           {kind:'Goal',          name:'',labels:{},spec:{target:0,start:0,unit:'',tracker:'',direction:'down'},status:{}},
   Alarm:          {kind:'Alarm',         name:'',labels:{},spec:{hora:'07:30',mensagem:'',once:false},status:{}},
   Timer:          {kind:'Timer',         name:'',labels:{},spec:{},status:{}},
-  Routine:        {kind:'Routine',       name:'',labels:{},spec:{agenda:'0 9 * * *',modelo:'none',saida:'telegram',ativa:false},status:{}},
+  Job:            {kind:'Job',           name:'',labels:{},spec:{agenda:'0 9 * * *',modelo:'none',saida:'telegram',ativa:false},status:{}},
+  Routine:        {kind:'Job',           name:'',labels:{},spec:{agenda:'0 9 * * *',modelo:'none',saida:'telegram',ativa:false},status:{}},
   Repo:           {kind:'Repo',          name:'',labels:{},spec:{url:'https://github.com/user/repo'},status:{}},
   Diff:           {kind:'Diff',          name:'',labels:{repo:''},spec:{commit:'',diff_raw:'',explicacao:''},status:{}},
   Idea:           {kind:'Idea',          name:'',labels:{},spec:{body:''},status:{}},

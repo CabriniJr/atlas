@@ -126,3 +126,56 @@ def test_resiliencia_objeto_corrompido_nao_quebra_list():
     nomes = {r.name for r in s.list("Idea")}
     assert "boa" in nomes  # a boa sobrevive
     assert "ruim" not in nomes  # a corrompida é pulada, não derruba o list
+
+
+# ---------------------------------------------------------------------------
+# E7-21 — Alias Job ↔ Routine (ADR-0021)
+# ---------------------------------------------------------------------------
+
+def test_job_lista_recursos_routine():
+    """list('Job') devolve recursos criados como kind=Routine."""
+    s = _store()
+    s.create(Resource(kind="Routine", name="diario"), agora=T0)
+    jobs = s.list("Job")
+    assert len(jobs) == 1
+    assert jobs[0].name == "diario"
+
+
+def test_job_get_encontra_routine():
+    s = _store()
+    s.create(Resource(kind="Routine", name="checkin"), agora=T0)
+    r = s.get("Job", "checkin")
+    assert r is not None
+    assert r.name == "checkin"
+
+
+def test_job_lista_ambos_routine_e_job():
+    """list('Job') combina Routine e Job numa única lista."""
+    s = _store()
+    s.create(Resource(kind="Routine", name="antigo"), agora=T0)
+    s.create(Resource(kind="Job", name="novo"), agora=T0)
+    nomes = {r.name for r in s.list("Job")}
+    assert "antigo" in nomes and "novo" in nomes
+
+
+def test_kinds_expoe_job_quando_ha_routine():
+    """kinds() mostra 'Job' em vez de 'Routine' quando há recursos Routine."""
+    s = _store()
+    s.create(Resource(kind="Routine", name="x"), agora=T0)
+    k = set(s.kinds())
+    assert "Job" in k
+    assert "Routine" not in k
+
+
+def test_kinds_job_direto():
+    """kinds() mostra 'Job' para recursos novos gravados como Job."""
+    s = _store()
+    s.create(Resource(kind="Job", name="novo"), agora=T0)
+    assert "Job" in set(s.kinds())
+
+
+def test_routine_list_continua_funcionando():
+    """list('Routine') ainda funciona para compatibilidade com código legado."""
+    s = _store()
+    s.create(Resource(kind="Routine", name="legado"), agora=T0)
+    assert s.list("Routine")[0].name == "legado"

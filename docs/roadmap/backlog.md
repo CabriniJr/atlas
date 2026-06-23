@@ -118,16 +118,16 @@ atualizado-em: 2026-06-23
 | E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget — **versão degradada** (sem Kind `Agente` ainda) | **feito** (degradado; troca p/ Agente quando ADR-0024 entrar) | [analyze.py](../../src/atlas/rotinas/repo_sync/analyze.py), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md), [spec](../specs/repo-especializacao-dados.md) |
 | E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | **feito** | [backfill.py](../../src/atlas/rotinas/repo_sync/backfill.py), [spec](../specs/repo-especializacao-dados.md) |
 | E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | **parcial** — campos de branches/serialize/analyze no schema; `goal` fica p/ E7-09 | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
-| E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
+| E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | **feito** | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-09 | **Progresso vs. meta**: amarrar Repo a um `Goal` (label) e mostrar avanço | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
+| E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | **feito** | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-11 | **Telegram do Repo**: notificações ricas (pool), prompts stateful opt-in, comandos simples, digest periódico | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0019](../arquitetura/adr/ADR-0019-interfaces-clientes-da-api.md) |
 
 ### ADRs irmãos (mesmo brainstorm)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
 | E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | **feito** | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md), [dashboard/](../../src/atlas/dashboard/) |
-| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | **aceito** (a implementar) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
+| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | **feito** | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
 | E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local) | **feito** | [ia.py](../../src/atlas/ia.py), [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
 | E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | **feito** (schema + `/_chat`) | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
 | E7-24 | **Agente Builder**: prompt natural → configura Kind Agente automaticamente — **CRÍTICO p/ curadoria automática** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [[autonomous-dev-loop]] |
