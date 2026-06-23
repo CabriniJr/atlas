@@ -21,9 +21,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import subprocess
 import threading
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import uuid
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,12 @@ _log = logging.getLogger("atlas.api")
 _API_PREFIX = "/apis/atlas/v1"
 _TOKEN = os.environ.get("ATLAS_API_TOKEN", "")
 _PORT = int(os.environ.get("ATLAS_API_PORT", "8080"))
+# Raiz do projeto Atlas — usada pelo agente modo=code para cwd + --add-dir
+_PROJECT_DIR = str(
+    Path(os.environ["ATLAS_PROJECT_DIR"]).resolve()
+    if "ATLAS_PROJECT_DIR" in os.environ
+    else Path(__file__).parent.parent.parent.resolve()
+)
 
 # Store injetado no boot — partilhado com o bot Telegram
 _store: ResourceStore | None = None
@@ -136,6 +144,41 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(503, {"error": "store not ready"})
             return
 
+        # SSE stream de um run agêntico: GET /_agent_run/{run_id}/stream
+        _ar_prefix = _API_PREFIX + "/_agent_run/"
+        if path.startswith(_ar_prefix) and path.endswith("/stream"):
+            run_id = path[len(_ar_prefix):-len("/stream")]
+            with _runs_lock:
+                run = _runs.get(run_id)
+            if run is None:
+                self._json(404, {"error": f"run '{run_id}' não encontrado"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            _stream_run_sse(run, self.wfile)
+            return
+
+        # GET /_agent_run/{run_id} → estado do run (done, event count)
+        if path.startswith(_ar_prefix):
+            run_id = path[len(_ar_prefix):]
+            with _runs_lock:
+                run = _runs.get(run_id)
+            if run is None:
+                self._json(404, {"error": f"run '{run_id}' não encontrado"})
+                return
+            with run["cond"]:
+                self._json(200, {
+                    "id": run["id"], "agente": run["agente"],
+                    "task": run["task"], "done": run["done"],
+                    "event_count": len(run["events"]),
+                    "started_at": run["started_at"],
+                })
+            return
+
         if path == _API_PREFIX:
             counts = {k: len(_store.list(k)) for k in _store.kinds()}
             self._json(200, counts)
@@ -217,6 +260,21 @@ class _Handler(BaseHTTPRequestHandler):
         # Chat interativo do Kind Agente (E7-25, ADR-0024).
         if path == _API_PREFIX + "/_chat":
             self._json(200, _agente_chat(body.get("agente", ""), body.get("mensagem", ""), _store))
+            return
+
+        # Agente modo=code — inicia run agêntico em background, devolve run_id.
+        if path == _API_PREFIX + "/_agent_run":
+            agente_name = body.get("agente", "").strip()
+            mensagem = body.get("mensagem", "").strip()
+            if not agente_name or not mensagem:
+                self._json(400, {"error": "agente e mensagem obrigatórios"})
+                return
+            run = _new_run(agente_name, mensagem)
+            threading.Thread(
+                target=_run_agent_bg, args=(run, _store),
+                daemon=True, name=f"agent-run-{run['id']}",
+            ).start()
+            self._json(202, {"run_id": run["id"], "agente": agente_name})
             return
 
         if path != _API_PREFIX + "/_cmd":
@@ -725,6 +783,171 @@ def _schema_context(store: ResourceStore, *, completo: bool = False) -> str:
     return "\n".join(linhas)
 
 
+# ── Registro de runs agênticos (in-memory, máx 30) ──────────────────────────
+_runs: dict[str, dict] = {}
+_runs_lock = threading.Lock()
+_RUNS_MAX = 30
+
+
+def _new_run(agente_name: str, mensagem: str) -> dict:
+    """Cria entrada de run no registro; descarta os mais velhos acima do limite."""
+    run_id = uuid.uuid4().hex[:8]
+    run: dict = {
+        "id": run_id,
+        "agente": agente_name,
+        "task": mensagem,
+        "events": [],
+        "done": False,
+        "started_at": datetime.now().isoformat(),
+        "cond": threading.Condition(threading.Lock()),
+    }
+    with _runs_lock:
+        if len(_runs) >= _RUNS_MAX:
+            oldest = min(_runs.keys(), key=lambda k: _runs[k]["started_at"])
+            del _runs[oldest]
+        _runs[run_id] = run
+    return run
+
+
+def _emit(run: dict, obj: dict) -> None:
+    """Adiciona evento ao run e notifica waiters."""
+    with run["cond"]:
+        run["events"].append(obj)
+        run["cond"].notify_all()
+
+
+def _finish_run(run: dict) -> None:
+    with run["cond"]:
+        run["done"] = True
+        run["cond"].notify_all()
+
+
+def _run_agent_bg(run: dict, store: ResourceStore) -> None:
+    """Thread de background: roda claude CLI e publica eventos no run."""
+    from atlas.ia import _resolver_claude  # noqa: PLC0415
+
+    agente_name = run["agente"]
+    mensagem = run["task"]
+
+    agente = store.get("Agente", agente_name) if store else None
+    if agente is None:
+        _emit(run, {"type": "error", "message": f"Agente '{agente_name}' não encontrado"})
+        _finish_run(run)
+        return
+
+    spec = agente.spec or {}
+    modelo = spec.get("modelo") or "claude-sonnet-4-6"
+    system_prompt = spec.get("prompt", "")
+    timeout = int(spec.get("timeout") or 300)
+    cwd = _PROJECT_DIR
+
+    try:
+        claude_bin = _resolver_claude()
+    except Exception as exc:  # noqa: BLE001
+        _emit(run, {"type": "error", "message": f"claude CLI não encontrado: {exc}"})
+        _finish_run(run)
+        return
+
+    # O prompt é argumento posicional — deve vir DEPOIS de todos os flags
+    # stream-json exige --verbose (retorna eventos em tempo real)
+    args = [
+        claude_bin, "-p",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+        "--model", modelo,
+        "--add-dir", cwd,
+    ]
+    if system_prompt:
+        args += ["--append-system-prompt", system_prompt]
+    args += [mensagem]
+
+    _emit(run, {"type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd})
+
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=cwd,
+        )
+
+        for raw_line in proc.stdout:  # type: ignore[union-attr]
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+                _emit(run, event)
+            except json.JSONDecodeError:
+                _emit(run, {"type": "raw", "text": line})
+
+        proc.wait(timeout=30)
+        if proc.returncode != 0:
+            _emit(run, {"type": "error", "message": f"claude encerrou com código {proc.returncode}"})
+        else:
+            _emit(run, {"type": "done"})
+
+    except subprocess.TimeoutExpired:
+        _emit(run, {"type": "error", "message": f"timeout após {timeout}s"})
+    except FileNotFoundError:
+        _emit(run, {"type": "error", "message": "binário 'claude' não encontrado"})
+    except Exception as exc:  # noqa: BLE001
+        _emit(run, {"type": "error", "message": str(exc)})
+    finally:
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+        _finish_run(run)
+
+
+def _stream_run_sse(run: dict, wfile) -> None:
+    """Envia (replay + live) eventos de um run via SSE para o cliente."""
+    cond = run["cond"]
+
+    def _sse(obj: dict) -> bool:
+        try:
+            wfile.write(("data: " + json.dumps(obj, ensure_ascii=False) + "\n\n").encode())
+            wfile.flush()
+            return True
+        except (BrokenPipeError, OSError):
+            return False
+
+    sent_idx = 0
+    try:
+        while True:
+            with cond:
+                chunk = list(run["events"][sent_idx:])
+                is_done = run["done"]
+
+            for ev in chunk:
+                if not _sse(ev):
+                    return  # cliente desconectou
+            sent_idx += len(chunk)
+
+            if is_done:
+                break  # run encerrou e todos os eventos foram enviados
+
+            # Aguarda novo evento (timeout p/ evitar deadlock se o cliente sumiu)
+            with cond:
+                if not run["done"] and len(run["events"]) <= sent_idx:
+                    cond.wait(timeout=5)
+
+        # Varredura final (pode haver eventos adicionados entre checks)
+        with cond:
+            chunk = list(run["events"][sent_idx:])
+        for ev in chunk:
+            _sse(ev)
+
+    except (BrokenPipeError, OSError):
+        pass
+
+
 def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | None:
     """Salva o insight como Doc. Para repo, fica na 'pasta' do repo (labels.repo)."""
     if _store is None:
@@ -769,7 +992,7 @@ def iniciar(store: ResourceStore, port: int = _PORT) -> None:
     global _store
     _store = store
 
-    server = HTTPServer(("0.0.0.0", port), _Handler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
 
     def _run() -> None:
         _log.info(

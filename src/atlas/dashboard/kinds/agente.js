@@ -54,8 +54,12 @@ function _wireAgente(name, s, container) {
 function _loadAgenteTab(name, s, tab, container) {
   const body = container.querySelector(`#ag-body-${CSS.escape(name)}`);
   if (!body) return;
-  if (tab === 'chat') _tabChat(name, s, body);
-  else if (tab === 'config') _tabAgenteConfig(name, body);
+  if (tab === 'chat') {
+    if (s.modo === 'code') _tabChatCode(name, s, body);
+    else _tabChat(name, s, body);
+  } else if (tab === 'config') {
+    _tabAgenteConfig(name, body);
+  }
 }
 
 // ── Tab: Chat ─────────────────────────────────────────────────────────────────
@@ -202,6 +206,242 @@ function _appendCmdButtons(msgsEl, commands) {
       }
     });
   });
+}
+
+// ── Tab: Chat (modo=code — Claude Code agêntico) ──────────────────────────────
+// Histórico de sessões por agente (user msgs + sessões concluídas)
+const _codeHist = {};
+// Run ativo por agente: { run_id, events[], done, sessEl (pode ser null/detached) }
+const _codeRuns = {};
+
+function _tabChatCode(name, s, el) {
+  if (!_codeHist[name]) _codeHist[name] = [];
+  const hist = _codeHist[name];
+  const modelo = s.modelo || 'claude-sonnet-4-6';
+  const activeRun = _codeRuns[name] || null;
+
+  el.innerHTML = `<div class="ag-chat-wrap">
+    <div class="ag-toolbar">
+      <span class="ag-badge code">⚡ Claude Code</span>
+      <span style="color:var(--muted);font-size:11px">${esc(modelo)}</span>
+      ${activeRun && !activeRun.done
+        ? `<span class="ag-run-badge" id="agc-runbadge-${esc(name)}">⏳ executando…</span>`
+        : ''}
+      <button class="btn" id="agc-clear-${esc(name)}" style="font-size:11px;padding:2px 8px;margin-left:auto">🗑 Limpar</button>
+    </div>
+    <div class="ag-messages" id="agc-msgs-${esc(name)}">
+      ${hist.length === 0 && !(activeRun && !activeRun.done)
+        ? `<div class="ag-hint">Diga ao <strong>${esc(name)}</strong> o que fazer.<br>
+           Ele pode ler, editar e criar arquivos do projeto.<br>
+           <em>Ex: "adiciona o campo goal ao spec do Repo"</em></div>`
+        : hist.map(m => m.type === 'user'
+            ? _msgHtml('user', m.content)
+            : `<div class="ag-code-session">${m.content}</div>`
+          ).join('')
+      }
+    </div>
+    <div class="ag-input-bar">
+      <textarea class="ag-input" id="agc-input-${esc(name)}"
+        placeholder="Descreva a tarefa… (Enter envia, Shift+Enter nova linha)" rows="2"></textarea>
+      <button class="btn ag-send" id="agc-send-${esc(name)}"
+        ${activeRun && !activeRun.done ? 'disabled' : ''}>Executar ↵</button>
+    </div>
+  </div>`;
+
+  const msgsEl = el.querySelector(`#agc-msgs-${CSS.escape(name)}`);
+  const inputEl = el.querySelector(`#agc-input-${CSS.escape(name)}`);
+  const sendBtn = el.querySelector(`#agc-send-${CSS.escape(name)}`);
+  const clearBtn = el.querySelector(`#agc-clear-${CSS.escape(name)}`);
+
+  // Se há um run ativo, reconectar ao SSE stream e exibir eventos já acumulados
+  if (activeRun && !activeRun.done) {
+    const sessEl = _attachLiveSession(name, msgsEl, activeRun);
+    _subscribeRunStream(name, activeRun, sessEl, msgsEl, sendBtn);
+  }
+
+  if (hist.length > 0) msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  clearBtn?.addEventListener('click', () => {
+    if (_codeRuns[name] && !_codeRuns[name].done) return; // não limpa enquanto roda
+    _codeHist[name] = [];
+    msgsEl.innerHTML = '<div class="ag-hint">Log limpo.</div>';
+  });
+
+  async function runTask() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = '';
+    sendBtn.disabled = true;
+    sendBtn.textContent = '⏳ Iniciando…';
+
+    hist.push({type: 'user', content: text});
+    msgsEl.innerHTML += _msgHtml('user', text);
+
+    let run;
+    try {
+      const r = await apiFetch(`${API}/_agent_run`, {
+        method: 'POST',
+        body: JSON.stringify({agente: name, mensagem: text}),
+      });
+      if (r.error) throw new Error(r.error);
+      run = {run_id: r.run_id, events: [], done: false};
+      _codeRuns[name] = run;
+    } catch (e) {
+      msgsEl.innerHTML += _msgHtml('error', `⚠️ ${esc(e.message)}`);
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Executar ↵';
+      return;
+    }
+
+    // container para os eventos desta execução
+    const sessEl = _attachLiveSession(name, msgsEl, run);
+    sendBtn.textContent = '⏳ Executando…';
+
+    // Atualiza badge
+    const badge = el.querySelector(`#agc-runbadge-${CSS.escape(name)}`);
+    if (!badge) {
+      const tb = el.querySelector('.ag-toolbar');
+      if (tb) {
+        const b = document.createElement('span');
+        b.className = 'ag-run-badge';
+        b.id = `agc-runbadge-${name}`;
+        b.textContent = '⏳ executando…';
+        tb.insertBefore(b, clearBtn);
+      }
+    }
+
+    _subscribeRunStream(name, run, sessEl, msgsEl, sendBtn);
+  }
+
+  sendBtn.addEventListener('click', runTask);
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runTask(); }
+  });
+  if (!activeRun || activeRun.done) inputEl.focus();
+}
+
+function _attachLiveSession(name, msgsEl, run) {
+  // Cria (ou reutiliza) o container de eventos do run atual
+  const sessId = `agc-live-${CSS.escape(name)}`;
+  let sessEl = msgsEl.querySelector(`#${sessId}`);
+  if (!sessEl) {
+    sessEl = document.createElement('div');
+    sessEl.className = 'ag-code-session';
+    sessEl.id = sessId;
+    msgsEl.appendChild(sessEl);
+  }
+  // Replay de eventos já acumulados no run (caso o usuário tenha navegado)
+  const rendered = sessEl.children.length;
+  for (let i = rendered; i < run.events.length; i++) {
+    _appendCodeEventToEl(run.events[i], sessEl);
+  }
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return sessEl;
+}
+
+function _subscribeRunStream(name, run, sessEl, msgsEl, sendBtn) {
+  const streamUrl = `${API}/_agent_run/${run.run_id}/stream`;
+  const es = new EventSource(streamUrl);
+
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    run.events.push(ev);
+    _appendCodeEventToEl(ev, sessEl);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+
+    if (ev.type === 'done' || ev.type === 'error') {
+      run.done = true;
+      es.close();
+      // Salva sessão no hist e limpa run ativo
+      _codeHist[name].push({type: 'session', content: sessEl.innerHTML});
+      delete _codeRuns[name];
+      // Restaura UI
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Executar ↵'; }
+      const badge = document.getElementById(`agc-runbadge-${name}`);
+      if (badge) badge.remove();
+    }
+  };
+
+  es.onerror = () => {
+    if (run.done) { es.close(); return; }
+    // Reconecta automaticamente (EventSource faz retry nativo)
+  };
+}
+
+function _appendCodeEventToEl(ev, sessEl) {
+  const type = ev.type;
+  let cls = null, html = null;
+
+  if (type === 'init') {
+    // Evento interno de início do run (criado por nós)
+    cls = 'init'; html = `🚀 <strong>${esc(ev.agente)}</strong> · ${esc(ev.modelo)}`;
+  } else if (type === 'done') {
+    cls = 'done'; html = '✅ Concluído';
+  } else if (type === 'error') {
+    cls = 'error'; html = `⚠️ ${esc(ev.message || 'Erro desconhecido')}`;
+  } else if (type === 'system') {
+    // Apenas mostra o init do claude (lista de ferramentas disponíveis)
+    if (ev.subtype === 'init') {
+      const tools = (ev.tools || []).filter(t => !['Task','AskUserQuestion','mcp__'].some(p => t.startsWith(p)));
+      if (tools.length) cls = 'init', html = `🛠 ${esc(tools.join(' · '))}`;
+    }
+    // hook_started/hook_response silenciados
+  } else if (type === 'result') {
+    // Resultado final do claude CLI
+    if (ev.result && ev.result.trim()) {
+      _appendCodeLog(sessEl, 'result', markdownToHtml(ev.result));
+    }
+    const cost = ev.total_cost_usd ?? ev.cost_usd;
+    if (cost != null) {
+      const usage = ev.usage || {};
+      const inTok = usage.input_tokens || '?';
+      const outTok = usage.output_tokens || '?';
+      _appendCodeLog(sessEl, 'meta', `💰 $${Number(cost).toFixed(4)} · ${inTok} in / ${outTok} out tokens`);
+    }
+    return;
+  } else if (type === 'assistant') {
+    // Texto do assistente
+    const content = Array.isArray((ev.message||{}).content) ? ev.message.content : [];
+    for (const block of content) {
+      if (block.type === 'text' && block.text && block.text.trim()) {
+        _appendCodeLog(sessEl, 'text', markdownToHtml(block.text));
+      } else if (block.type === 'tool_use') {
+        _appendCodeToolUse(sessEl, block);
+      }
+    }
+    return;
+  } else if (type === 'tool_use') {
+    _appendCodeToolUse(sessEl, ev.content_block || ev);
+    return;
+  } else if (type === 'raw' && ev.text) {
+    cls = 'raw'; html = `<code>${esc(ev.text)}</code>`;
+  }
+  // Silencia: content_block_delta, content_block_start/stop, tool_result, rate_limit_event, message_*
+
+  if (cls && html) _appendCodeLog(sessEl, cls, html);
+}
+
+function _appendCodeToolUse(sessEl, block) {
+  const toolName = block.name || '?';
+  const input = block.input || {};
+  let detail = '';
+  if (toolName === 'Read' || toolName === 'Write') detail = input.file_path || input.path || '';
+  else if (toolName === 'Edit') detail = input.file_path || '';
+  else if (toolName === 'Bash') detail = (input.command || '').slice(0, 80);
+  else if (toolName === 'Glob' || toolName === 'Grep') detail = input.pattern || input.query || '';
+  else if (toolName === 'TodoWrite') detail = (input.todos || []).length + ' itens';
+  const icon = {Read:'📖',Write:'✍️',Edit:'✏️',Bash:'💻',Glob:'🔍',Grep:'🔍',TodoWrite:'📝',Task:'🤖',WebSearch:'🌐'}[toolName] || '🔧';
+  _appendCodeLog(sessEl, 'tool',
+    `${icon} <strong>${esc(toolName)}</strong>${detail ? ` <span class="ag-tool-detail">— ${esc(detail)}</span>` : ''}`
+  );
+}
+
+function _appendCodeLog(sessEl, cls, html) {
+  const div = document.createElement('div');
+  div.className = `ag-code-log ${cls}`;
+  div.innerHTML = html;
+  sessEl.appendChild(div);
 }
 
 // ── Tab: Config ───────────────────────────────────────────────────────────────

@@ -562,6 +562,9 @@ body[data-view="status"] #status-view{display:flex}
 .ag-badge{padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600}
 .ag-badge.claude{background:#4a5568;color:#e2e8f0}
 .ag-badge.ollama{background:#2d6a4f;color:#d8f3dc}
+.ag-badge.code{background:#5a2e8c;color:#e9d8ff}
+.ag-run-badge{font-size:10px;color:#b48ce8;padding:1px 6px;border:1px solid #5a2e8c;border-radius:10px;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .ag-messages{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .ag-hint{color:var(--muted);font-size:12px;text-align:center;padding:20px 0}
 .ag-msg{display:flex;flex-direction:column;max-width:85%}
@@ -584,6 +587,20 @@ body[data-view="status"] #status-view{display:flex}
 .ag-cmd-code{flex:1;font-size:11px;color:var(--orange);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ag-cmd-run{font-size:11px;padding:2px 8px;flex-shrink:0;color:var(--green);border-color:var(--green)}
 .ag-cmd-result{font-size:10px;flex-shrink:0}.ag-cmd-result.ok{color:var(--green)}.ag-cmd-result.err{color:var(--red)}
+
+/* ── Agente modo=code: log de execução agêntica ─────────────────────────── */
+.ag-code-session{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-left:2px solid #5a2e8c;padding-left:10px;margin:2px 0}
+.ag-code-log{font-size:12px;line-height:1.5;padding:2px 0}
+.ag-code-log.init{color:var(--muted);font-style:italic}
+.ag-code-log.tool{color:#b48ce8}
+.ag-tool-detail{color:var(--muted);font-weight:normal}
+.ag-code-log.text{color:var(--text)}
+.ag-code-log.text p{margin:2px 0}
+.ag-code-log.result{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:13px;color:var(--text)}
+.ag-code-log.meta{color:var(--muted);font-size:11px}
+.ag-code-log.done{color:var(--green);font-weight:600}
+.ag-code-log.error{color:var(--red)}
+.ag-code-log.raw code{font-size:11px;color:var(--muted)}
 
 /* ── Fullscreen / aba destacável ─────────────────────────────────────────── */
 body.rk-fullscreen #titlebar,
@@ -620,3 +637,25 @@ body.rk-fullscreen #editor
 textarea.rk-cfg-input{resize:vertical;line-height:1.4}
 .rk-cfg-toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:var(--text);padding-top:3px}
 .rk-cfg-toggle input[type=checkbox]{accent-color:var(--blue);width:14px;height:14px}
+
+/* ── Repo: git-graph com cards expansíveis ───────────────────────────────── */
+.rk-gv-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.rk-gv-list{flex:1;overflow-y:auto;padding:4px 0}
+.rk-gv-row{display:flex;align-items:flex-start;gap:0;border-bottom:1px solid var(--bg3);min-height:36px}
+.rk-gv-graph-col{flex-shrink:0;overflow:visible;position:relative}
+.rk-gv-info{flex:1;padding:5px 10px 5px 4px;min-width:0;cursor:default}
+.rk-gv-expandable .rk-gv-info{cursor:pointer}
+.rk-gv-expandable:hover .rk-gv-info{background:var(--bg2)}
+.rk-gv-top{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;line-height:1.5}
+.rk-gv-sha{font-family:monospace;font-size:11px;font-weight:700;flex-shrink:0}
+.rk-gv-msg{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:500px}
+.rk-gv-arrow{font-size:9px;color:var(--muted);flex-shrink:0;transition:transform .15s}
+.rk-gv-row.open .rk-gv-arrow{transform:rotate(90deg)}
+.rk-gv-meta{font-size:10px;color:var(--muted);margin-top:1px}
+.rk-gv-stats{margin-left:8px;font-family:monospace;color:var(--muted);font-size:10px}
+.rk-gv-br{font-size:10px;padding:1px 6px;border-radius:9px;border:1px solid;flex-shrink:0}
+.rk-gv-detail{display:none;padding:8px 0 4px;border-top:1px solid var(--bg3);margin-top:4px}
+.rk-gv-row.open .rk-gv-detail{display:block}
+.rk-gv-explain{font-size:12px;color:var(--text);margin-bottom:8px;padding:6px 8px;background:var(--bg2);border-radius:4px;border-left:3px solid var(--blue)}
+.rk-gv-explain p{margin:3px 0}
+.rk-gv-diff{font-size:10px;font-family:monospace;white-space:pre-wrap;word-break:break-all;color:var(--muted);background:var(--bg2);padding:8px;border-radius:4px;margin:0;max-height:300px;overflow-y:auto;line-height:1.4}

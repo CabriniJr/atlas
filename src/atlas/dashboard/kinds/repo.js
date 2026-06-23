@@ -221,81 +221,208 @@ async function _tabCommits(name, el) {
   </div>`;
 }
 
-// ── Tab: Graph (SVG git-graph) ────────────────────────────────────────────────
+// ── Tab: Graph (git-graph com cards expansíveis) ─────────────────────────────
 async function _tabGraph(name, el) {
-  const commits = await _fetchByLabel('Commit', 'repo', name);
+  el.innerHTML = '<div style="padding:16px;color:var(--muted)">Carregando…</div>';
+
+  const [commits, diffs, branches] = await Promise.all([
+    _fetchByLabel('Commit', 'repo', name),
+    _fetchByLabel('Diff', 'repo', name).catch(() => []),
+    _fetchByLabel('Branch', 'repo', name).catch(() => []),
+  ]);
+
   if (!commits.length) {
-    el.innerHTML = '<div style="padding:16px;color:var(--muted)">Nenhum commit para desenhar.</div>';
+    el.innerHTML = '<div style="padding:16px;color:var(--muted)">Sem commits. Execute Sync ou Backfill primeiro.</div>';
     return;
   }
 
-  const byShа = {};
+  // Normaliza sha7 em cada commit
   commits.forEach(c => {
-    const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
-    byShа[sha7] = c;
+    c._sha7 = (c.spec?.sha || c.name.split('-').pop()).slice(0, 7);
   });
 
+  // Índice sha7 → commit e diff
+  const bySha = {};
+  commits.forEach(c => { bySha[c._sha7] = c; });
+  const diffBySha = {};
+  diffs.forEach(d => {
+    const s = (d.labels?.commit || d.spec?.sha || '').slice(0, 7);
+    if (s) diffBySha[s] = d;
+  });
+  // sha7 → [branch name] (da última branch que aponta para esse commit)
+  const branchBySha = {};
+  branches.forEach(b => {
+    const s = (b.spec?.last_commit || b.status?.last_commit || '').slice(0, 7);
+    if (!s) return;
+    if (!branchBySha[s]) branchBySha[s] = [];
+    branchBySha[s].push(b.spec?.branch || b.name);
+  });
+
+  // Ordena: mais recente primeiro
   const sorted = [...commits].sort((a, b) =>
     String(b.spec?.date || '').localeCompare(String(a.spec?.date || '')));
 
-  const lanes = {};
-  const activeLanes = [];
+  // ── Lane algorithm ──────────────────────────────────────────────────────────
+  // openSlots[i] = sha7 que essa lane está esperando (null = livre)
+  const openSlots = [];
+  const laneOf = {};
+
   sorted.forEach(c => {
-    const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
-    const parents = (c.spec?.parents || []).filter(p => byShа[p]);
-    let lane = parents.length
-      ? (lanes[parents[0]] ?? activeLanes.findIndex(s => s === null))
-      : -1;
-    if (lane < 0) lane = activeLanes.length;
-    lanes[sha7] = lane;
-    activeLanes[lane] = sha7;
+    const sha7 = c._sha7;
+    const parents = (c.spec?.parents || [])
+      .map(p => p.slice(0, 7)).filter(p => bySha[p]);
+
+    // Encontra o slot que estava esperando por este commit
+    let slot = openSlots.indexOf(sha7);
+    if (slot < 0) {
+      slot = openSlots.indexOf(null);
+      if (slot < 0) slot = openSlots.length;
+    }
+    openSlots[slot] = null;
+    laneOf[sha7] = slot;
+
+    // Primeiro pai continua no mesmo slot; demais abrem novos
+    parents.forEach((p, i) => {
+      if (i === 0) {
+        openSlots[slot] = p;
+      } else {
+        let pSlot = openSlots.indexOf(p);
+        if (pSlot < 0) { pSlot = openSlots.indexOf(null); }
+        if (pSlot < 0) { pSlot = openSlots.length; }
+        openSlots[pSlot] = p;
+      }
+    });
   });
 
-  const COL = 16, ROW = 28, R = 5;
-  const maxLane = Math.max(...Object.values(lanes), 0);
-  const W = (maxLane + 1) * COL + 200;
-  const H = sorted.length * ROW + 8;
-  const LANE_COLORS = ['#58a6ff','#3fb950','#f78166','#d2a8ff','#ffa657','#79c0ff','#56d364'];
-  const lc = l => LANE_COLORS[l % LANE_COLORS.length];
+  const maxLane = Math.max(...Object.values(laneOf), 0);
+  const COLORS = ['#58a6ff','#3fb950','#f78166','#d2a8ff','#ffa657','#79c0ff','#56d364','#e3b341'];
+  const lc = l => COLORS[l % COLORS.length];
 
-  let edges = '', nodes = '', labels = '';
-  sorted.forEach((c, i) => {
-    const sha7 = c.spec?.sha ? c.spec.sha.slice(0, 7) : c.name.split('-').pop();
-    const lane = lanes[sha7] ?? 0;
-    const cx = lane * COL + R + 2;
-    const cy = i * ROW + ROW / 2 + 4;
+  // ── Inline SVG por linha (colunas de lanes) ─────────────────────────────────
+  // Pré-calcula o estado das lanes em cada linha (quais estão abertas)
+  const laneStates = []; // index i → Set of sha7s "em trânsito" após processar commit i
+  const openAfter = [];  // cópia do openSlots após cada commit
+  {
+    const slots = [];
+    sorted.forEach((c, i) => {
+      const sha7 = c._sha7;
+      const parents = (c.spec?.parents || [])
+        .map(p => p.slice(0, 7)).filter(p => bySha[p]);
+      const slot = laneOf[sha7];
+      // Reset slot e atribui pais
+      slots[slot] = null;
+      parents.forEach((p, j) => {
+        if (j === 0) { slots[slot] = p; }
+        else {
+          let ps = slots.indexOf(p);
+          if (ps < 0) ps = slots.indexOf(null);
+          if (ps < 0) ps = slots.length;
+          slots[ps] = p;
+        }
+      });
+      openAfter[i] = [...slots];
+    });
+  }
+
+  function _graphSvg(i) {
+    const c = sorted[i];
+    const sha7 = c._sha7;
+    const lane = laneOf[sha7];
+    const nLanes = maxLane + 1;
+    const W = nLanes * 14 + 4;
+    const H = 36;
+    const cx = lane * 14 + 8;
+    const cy = H / 2;
     const color = lc(lane);
 
-    (c.spec?.parents || []).forEach(psha => {
-      if (!byShа[psha]) return;
-      const pidx = sorted.findIndex(x =>
-        (x.spec?.sha?.slice(0, 7) || x.name.split('-').pop()) === psha);
-      if (pidx < 0) return;
-      const plane = lanes[psha] ?? 0;
-      const px = plane * COL + R + 2;
-      const py = pidx * ROW + ROW / 2 + 4;
-      edges += `<path d="M${cx},${cy} C${cx},${(cy+py)/2} ${px},${(cy+py)/2} ${px},${py}"
-        fill="none" stroke="${lc(lane)}" stroke-width="1.5" opacity=".7"/>`;
+    let lines = '';
+    // Traços verticais dos lanes ativos ANTES deste commit (linha de cima)
+    const before = i > 0 ? openAfter[i - 1] : [];
+    before.forEach((sha, l) => {
+      if (!sha) return;
+      const x = l * 14 + 8;
+      lines += `<line x1="${x}" y1="0" x2="${x}" y2="${cy}" stroke="${lc(l)}" stroke-width="1.5" opacity=".6"/>`;
     });
 
-    nodes += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${color}"/>`;
+    // Traços verticais dos lanes ativos DEPOIS deste commit (linha de baixo)
+    const after = openAfter[i] || [];
+    after.forEach((sha, l) => {
+      if (!sha) return;
+      const x = l * 14 + 8;
+      lines += `<line x1="${x}" y1="${cy}" x2="${x}" y2="${H}" stroke="${lc(l)}" stroke-width="1.5" opacity=".6"/>`;
+    });
 
+    // Curvas para pais em lanes diferentes
+    const parents = (c.spec?.parents || []).map(p => p.slice(0, 7)).filter(p => bySha[p]);
+    parents.forEach((p, j) => {
+      if (j === 0 && laneOf[p] === lane) return; // mesmo lane — já coberto pela linha
+      const pLane = laneOf[p] ?? 0;
+      const px = pLane * 14 + 8;
+      if (j === 0) {
+        // Primeiro pai em lane diferente (movimento de lane)
+        lines += `<path d="M${cx},${cy} Q${cx},${H} ${px},${H}" fill="none" stroke="${color}" stroke-width="1.5" opacity=".7"/>`;
+      } else {
+        // Merge: curva do lane do pai até a posição do commit
+        lines += `<path d="M${cx},${cy} Q${px},${cy} ${px},${H}" fill="none" stroke="${lc(pLane)}" stroke-width="1.5" opacity=".6"/>`;
+      }
+    });
+
+    // Dot
+    lines += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${color}" stroke="var(--bg)" stroke-width="1.5"/>`;
+
+    return `<svg width="${W}" height="${H}" style="flex-shrink:0;overflow:visible">${lines}</svg>`;
+  }
+
+  // ── Renderiza cards ─────────────────────────────────────────────────────────
+  const rows = sorted.map((c, i) => {
+    const sha7 = c._sha7;
     const sp = c.spec || {};
-    const subj = (sp.subject || '').slice(0, 60);
-    const meta = `${esc(sp.author?.split(' ')[0] || '')} ${sp.date ? _ago(sp.date) : ''}`;
-    labels += `<text x="${(maxLane + 1) * COL + 8}" y="${cy + 4}"
-      font-size="11" fill="var(--text)" font-family="monospace">
-      <tspan fill="${color}">${esc(sha7)}</tspan>
-      <tspan dx="6" fill="var(--text)">${esc(subj)}</tspan>
-      <tspan dx="8" fill="var(--muted)" font-size="10">${esc(meta)}</tspan>
-    </text>`;
-  });
+    const lane = laneOf[sha7];
+    const color = lc(lane);
+    const diff = diffBySha[sha7];
+    const brs = branchBySha[sha7] || [];
+    const ago = sp.date ? _ago(sp.date) : '';
+    const author = (sp.author || '').split('<')[0].trim();
+    const subject = sp.subject || sp.message || sha7;
 
-  el.innerHTML = `<div style="overflow:auto;height:100%;padding:8px">
-    <svg width="${W}" height="${H}" style="min-width:${W}px">
-      <g>${edges}</g><g>${nodes}</g><g>${labels}</g>
-    </svg>
-  </div>`;
+    const brTags = brs.map(b =>
+      `<span class="rk-gv-br" style="background:${color}22;color:${color};border-color:${color}55">${esc(b)}</span>`
+    ).join('');
+
+    const stats = (sp.files_changed || sp.insertions || sp.deletions)
+      ? `<span class="rk-gv-stats">${sp.files_changed||0} ✱ +${sp.insertions||0} -${sp.deletions||0}</span>` : '';
+
+    const hasDiff = !!diff;
+    const expandable = hasDiff ? ' rk-gv-expandable' : '';
+
+    return `<div class="rk-gv-row${expandable}" data-i="${i}">
+      <div class="rk-gv-graph-col">${_graphSvg(i)}</div>
+      <div class="rk-gv-info">
+        <div class="rk-gv-top">
+          <span class="rk-gv-sha" style="color:${color}">${esc(sha7)}</span>
+          ${brTags}
+          <span class="rk-gv-msg">${esc(subject)}</span>
+          ${hasDiff ? '<span class="rk-gv-arrow">▶</span>' : ''}
+        </div>
+        <div class="rk-gv-meta">${esc(author)}${ago ? ' · ' + esc(ago) : ''}${stats}</div>
+        ${hasDiff ? `<div class="rk-gv-detail">
+          ${diff.spec?.explicacao ? `<div class="rk-gv-explain">${markdownToHtml(diff.spec.explicacao)}</div>` : ''}
+          ${diff.spec?.diff_raw ? `<pre class="rk-gv-diff">${esc(diff.spec.diff_raw.slice(0, 4000))}</pre>` : ''}
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="rk-gv-wrap"><div class="rk-gv-list">${rows}</div></div>`;
+
+  // Click para expandir/colapsar
+  el.querySelectorAll('.rk-gv-expandable').forEach(row => {
+    row.addEventListener('click', () => {
+      row.classList.toggle('open');
+      const arrow = row.querySelector('.rk-gv-arrow');
+      if (arrow) arrow.textContent = row.classList.contains('open') ? '▼' : '▶';
+    });
+  });
 }
 
 // ── Tab: Log (progresso/resultado de operações) ───────────────────────────────

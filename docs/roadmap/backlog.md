@@ -133,6 +133,8 @@ atualizado-em: 2026-06-23
 | E7-24 | **Agente Builder**: prompt natural → configura Kind Agente automaticamente — **CRÍTICO p/ curadoria automática** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [[autonomous-dev-loop]] |
 | E7-25 | **Render chat do Agente** (quad. branco): interface interativa via motor plugável — **CRÍTICO p/ IDE integrado** | **feito** | [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
 | E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | **feito** | [ia.py](../../src/atlas/ia.py) |
+| E7-27 | **ADR-0025** — Agente **modo `code`** (Claude Code agêntico 2b no workspace): campo `modo`, `POST /_agent_run` + SSE `GET /_agent_run/{id}/stream`, `ThreadingHTTPServer`, runs assíncronos p/ multitarefa. Atende "ser um Claude Code". | **feito** (núcleo); pendências de segurança no ADR | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md), [api.py](../../src/atlas/api.py), [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
+| E7-28 | **Endurecimento do modo `code`**: workspace restrito, gate de curadoria humana, persistência de runs, allow/deny de tools por Agente | proposto | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md) §Pendências, [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |

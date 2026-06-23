@@ -259,6 +259,13 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         },
         "spec": [
             {
+                "k": "modo",
+                "type": "select",
+                "label": "Modo",
+                "opts": ["chat", "code"],
+                "hint": "chat = resposta simples; code = Claude Code agêntico (edita arquivos)",
+            },
+            {
                 "k": "motor",
                 "type": "select",
                 "label": "Motor",
@@ -269,20 +276,20 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "modelo",
                 "type": "text",
                 "label": "Modelo",
-                "hint": "claude-haiku-4-5-20251001 / gemma4",
+                "hint": "claude-haiku-4-5-20251001 / claude-sonnet-4-6 / gemma4",
             },
             {
                 "k": "nivel_contexto",
                 "type": "select",
                 "label": "Nível de contexto",
                 "opts": ["none", "resumo", "completo"],
-                "hint": "Quanto contexto do projeto entra no prompt",
+                "hint": "Quanto contexto do projeto entra no prompt (só modo=chat)",
             },
             {
                 "k": "prompt",
                 "type": "area",
                 "label": "Prompt / template",
-                "hint": "Use {mensagem} e {agora}",
+                "hint": "Use {mensagem} e {agora} no modo chat; instrução de sistema no modo code",
             },
             {
                 "k": "endpoint",
@@ -290,9 +297,9 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "label": "Endpoint Ollama",
                 "hint": "Ex: http://192.168.86.22:11434 (só para motor=ollama)",
             },
-            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60"},
+            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60 (chat) / 300 (code)"},
         ],
-        "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral"}],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral · dev"}],
     },
 }
 
