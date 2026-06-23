@@ -1,8 +1,8 @@
 ---
 titulo: ADR-0020 — Views especializadas por Kind (o "quadro branco")
 id: ADR-0020
-status: proposto
-versao: 0.1
+status: aceito
+versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
 atualizado-em: 2026-06-23
@@ -20,7 +20,7 @@ substituido-por: —
 ---
 
 ## Status
-`proposto` — aguardando aceite do PO/PM.
+`aceito` — aceito pelo PO/PM (2026-06-23); em implementação ágil.
 
 ## Contexto
 

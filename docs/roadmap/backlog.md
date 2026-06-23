@@ -126,10 +126,10 @@ atualizado-em: 2026-06-23
 ### ADRs irmãos (mesmo brainstorm)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | proposto (escrito) | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
-| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | proposto (escrito) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
-| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | proposto (escrito) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
-| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | proposto (escrito) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
+| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | **aceito** (a implementar) | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
+| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | **aceito** (a implementar) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
+| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | **aceito** (a implementar) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
+| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | **aceito** (a implementar) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
 | E7-24 | **Agente Builder**: prompt → configura o Kind nos conformes do projeto → curadoria (gate humano) | proposto | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [revisor-curador](../agentes/revisor-curador.md) |
 
 ## Épico E3 — Tracking e metas (M3)
