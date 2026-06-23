@@ -848,6 +848,11 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         _finish_run(run)
         return
 
+    # Conhecimento operacional do Atlas: schema de objetos + como usar a API.
+    # Garante que o agente CRIE recursos pela API (não editando SQLite/arquivos soltos).
+    api_context = _agent_api_context(store)
+    full_system = (system_prompt + "\n\n" + api_context) if system_prompt else api_context
+
     # O prompt é argumento posicional — deve vir DEPOIS de todos os flags
     # stream-json exige --verbose (retorna eventos em tempo real)
     args = [
@@ -857,9 +862,8 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         "--dangerously-skip-permissions",
         "--model", modelo,
         "--add-dir", cwd,
+        "--append-system-prompt", full_system,
     ]
-    if system_prompt:
-        args += ["--append-system-prompt", system_prompt]
     args += [mensagem]
 
     _emit(run, {"type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd})
@@ -946,6 +950,64 @@ def _stream_run_sse(run: dict, wfile) -> None:
 
     except (BrokenPipeError, OSError):
         pass
+
+
+def _agent_api_context(store: ResourceStore) -> str:
+    """Instruções operacionais p/ o Agente modo=code: modelo de objetos + uso da API.
+
+    Faz o agente criar/editar recursos de domínio **pela API REST** (seguindo o
+    schema de cada Kind), em vez de mexer no SQLite ou inventar arquivos.
+    """
+    from atlas.api_schema import schema_payload  # noqa: PLC0415
+
+    base = f"http://127.0.0.1:{_PORT}/apis/atlas/v1"
+    payload = schema_payload()
+
+    linhas: list[str] = [
+        "=== Atlas — Modelo de Objetos (API REST estilo Kubernetes) ===",
+        "",
+        "Você opera o Atlas. Recursos de domínio são objetos {kind, name, spec, labels}.",
+        f"A API roda em {base} (loopback, sem token quando local).",
+        "",
+        "REGRA: para CRIAR/EDITAR/REMOVER um recurso de domínio (Job, Tracker, Goal,",
+        "Repo, Agente, Doc, Prompt, etc.), use SEMPRE a API abaixo. NUNCA edite o",
+        "SQLite diretamente nem crie arquivos avulsos para representar dados.",
+        "",
+        "  Criar/atualizar (idempotente):",
+        f"    curl -s -X PUT {base}/<Kind>/<name> \\",
+        "      -H 'Content-Type: application/json' \\",
+        "      -d '{\"spec\": {<campos>}, \"labels\": {<labels>}}'",
+        f"  Listar:    curl -s {base}/<Kind>",
+        f"  Detalhe:   curl -s {base}/<Kind>/<name>",
+        f"  Remover:   curl -s -X DELETE {base}/<Kind>/<name>",
+        f"  Schema:    curl -s {base}/_schema   (forms e campos por Kind)",
+        "",
+        "Kinds e campos de spec (respeite tipos e opções):",
+    ]
+    for kind, info in payload["kinds"].items():
+        if info["meta"].get("hidden"):
+            continue
+        campos = []
+        for f in info["spec"]:
+            t = f.get("type", "text")
+            opts = f.get("opts")
+            campos.append(f"{f['k']}:{t}" + (f"={'|'.join(opts)}" if opts else ""))
+        lbls = ", ".join(f["k"] for f in info.get("labels", []))
+        desc = info["meta"].get("desc", "")
+        linha = f"- {kind} — {desc}"
+        if campos:
+            linha += f"\n    spec: {', '.join(campos)}"
+        if lbls:
+            linha += f"\n    labels: {lbls}"
+        linhas.append(linha)
+
+    linhas += [
+        "",
+        "Padrões do projeto (CLAUDE.md): a doc em docs/ é a fonte de verdade; decisão",
+        "de arquitetura vira ADR antes de virar código; TDD ao implementar; commits",
+        "Conventional. Ao terminar, confirme objetivamente o que foi criado/alterado.",
+    ]
+    return "\n".join(linhas)
 
 
 def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | None:
