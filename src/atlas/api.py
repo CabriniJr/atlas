@@ -1099,59 +1099,11 @@ function renderResource(r) {
 function _cardHtml(r) {
   const meta = [
     ['kind', r.kind], ['name', r.name],
-    ['criado_em', r.criado_em?.slice(0,19)], ['atualizado_em', r.atualizado_em?.slice(0,19)],
-  ].filter(([,v])=>v).map(([k,v])=>`
-    <div class="meta-item"><div class="mi-key">${k}</div><div class="mi-val">${esc(String(v))}</div></div>
-  `).join('');
-
-  const labels = Object.entries(r.labels||{}).map(([k,v])=>
-    `<span class="label-chip lc-${k}-${v}">${esc(k)}=${esc(v)}</span>`
-  ).join('');
-
+    ['criado_em', fmtDt(r.criado_em)], ['atualizado_em', fmtDt(r.atualizado_em)],
+  ].filter(([,v])=>v).map(([k,v])=>`<div class="meta-item"><div class="mi-key">${k}</div><div class="mi-val">${esc(String(v))}</div></div>`).join('');
+  const labels = Object.entries(r.labels||{}).map(([k,v])=>`<span class="label-chip lc-${k}-${v}">${esc(k)}=${esc(v)}</span>`).join('');
   const schema = _KIND_SCHEMA[r.kind];
-  let specHtml = '';
-  if (Object.keys(r.spec||{}).length) {
-    if (r.kind === 'Doc' && r.spec.body) {
-      specHtml = `<div class="r-section">
-        <div class="sec-title">spec · body</div>
-        <div class="md">${markdownToHtml(r.spec.body.slice(0,8000))}</div>
-        ${r.spec.source ? `<div style="margin-top:8px;font-size:10px;color:var(--muted)">src: ${esc(r.spec.source)}</div>` : ''}
-      </div>`;
-    } else {
-      specHtml = `<div class="r-section">
-        <div class="sec-title">spec</div>
-        <pre class="json">${jsonStr(r.spec)}</pre>
-      </div>`;
-    }
-  }
-
-  let statusHtml = '';
-  if (Object.keys(r.status||{}).length) {
-    statusHtml = `<div class="r-section">
-      <div class="sec-title">status</div>
-      <pre class="json">${jsonStr(r.status)}</pre>
-    </div>`;
-  }
-
   const kindDesc = schema?.meta?.desc ? `<div style="font-size:11px;color:var(--muted);margin-bottom:12px">${esc(schema.meta.desc)}</div>` : '';
-
-  // Tracker: caixa de input visual para registrar valor
-  let trackerInput = '';
-  if (r.kind === 'Tracker') {
-    const syn = (r.spec&&r.spec.syntax) || r.name+':';
-    const unit = r.spec&&r.spec.unit ? ' ('+esc(r.spec.unit)+')' : '';
-    const last = (r.status&&r.status.ultimo_valor!=null) ? '  ·  último: '+esc(String(r.status.ultimo_valor)) : '';
-    trackerInput = `<div class="r-section">
-      <div class="sec-title">📝 registrar valor${last}</div>
-      <div class="tk-input">
-        <input id="tk-val" type="text" inputmode="decimal" autocomplete="off"
-          placeholder="${esc(syn)} valor${unit}"
-          onkeydown="if(event.key==='Enter')_tkLog('${escJs(syn)}')">
-        <button class="btn" style="border-color:var(--green);color:var(--green)" onclick="_tkLog('${escJs(syn)}')">registrar</button>
-      </div>
-    </div>`;
-  }
-
   return `<div class="r-card">
     <div class="r-header">
       <span class="r-kind">${esc(r.kind)}</span>
@@ -1164,11 +1116,10 @@ function _cardHtml(r) {
       </div>
     </div>
     ${kindDesc}
-    ${trackerInput}
     <div class="r-meta">${meta}</div>
     ${labels ? `<div class="labels-row">${labels}</div>` : ''}
-    ${specHtml}
-    ${statusHtml}
+    ${_kindCard(r)}
+    ${_rawDetails(r)}
   </div>`;
 }
 
@@ -1693,6 +1644,50 @@ function jsonStr(obj) {
   return JSON.stringify(obj, null, 2)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+function fmtDt(s){ return s ? String(s).slice(0,16).replace('T',' ') : ''; }
+
+function _rawDetails(r){
+  const spec = Object.keys(r.spec||{}).length ? `<div class="sec-title">spec</div><pre class="json">${jsonStr(r.spec)}</pre>` : '';
+  const status = Object.keys(r.status||{}).length ? `<div class="sec-title" style="margin-top:8px">status</div><pre class="json">${jsonStr(r.status)}</pre>` : '';
+  if(!spec && !status) return '';
+  return `<details class="r-section" style="margin-top:12px"><summary style="cursor:pointer;color:var(--muted);font-size:11px">spec / status (JSON)</summary><div style="margin-top:8px">${spec}${status}</div></details>`;
+}
+
+function _kindCard(r){
+  switch(r.kind){
+    case 'Repo':    return _repoCard(r);
+    case 'Goal':    return _goalCard(r);
+    case 'Timer':   return _timerCard(r);
+    case 'Tracker': return _trackerCard(r);
+    case 'Routine': return _routineCard(r);
+    case 'Alarm':   return _alarmCard(r);
+    case 'Diff':    return _diffCard(r);
+    case 'Doc':     return _docCard(r);
+    case 'Prompt':  return _promptCard(r);
+    case 'Idea': case 'Task': case 'RoutineRequest': return _poolCard(r);
+    default:        return _genericCard(r);
+  }
+}
+
+function _genericCard(r){
+  let html='';
+  if(Object.keys(r.spec||{}).length) html += `<div class="r-section"><div class="sec-title">spec</div><pre class="json">${jsonStr(r.spec)}</pre></div>`;
+  if(Object.keys(r.status||{}).length) html += `<div class="r-section"><div class="sec-title">status</div><pre class="json">${jsonStr(r.status)}</pre></div>`;
+  return html;
+}
+
+// ── Kind-card stubs (replaced in Tasks 2–4) ───────────────────────────────────
+function _repoCard(r){ return ''; }
+function _goalCard(r){ return ''; }
+function _timerCard(r){ return ''; }
+function _trackerCard(r){ return ''; }
+function _routineCard(r){ return ''; }
+function _alarmCard(r){ return ''; }
+function _diffCard(r){ return ''; }
+function _docCard(r){ return ''; }
+function _promptCard(r){ return ''; }
+function _poolCard(r){ return ''; }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
