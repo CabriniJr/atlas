@@ -634,7 +634,9 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
     """Executa o Kind Agente em modo chat (E7-25, ADR-0024).
 
     Busca o recurso Agente, constrói o prompt com o template e chama o motor
-    selecionado. Devolve ``{response, motor, modelo}`` ou ``{error}``.
+    selecionado. Suporta nivel_contexto (resumo|completo) para injetar schema
+    e contexto do projeto (E7-24 — builder). Devolve {response, motor, modelo,
+    commands?} ou {error}.
     """
     from atlas.ia import InvocarErro, invocar
 
@@ -652,8 +654,23 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
     timeout = int(spec.get("timeout") or 60)
     endpoint = spec.get("endpoint") or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
     template = spec.get("prompt") or "{mensagem}"
+    nivel = spec.get("nivel_contexto", "none")
     agora_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    prompt = template.replace("{mensagem}", mensagem).replace("{agora}", agora_str)
+
+    # Injecao de contexto (E7-24)
+    ctx_inject = ""
+    if nivel in ("resumo", "completo"):
+        ctx_inject = _schema_context(store, completo=(nivel == "completo"))
+
+    prompt = (
+        template
+        .replace("{mensagem}", mensagem)
+        .replace("{agora}", agora_str)
+        .replace("{schema}", ctx_inject)
+    )
+    # Se o template não usou {schema}, pré-pende o contexto
+    if ctx_inject and "{schema}" not in template:
+        prompt = ctx_inject + "\n\n" + prompt
 
     invoke_kwargs: dict = {"modelo": modelo, "timeout": timeout, "motor": motor}
     if motor == "ollama" and endpoint:
@@ -668,7 +685,44 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
         except InvocarErro as e:
             return {"error": str(e), "motor": motor, "modelo": modelo}
 
-    return {"response": resposta, "motor": motor, "modelo": modelo}
+    # Extrai comandos /apply da resposta para o front destacar (E7-24)
+    import re
+    commands = re.findall(r"(?m)^/?apply\s+\S[^\n]*", resposta)
+    result: dict = {"response": resposta, "motor": motor, "modelo": modelo}
+    if commands:
+        result["commands"] = [c if c.startswith("/") else "/" + c for c in commands]
+    return result
+
+
+def _schema_context(store: ResourceStore, *, completo: bool = False) -> str:
+    """Gera contexto textual do schema do Atlas para injeção no prompt (E7-24)."""
+    from atlas.api_schema import schema_payload
+
+    payload = schema_payload()
+    recursos_ativos = store.kinds()
+    linhas = [
+        "=== Atlas — Schema de Recursos ===",
+        f"Kinds disponíveis: {', '.join(recursos_ativos)}",
+        "",
+    ]
+    for kind, info in payload["kinds"].items():
+        if info["meta"].get("hidden"):
+            continue
+        if completo:
+            campos = "; ".join(
+                f"{f['k']} ({f['type']}): {f.get('hint','')}"
+                for f in info["spec"]
+            )
+        else:
+            campos = ", ".join(f["k"] for f in info["spec"])
+        linhas.append(f"- {kind}: [{campos}]")
+    linhas += [
+        "",
+        "Para criar/editar recursos use: /apply Kind nome spec.campo=valor",
+        "Para listar: /list Kind",
+        "Para detalhe: /describe Kind nome",
+    ]
+    return "\n".join(linhas)
 
 
 def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | None:
