@@ -508,7 +508,7 @@ body[data-view="status"] #status-view{display:flex}
 }
 
 /* ── Repo render especializada (E7-08) ───────────────────────────────────── */
-.rk-wrap{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.rk-wrap{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .rk-header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .rk-title{font-size:16px;font-weight:600;color:var(--text)}
 .rk-actions{display:flex;gap:6px;flex-shrink:0}
