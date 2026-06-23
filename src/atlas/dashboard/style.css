@@ -623,6 +623,26 @@ body.rk-fullscreen #editor
 .rk-log-line.ok{color:var(--green)}
 .rk-log-line.err{color:var(--red)}
 
+/* ── RepoGroup: dashboard multirepo ──────────────────────────────────────── */
+.rg-wrap{height:100%;overflow-y:auto;padding:12px 14px}
+.rg-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.rg-stat{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;min-width:80px;text-align:center}
+.rg-stat-n{font-size:20px;font-weight:700;color:var(--text);line-height:1.1}
+.rg-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.rg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.rg-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s,transform .1s;display:flex;flex-direction:column;gap:6px}
+.rg-card:hover{border-color:var(--blue);transform:translateY(-1px)}
+.rg-card-missing{cursor:default;opacity:.7;border-style:dashed}
+.rg-card-missing:hover{border-color:var(--border);transform:none}
+.rg-card-head{display:flex;align-items:center;gap:6px;font-size:13px}
+.rg-card-head strong{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rg-card-branches{font-size:10px;color:var(--muted);flex-shrink:0}
+.rg-card-commit{font-size:11px;display:flex;gap:6px;align-items:baseline;overflow:hidden}
+.rg-sha{color:var(--orange);font-family:monospace;font-size:10px;flex-shrink:0}
+.rg-msg{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rg-card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px}
+.rg-card-stats{font-family:monospace;font-size:10px;color:var(--muted)}
+
 /* ── Repo: config form ───────────────────────────────────────────────────── */
 .rk-cfg-form{display:flex;flex-direction:column;height:100%;overflow:hidden}
 .rk-cfg-form .rk-section{flex:1;overflow-y:auto}

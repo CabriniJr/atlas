@@ -110,6 +110,24 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         "spec": [],
         "labels": [],
     },
+    "RepoGroup": {
+        "meta": {"icon": "🗂", "desc": "Multirepo: agrupa uma série de Repos num dashboard"},
+        "spec": [
+            {
+                "k": "repos",
+                "type": "text",
+                "label": "Repos",
+                "hint": "Nomes de Repo separados por vírgula (ex.: nora, atlas)",
+            },
+            {
+                "k": "description",
+                "type": "area",
+                "label": "Descrição",
+                "hint": "Para que serve este grupo",
+            },
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "trabalho · pessoal · estudo"}],
+    },
     "Repo": {
         "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync, multi-branch)"},
         "spec": [
