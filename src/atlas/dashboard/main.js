@@ -232,11 +232,14 @@ async function loadAndRender(kind, name) {
     const r = await apiFetch(API + '/' + kind + '/' + name);
     if (RENDER_REGISTRY[kind]) {
       ec.innerHTML = '';
+      ec.classList.add('no-pad');
       await RENDER_REGISTRY[kind](r, ec);
     } else {
+      ec.classList.remove('no-pad');
       renderResource(r);
     }
   } catch(e) {
+    ec.classList.remove('no-pad');
     ec.innerHTML = `<div style="padding:20px;color:var(--red)">erro: ${esc(e.message)}</div>`;
   }
 }
@@ -1518,7 +1521,7 @@ function _svRoutines(s){
                (r.active?'<span style="color:var(--orange)">agenda não-cron</span>':'inativa');
     const last=r.last_run?`<span class="sv-when2">últ: ${_ago(r.last_run)}</span>`:'';
     const ckBtn = r.checkin ? `<button class="sv-runbtn" style="color:var(--blue);width:34px" title="Check-in (registrar valores do grupo ${esc(r.grupo)})" onclick="event.stopPropagation();openCheckin('${escJs(r.grupo)}')">📝</button>` : '';
-    return `<div class="sv-row" onclick="openResource('Routine','${escJs(r.name)}');setView('explorer')">
+    return `<div class="sv-row" onclick="openResource('Job','${escJs(r.name)}');setView('explorer')">
       <div class="sv-dot ${dot}"></div>
       <div class="sv-main"><div class="sv-name">${esc(r.name)}</div>
         <div class="sv-sub">${esc(r.schedule||'sem agenda')}${r.model!=='none'?' · '+esc(r.model):''}</div></div>

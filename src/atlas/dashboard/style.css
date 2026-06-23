@@ -43,6 +43,7 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono',Consolas,monos
 .tab-welcome{color:var(--muted);font-style:italic}
 /* ── Editor content ── */
 #editor-content{flex:1;overflow:auto;padding:20px 24px;min-height:0}
+#editor-content.no-pad{padding:0;overflow:hidden;display:flex;flex-direction:column}
 /* ── Bottom resize handle ── */
 #bot-resize{height:4px;cursor:ns-resize;flex-shrink:0;background:transparent;transition:background .12s}
 #bot-resize:hover,#bot-resize.drag{background:var(--blue)}

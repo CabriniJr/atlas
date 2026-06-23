@@ -330,11 +330,12 @@ async function _runBackfill(name) {
 }
 
 async function _runSync(name) {
+  const jobName = name + '-sync';
   toast(`↻ sync ${name}…`);
   try {
     const r = await apiFetch(`${API}/_run`, {
       method: 'POST',
-      body: JSON.stringify({routine: 'repo-sync'}),
+      body: JSON.stringify({routine: jobName}),
     });
     toast(r.ok ? 'sync ok' : 'sync: ' + (r.output || 'erro'), !r.ok);
   } catch (e) { toast('erro: ' + e.message, true); }
