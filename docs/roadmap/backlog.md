@@ -39,8 +39,8 @@ atualizado-em: 2026-06-23
 | E0-02 | **API HTTP** (stdlib) expondo os verbos: `GET/POST/PUT/PATCH/DELETE /apis/atlas/v1/<kind>[/<name>]` | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 | E0-03 | **Verbos uniformes no chat** (`/resources`, `/list`, `/get`, `/describe`, `/apply`, `/delete`) | **feito** — `verbos.py` + roteado em `handler.py` | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 | E0-04 | **Migrar kinds** legados (Idea/Task/RoutineRequest, Tracker, Alarm, Routine) para o store — boot sync + CRUD espelhado | **feito** — `sync.py` + todos os módulos leem/escrevem no store | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
-| E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP | proposto | [seguranca](../arquitetura/seguranca.md) |
-| E0-06 | **Web app (Vercel)** consumindo a API + **túnel** Vercel→backend doméstico | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
+| E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP — **CRÍTICO p/ Claude Code SSH** | proposto | [seguranca](../arquitetura/seguranca.md) |
+| E0-06 | **CLI SSH** (vs Vercel) consumindo API auth — **CRÍTICO p/ dev noturno autônomo** | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md), [[autonomous-dev-loop]] |
 
 ## Épico E1 — Motor mínimo (M1)
 | ID | História | Estado | ADR/doc |
@@ -62,7 +62,7 @@ atualizado-em: 2026-06-23
 |---|---|---|---|
 | E2-01 | Rotina **resumo diário** (collect tudo do dia; análise 2a bloqueada por E1-05) | **feito (camada 0)** — `rotinas/resumo_diario.py` + `routines/resumo-diario/routine.toml`; agenda 21h | [personas](../visao/personas-e-uso.md) |
 | E2-02 | **Meta-loop** fase 1 (planejamento no Telegram → `SPEC.md`) | proposto | [ADR-0009](../arquitetura/adr/ADR-0009-handoff-entre-modos.md) |
-| E2-03 | **Meta-loop** fase 2 (geração via agente 2b, inativo por padrão) | proposto | [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
+| E2-03 | **Meta-loop** fase 2 (geração via agente 2b, inativo por padrão) — **CRÍTICO p/ dev noturno** | proposto | [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
 | E2-04 | `/ativar` + fluxo de revisão e commit da rotina gerada | proposto | [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md), [spec meta-loop](../specs/meta-loop-chat.md) |
 
 ## Épico E5 — Interface de configuração e trackers via chat (prioridade atual)
@@ -88,7 +88,7 @@ atualizado-em: 2026-06-23
 | E6-01 | Tabela `ideas` + migração idempotente de schema | **feito** | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec pool](../specs/pool-de-ideias.md) |
 | E6-02 | Captura via Telegram (`/ideia`, `/tarefa`/`/licao`, `/rotina_nova`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
 | E6-03 | CRUD/priorização (`/ideias`, `/ideia <id>`, `prio`, `editar`, `feito`, `arquivar`, `remover`) | **feito** | [spec pool](../specs/pool-de-ideias.md) |
-| E6-04 | Laço de desenvolvimento: agente livre + item `rotina` → dispara meta-loop (gera inativo) + notifica | bloqueado (depende de E1-10 + E2) | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec meta-loop](../specs/meta-loop-chat.md) |
+| E6-04 | Pool → geração: item `rotina` dispara meta-loop (agente 2b gera inativo) — **CRÍTICO p/ loop autônomo** | pronto (spec) | [ADR-0014](../arquitetura/adr/ADR-0014-pool-de-ideias-desenvolvimento.md), [spec meta-loop](../specs/meta-loop-chat.md) |
 
 ## ⭐ Épico E7 — Repo como carro-chefe (multi-branch, git-graph, progresso) — **PRIORIDADE ALTA**
 > Especializar a capacidade mais importante do produto. Decisão: [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md).
@@ -130,7 +130,7 @@ atualizado-em: 2026-06-23
 | E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | **aceito** (a implementar) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
 | E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | **aceito** (a implementar) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
 | E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | **aceito** (a implementar) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
-| E7-24 | **Agente Builder**: prompt → configura o Kind nos conformes do projeto → curadoria (gate humano) | proposto | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [revisor-curador](../agentes/revisor-curador.md) |
+| E7-24 | **Agente Builder**: prompt natural → configura Kind Agente automaticamente — **CRÍTICO p/ curadoria automática** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [[autonomous-dev-loop]] |
 | E7-25 | **Render chat do Agente** (quad. branco, E7 spec b): interface interativa via motor plugável — **CRÍTICO p/ IDE integrado** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | pronto (design) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
 
