@@ -57,6 +57,9 @@ e nas fichas de [`docs/agentes/`](docs/agentes/README.md).
 - **Toda decisão de arquitetura vira ADR** antes de virar código.
 - **Atualize a doc junto com o código** — doc desatualizada é bug.
 - **Header + histórico de revisão** em todo documento novo ou alterado.
+- **Dossiê de contexto por épico.** Todo épico tem um dossiê que agrega os arquivos
+  certos para desenvolver; ao despachar/atuar num épico, leia (ou mantenha) o dossiê.
+  Ver [`docs/processos/dossie-de-contexto.md`](docs/processos/dossie-de-contexto.md).
 - **Branch + PR + Conventional Commits.** Feature em branch curta a partir de
   `main`; commits `tipo(escopo): assunto`; PR com CI verde antes do merge. Prod só
   roda tags. Ver [`docs/processos/politica-de-desenvolvimento.md`](docs/processos/politica-de-desenvolvimento.md).

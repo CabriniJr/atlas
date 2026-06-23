@@ -22,6 +22,8 @@ atualizado-em: 2026-06-23
 > Ele agrega, em ordem de leitura, os arquivos certos — ADRs (o porquê), código (o
 > onde), plano (o como) e contratos/testes (as regras) — para o dev ganhar contexto
 > rico sem garimpar o repositório. Leia também o [CLAUDE.md](../../../CLAUDE.md) na raiz.
+>
+> Instância da [diretriz de dossiê de contexto](../../processos/dossie-de-contexto.md).
 
 ## 0. Regras inegociáveis (resumo — não pule)
 
@@ -47,18 +49,19 @@ atualizado-em: 2026-06-23
 | 5 | [ADR-0022 — Motor de IA plugável](../../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) | Seleção de motor; ponto de extensão para local (Ollama/Gemma). |
 | 6 | [ADR-0021 — Rotina → Job](../../arquitetura/adr/ADR-0021-rotina-para-job.md) | Renomeação transversal (afeta terminologia em todo o E7). |
 
-## 2. O "como" — plano e roadmap
+## 2. O "como" — spec, plano e roadmap
 
 | Arquivo | O que extrair |
 |---|---|
-| [Plano E7-01 — fundação multi-branch](2026-06-23-repo-fundacao-multibranch.md) | Plano TDD bite-sized da primeira fatia (Kinds `Branch`/`Commit`). Código de teste + implementação por passo. **Comece por aqui ao codar.** |
+| [SPEC-REPO-DADOS](../../specs/repo-especializacao-dados.md) | **Autoritativa (comece por aqui).** Spec (a) dados/pull do ADR-0023: modelo dos 5 Kinds, campos de schema, pipeline multi-branch **sem checkout**, `analyze_policy` + disjuntor, serialização (stdlib + `pdftotext`), backfill, **contrato de código (pacote `repo_sync/`)** e DoD. |
+| [Plano E7-01 — fundação multi-branch](2026-06-23-repo-fundacao-multibranch.md) | Apoio TDD ilustrativo das primitivas (slug, métricas, materialização). **Superado pela spec** quanto a estrutura (pacote) e estratégia de teste (git real) — use como referência de lógica, siga a spec na arquitetura. |
 | [Backlog — épico E7](../../roadmap/backlog.md) | Estado de cada história (feito × a-fazer), dependências e ordem. |
 
 ## 3. O "onde" — código a conhecer
 
 | Arquivo | Papel | O que olhar |
 |---|---|---|
-| [src/atlas/rotinas/repo_sync.py](../../../src/atlas/rotinas/repo_sync.py) | **A rotina-alvo.** | Anatomia: `collect` (entrada), `_clonar`/`_sincronizar`, `_reportar`, `_salvar_diff`/`_salvar_doc`, `_gerar_contexto`, wrapper `_git`. Clone é `--depth=100` (raso) e só segue `origin/HEAD` hoje. |
+| [src/atlas/rotinas/repo_sync.py](../../../src/atlas/rotinas/repo_sync.py) | **A rotina-alvo.** | Anatomia: `collect` (entrada), `_clonar`/`_sincronizar`, `_reportar`, `_salvar_diff`/`_salvar_doc`, `_gerar_contexto`, wrapper `_git`. Clone é `--depth=100` (raso) e só segue `origin/HEAD` hoje. **A spec manda refatorar isto num pacote** `repo_sync/` (`git.py`, `materialize.py`, `serialize.py`, `analyze.py`, `context.py`, `backfill.py`) preservando o entrypoint `@registrar("repo-sync")`. |
 | [src/atlas/core/resource.py](../../../src/atlas/core/resource.py) | Forma do `Resource` | `kind`, `name`, `labels`, `spec`, `status`. Identidade = `(kind, name)`. |
 | [src/atlas/core/store.py](../../../src/atlas/core/store.py) | Persistência | Verbos `get/list/apply/patch/set_status/delete`; `list(kind, labels=...)` filtra por label (AND exato). |
 | [src/atlas/executor.py](../../../src/atlas/executor.py) | `ContextoExecucao` e `CollectResult` | O que `collect` recebe (`ctx.agora`, `ctx.store`, `ctx.rotina`, `ctx.db`) e devolve (`CollectResult(data=...)`). |
@@ -75,10 +78,12 @@ atualizado-em: 2026-06-23
 | [tests/test_repo_contexto.py](../../../tests/test_repo_contexto.py) | Testes do `Doc` de contexto (Opus), TTL e corpus. |
 | [tests/test_core_store.py](../../../tests/test_core_store.py) | Como exercitar o store isolado (útil para testar materialização de `Branch`/`Commit`). |
 
-**Dica:** para funções puras novas (ex.: `_metricas_branch`), mockar o wrapper
-`_git` (`monkeypatch.setattr(repo_sync, "_git", fake)`) é mais limpo que mockar
-`subprocess.run`. Para testes de integração do `collect`, siga o mock de
-`subprocess.run` de `test_repo_sync.py`.
+**Estratégia de teste (autoritativa — DoD da spec):** a lógica git-pesada nova
+(multi-branch, parents/grafo, ahead/behind, backfill) é testada contra **repositórios
+git reais criados em `tmp_path`** (`git init`, commits, branches de verdade), com a
+**IA mockada**. Os testes legados de `test_repo_sync.py` (mock de `subprocess.run`)
+continuam válidos para o caminho single-branch e devem permanecer verdes após a
+refatoração (ajustando os alvos de `patch` ao novo pacote).
 
 ## 5. Modelo de dados alvo (referência rápida — ADR-0023 §1)
 
@@ -93,18 +98,18 @@ Diff/<label>-<sha7>     labels:{repo,commit}  spec:{diff_raw, explicacao}   # pe
 Doc/<label>-…           labels:{repo,topic:repo,tipo}  # contexto, serializados, por-commit
 ```
 
-## 6. Sequência sugerida dos planos (fatias do E7)
+## 6. Sequência das fatias do E7
 
-1. **E7-01 — fundação multi-branch** (`Branch`/`Commit`): [plano](2026-06-23-repo-fundacao-multibranch.md). *Pré-requisito de tudo.*
-2. **E7-02** — fetch de **todas** as remotas + loop por branch (estende E7-01).
-3. **E7-04** — serialização incremental por preset (arquivos alterados → `Doc`).
-4. **E7-05** — `analyze_policy` + referência a `Agente` (depende do ADR-0024).
-5. **E7-06** — backfill (`--unshallow` + varredura idempotente).
-6. **E7-07/E7-08/E7-10** — schema `hidden` + render no quadro branco + modularização do front (depende do ADR-0020).
-7. **E7-11** — Telegram (pool/stateful/digest).
+- **Dados/pull — E7-01..E7-06** → coberto pela [SPEC-REPO-DADOS](../../specs/repo-especializacao-dados.md)
+  (Kinds `Branch`/`Commit`, pull multi-branch sem checkout, git-graph híbrido,
+  serialização, `analyze_policy` degradado, backfill, pacote `repo_sync/`). **Em andamento.**
+- **Front — E7-07/E7-08/E7-10** → spec "b" (render no quadro branco + modularização);
+  depende do [ADR-0020](../../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md). *A escrever.*
+- **Agente/motor — E7-05 completo** → depende dos ADRs [0024](../../arquitetura/adr/ADR-0024-kind-agente.md)/[0022](../../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md). *A escrever.*
+- **Telegram — E7-11** → pool/stateful/digest. *A escrever.*
 
-> Planos 2–7 ainda não foram escritos. Peça ao Tech Lead (Opus) para gerar o plano da
-> próxima fatia antes de iniciá-la — cada fatia é um plano TDD próprio.
+> As specs/planos ainda não escritos (front, Agente, Telegram) são pedidos ao Tech
+> Lead (Opus) quando a fatia entrar na fila — cada uma é uma spec/plano próprio.
 
 ## 7. Armadilhas conhecidas
 

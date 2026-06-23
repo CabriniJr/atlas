@@ -1,5 +1,12 @@
 # Repo — Fundação de dados multi-branch (Branch/Commit) — Implementation Plan
 
+> ⚠️ **Superado em parte pela [SPEC-REPO-DADOS](../../specs/repo-especializacao-dados.md)
+> (autoritativa, ADR-0023 aceito).** A spec manda **refatorar `repo_sync.py` num
+> pacote** `repo_sync/` e **testar contra repositórios git reais em `tmp_path`** (não
+> mock de `subprocess`). Este plano vale como **referência da lógica** das primitivas
+> (slug, métricas, parents, materialização), mas **siga a spec** na estrutura de
+> arquivos e na estratégia de teste.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Materializar, a cada sync do `repo-sync`, os Kinds ocultos `Branch` e `Commit` (resumo leve) no store, ligados por label `repo=<label>`, formando a base do git-graph e do progresso (ADR-0023 §1–§3).

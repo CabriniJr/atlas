@@ -22,6 +22,7 @@ atualizado-em: 2026-06-23
 | 1.6    | 2026-06-17 | Tech Lead | ADR-0019 (Interfaces são clientes da API) — aceito | PO/PM |
 | 1.7    | 2026-06-23 | Tech Lead | ADR-0023 (Especialização do Kind Repo) — proposto; ADRs irmãos 0020/0021/0022/0024 reservados | — |
 | 1.8    | 2026-06-23 | Tech Lead | ADRs irmãos 0020/0021/0022/0024 escritos (proposto) | — |
+| 1.9    | 2026-06-23 | Tech Lead | ADR-0023 **aceito** pelo PO/PM; spec SPEC-REPO-DADOS criada | PO/PM |
 
 ---
 
@@ -65,7 +66,7 @@ atualizado-em: 2026-06-23
 | [0020](ADR-0020-views-especializadas-por-kind.md) | Views especializadas por Kind (o "quadro branco") | proposto | Brainstorm Repo (carro-chefe) |
 | [0021](ADR-0021-rotina-para-job.md) | Renomeação Rotina → Job | proposto | Brainstorm Repo (carro-chefe) |
 | [0022](ADR-0022-motor-de-ia-plugavel.md) | Motor de IA selecionável e plugável (incl. local) | proposto | Brainstorm Repo (carro-chefe) |
-| [0023](ADR-0023-especializacao-kind-repo.md) | **Especialização do Kind Repo** (multi-branch, git-graph, serialização/análise) | **proposto** | Brainstorm Repo (carro-chefe) |
+| [0023](ADR-0023-especializacao-kind-repo.md) | **Especialização do Kind Repo** (multi-branch, git-graph, serialização/análise) | **aceito** | Brainstorm Repo (carro-chefe) |
 | [0024](ADR-0024-kind-agente.md) | Kind `Agente` (analisador configurável) | proposto | Brainstorm Repo (carro-chefe) |
 
 ## Lastro

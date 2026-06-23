@@ -27,6 +27,8 @@ atualizado-em: 2026-06-16
 3. Leia a [constituição](../arquitetura/constituicao.md) e os
    [ADRs](../arquitetura/adr/README.md) relevantes.
 4. Leia o documento específico da área que vai tocar.
+5. **Se foi despachado num épico, leia o [dossiê de contexto](../processos/dossie-de-contexto.md)**
+   daquele épico antes de tudo — ele agrega os arquivos certos em ordem de leitura.
 
 ## Durante o trabalho
 - **A doc é a fonte de verdade (P8).** Código que diverge está errado ou precisa

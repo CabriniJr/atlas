@@ -48,6 +48,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 - [`processos/politica-de-desenvolvimento.md`](processos/politica-de-desenvolvimento.md) — commits, branches, PR, CI/CD, deploy.
 - [`processos/definicao-de-pronto.md`](processos/definicao-de-pronto.md) — DoR / DoD.
 - [`processos/revisao-e-curadoria.md`](processos/revisao-e-curadoria.md) — best-of-two na prática.
+- [`processos/dossie-de-contexto.md`](processos/dossie-de-contexto.md) — **diretriz:** todo épico tem um dossiê que agrega o contexto certo para despachar devs.
 
 ### 📝 Specs — *como cada feature funciona em detalhe*
 Specs detalhadas que guiam a implementação (requisitos, fluxo, dados, erros, testes).

@@ -27,6 +27,8 @@ sua abordagem, para alimentar a curadoria best-of-two.
 paralelo (geralmente 2 instâncias por tarefa).
 
 ## Entradas
+- O [dossiê de contexto](../processos/dossie-de-contexto.md) do épico — **leia primeiro;**
+  agrega ADRs, código, plano e padrões de teste em ordem de leitura.
 - A spec da tarefa (objetivo, contrato, DoD) do Tech Lead.
 - Os documentos de arquitetura/ADR relevantes.
 - Código existente como padrão a seguir.
