@@ -102,22 +102,22 @@ atualizado-em: 2026-06-23
 ### Já feito (estado atual do `repo-sync`)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-00a | Kind **Repo** + rotina `repo-sync`: clone raso, pull de `origin/HEAD`, diff single-branch | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
-| E7-00b | Kind **Diff** por commit com explicação de IA (Sonnet) | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
-| E7-00c | **Doc** de contexto do projeto (Opus, corpus README+docs+metadados, TTL) + **Doc** por commit | **feito** | [repo_sync.py](../../src/atlas/rotinas/repo_sync.py) |
+| E7-00a | Kind **Repo** + rotina `repo-sync`: clone raso, pull de `origin/HEAD`, diff single-branch | **feito** | [repo_sync/](../../src/atlas/rotinas/repo_sync/) |
+| E7-00b | Kind **Diff** por commit com explicação de IA (Sonnet) | **feito** | [repo_sync/](../../src/atlas/rotinas/repo_sync/) |
+| E7-00c | **Doc** de contexto do projeto (Opus, corpus README+docs+metadados, TTL) + **Doc** por commit | **feito** | [repo_sync/](../../src/atlas/rotinas/repo_sync/) |
 | E7-00d | `Repo.status` com metadados do HEAD (last_commit/autor/data/stat) + schema/ações no `/_schema` | **feito** | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
 | E7-00e | Card de Repo no dashboard (contexto + diffs recentes) | **feito** | [api.py](../../src/atlas/api.py) |
 
 ### A fazer (ADR-0023)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-01 | Kinds **`Branch`** e **`Commit`** (ocultos), agregados por label `repo=<label>` | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-02 | Pull **multi-branch**: fetch de todas as branches remotas + materialização de `Branch`/`Commit` leves | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-03 | **Git-graph híbrido**: grafo reconstruído de `Commit.parents`+ponteiros (store, offline); `Diff` pesado sob demanda | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-04 | **Serialização incremental por preset** (`off`/`docs`/`docs+code`) dos arquivos alterados → `Doc`; nunca binário compilado | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget — **versão degradada** (sem Kind `Agente` ainda) | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | em-andamento | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
-| E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
+| E7-01 | Kinds **`Branch`** e **`Commit`** (ocultos), agregados por label `repo=<label>` | **feito** | [materialize.py](../../src/atlas/rotinas/repo_sync/materialize.py), [spec](../specs/repo-especializacao-dados.md) |
+| E7-02 | Pull **multi-branch**: fetch de todas as branches remotas + materialização de `Branch`/`Commit` leves | **feito** | [gitcmd.py](../../src/atlas/rotinas/repo_sync/gitcmd.py), [spec](../specs/repo-especializacao-dados.md) |
+| E7-03 | **Git-graph híbrido**: grafo reconstruído de `Commit.parents`+ponteiros (store, offline); `Diff` pesado sob demanda | **feito** (dados; render visual = E7-08) | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-04 | **Serialização incremental por preset** (`off`/`docs`/`docs+code`) dos arquivos alterados → `Doc`; nunca binário compilado | **feito** (texto/office-stdlib/pdf-cli) | [serialize.py](../../src/atlas/rotinas/repo_sync/serialize.py), [spec](../specs/repo-especializacao-dados.md) |
+| E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget — **versão degradada** (sem Kind `Agente` ainda) | **feito** (degradado; troca p/ Agente quando ADR-0024 entrar) | [analyze.py](../../src/atlas/rotinas/repo_sync/analyze.py), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md), [spec](../specs/repo-especializacao-dados.md) |
+| E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | **feito** | [backfill.py](../../src/atlas/rotinas/repo_sync/backfill.py), [spec](../specs/repo-especializacao-dados.md) |
+| E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | **parcial** — campos de branches/serialize/analyze no schema; `goal` fica p/ E7-09 | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
 | E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-09 | **Progresso vs. meta**: amarrar Repo a um `Goal` (label) e mostrar avanço | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
 | E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
