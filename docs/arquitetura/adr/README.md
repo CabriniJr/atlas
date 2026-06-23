@@ -21,6 +21,7 @@ atualizado-em: 2026-06-23
 | 1.5    | 2026-06-17 | Tech Lead | ADR-0018 (Manifestos declarativos e `apply -f`) — aceito | PO/PM |
 | 1.6    | 2026-06-17 | Tech Lead | ADR-0019 (Interfaces são clientes da API) — aceito | PO/PM |
 | 1.7    | 2026-06-23 | Tech Lead | ADR-0023 (Especialização do Kind Repo) — proposto; ADRs irmãos 0020/0021/0022/0024 reservados | — |
+| 1.8    | 2026-06-23 | Tech Lead | ADRs irmãos 0020/0021/0022/0024 escritos (proposto) | — |
 
 ---
 
@@ -61,19 +62,11 @@ atualizado-em: 2026-06-23
 | [0017](ADR-0017-gui-por-kind-abstrai-api.md) | Todo Kind tem GUI completa que abstrai a API | aceito | Ações + config visual por Kind |
 | [0018](ADR-0018-manifestos-e-apply-f.md) | Manifestos declarativos e `apply -f`; interface como cliente da API | aceito | Manifestos de domínio + loader |
 | [0019](ADR-0019-interfaces-clientes-da-api.md) | Interfaces são clientes da API | aceito | API pura + /_schema (sub-projeto 2) |
+| [0020](ADR-0020-views-especializadas-por-kind.md) | Views especializadas por Kind (o "quadro branco") | proposto | Brainstorm Repo (carro-chefe) |
+| [0021](ADR-0021-rotina-para-job.md) | Renomeação Rotina → Job | proposto | Brainstorm Repo (carro-chefe) |
+| [0022](ADR-0022-motor-de-ia-plugavel.md) | Motor de IA selecionável e plugável (incl. local) | proposto | Brainstorm Repo (carro-chefe) |
 | [0023](ADR-0023-especializacao-kind-repo.md) | **Especialização do Kind Repo** (multi-branch, git-graph, serialização/análise) | **proposto** | Brainstorm Repo (carro-chefe) |
-
-## ADRs reservados (brainstorm de 2026-06-23)
-
-Números e títulos travados no brainstorm que originou o [ADR-0023](ADR-0023-especializacao-kind-repo.md)
-(épico [E7](../../roadmap/backlog.md) — Repo como carro-chefe). Cada um vira um ADR
-próprio quando entrar na fila e for desenhado; até lá **não há arquivo** (por isso
-sem link):
-
-- **ADR-0020** — Views especializadas por Kind (o "quadro branco" genérico).
-- **ADR-0021** — Renomeação Rotina → Job.
-- **ADR-0022** — Motor de IA selecionável e plugável (Ollama/Gemma local).
-- **ADR-0024** — Kind `Agente` (analisador configurável).
+| [0024](ADR-0024-kind-agente.md) | Kind `Agente` (analisador configurável) | proposto | Brainstorm Repo (carro-chefe) |
 
 ## Lastro
 

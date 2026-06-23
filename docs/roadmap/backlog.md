@@ -19,6 +19,7 @@ atualizado-em: 2026-06-23
 | 1.3    | 2026-06-16 | Tech Lead | Atualização de estados: E0-01/03/04 feitos; E1-11/E5-06/E2-01 feitos; E5-03/E3-01 feitos | — |
 | 1.4    | 2026-06-16 | Tech Lead | E1-05 scaffold feito; E4-07 feito; kinds Timer+CheckIn+labels adicionados ao core | — |
 | 1.5    | 2026-06-23 | Tech Lead | Épico E7 (carro-chefe Repo) + ADR-0023 proposto; ADRs irmãos 0020/0021/0022/0024; estado atual do repo-sync marcado como feito | — |
+| 1.6    | 2026-06-23 | Tech Lead | ADRs irmãos 0020/0021/0022/0024 escritos (proposto); links atualizados | — |
 
 ---
 
@@ -112,19 +113,19 @@ atualizado-em: 2026-06-23
 | E7-05 | **`analyze_policy`** (branch default=auto, demais=manual, pular merges, `min_lines`, allowlist) + disjuntor de budget | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0005](../arquitetura/adr/ADR-0005-orcamento-reativo.md) |
 | E7-06 | **Backfill** (`repo backfill`): `--unshallow` + varredura do histórico; idempotente; 0 IA por padrão | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
 | E7-07 | Config **schema-driven** dos campos novos do Repo (branches, serialize, analyze, goal) — blocos visuais, sem manifesto cru | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md) |
-| E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) · ADR-0020 (reservado) |
+| E7-08 | **Render do Repo** no quadro branco: aba Repos, git-graph, dashboards de progresso (4 eixos), timeline, ações | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-09 | **Progresso vs. meta**: amarrar Repo a um `Goal` (label) e mostrar avanço | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
-| E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) · ADR-0020 (reservado) |
+| E7-10 | **Modularização do front embutido** por Kind (`dashboard/kinds/repo/*`), servido pela API | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
 | E7-11 | **Telegram do Repo**: notificações ricas (pool), prompts stateful opt-in, comandos simples, digest periódico | proposto | [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md), [ADR-0019](../arquitetura/adr/ADR-0019-interfaces-clientes-da-api.md) |
 
-### ADRs irmãos (mesmo brainstorm; a escrever/decidir)
+### ADRs irmãos (mesmo brainstorm)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | proposto (a escrever) | ADR-0020 |
-| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | proposto (a escrever) | ADR-0021 |
-| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | proposto (a escrever) | ADR-0022 |
-| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | proposto (a escrever) | ADR-0024 |
-| E7-24 | **Agente Builder**: prompt → configura o Kind nos conformes do projeto → curadoria (gate humano) | proposto | ADR-0024, [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [revisor-curador](../agentes/revisor-curador.md) |
+| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | proposto (escrito) | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
+| E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | proposto (escrito) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
+| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | proposto (escrito) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
+| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | proposto (escrito) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
+| E7-24 | **Agente Builder**: prompt → configura o Kind nos conformes do projeto → curadoria (gate humano) | proposto | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [revisor-curador](../agentes/revisor-curador.md) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |
