@@ -48,6 +48,7 @@ function _repoShell(r) {
       <button class="rk-tab" data-tab="branches">🌿 Branches</button>
       <button class="rk-tab" data-tab="commits">📝 Commits</button>
       <button class="rk-tab" data-tab="graph">⬡ Graph</button>
+      <button class="rk-tab" data-tab="files">📁 Files</button>
       <button class="rk-tab" data-tab="log" id="rk-log-tab-${esc(r.name)}">📋 Log</button>
       <button class="rk-tab" data-tab="config">⚙️ Config</button>
     </div>
@@ -83,6 +84,7 @@ async function _loadRepoTab(name, tab, container) {
       case 'branches':  await _tabBranches(name, body); break;
       case 'commits':   await _tabCommits(name, body); break;
       case 'graph':     await _tabGraph(name, body); break;
+      case 'files':     await _tabFiles(name, body); break;
       case 'log':       _tabLog(name, body); break;
       case 'config':    await _tabConfig(name, body); break;
     }
@@ -423,6 +425,126 @@ async function _tabGraph(name, el) {
       if (arrow) arrow.textContent = row.classList.contains('open') ? '▼' : '▶';
     });
   });
+}
+
+// ── Tab: Files (arquivos serializados de dentro do repo) ──────────────────────
+async function _tabFiles(name, el) {
+  // Docs serializados: labels.topic=repo, labels.repo=<name>, labels.tipo=serial
+  const all = await apiFetch(`${API}/Doc`).catch(() => []);
+  const files = (all || []).filter(d =>
+    d.labels?.repo === name && d.labels?.tipo === 'serial' && d.labels?.path);
+  files.sort((a, b) => (a.labels.path || '').localeCompare(b.labels.path || ''));
+
+  const toolbar = `<div class="rk-files-bar">
+    <span style="font-size:11px;color:var(--muted)">${files.length} arquivo${files.length !== 1 ? 's' : ''} serializado${files.length !== 1 ? 's' : ''}</span>
+    <span style="flex:1"></span>
+    <button class="btn" id="rk-snap-${esc(name)}" title="Serializa a árvore atual inteira">📸 Snapshot completo</button>
+  </div>`;
+
+  if (!files.length) {
+    el.innerHTML = `${toolbar}
+      <div style="padding:24px 16px;color:var(--muted);font-size:13px">
+        Nenhum arquivo serializado. Configure <code>serialize</code> = docs ou docs+code
+        na aba Config e clique <strong>📸 Snapshot completo</strong> para capturar a árvore.
+      </div>`;
+    _wireSnapshot(name, el);
+    return;
+  }
+
+  // Constrói árvore de pastas a partir dos paths
+  const tree = _buildFileTree(files);
+  el.innerHTML = `${toolbar}
+    <div class="rk-files-wrap">
+      <div class="rk-files-tree" id="rk-ftree-${esc(name)}">${_renderFileTree(tree)}</div>
+      <div class="rk-files-view" id="rk-fview-${esc(name)}">
+        <div style="color:var(--muted);padding:16px;font-size:12px">Selecione um arquivo à esquerda.</div>
+      </div>
+    </div>`;
+
+  _wireSnapshot(name, el);
+
+  // Clique num arquivo → carrega conteúdo
+  el.querySelectorAll('.rk-file-leaf').forEach(node => {
+    node.addEventListener('click', async () => {
+      el.querySelectorAll('.rk-file-leaf').forEach(n => n.classList.remove('active'));
+      node.classList.add('active');
+      const docName = node.dataset.doc;
+      const view = el.querySelector(`#rk-fview-${CSS.escape(name)}`);
+      view.innerHTML = '<div style="padding:16px;color:var(--muted)">carregando…</div>';
+      try {
+        const doc = await apiFetch(`${API}/Doc/${encodeURIComponent(docName)}`);
+        const path = doc.labels?.path || doc.name;
+        const sa = doc.status?.serialized_at ? fmtDt(doc.status.serialized_at) : '';
+        const commit = doc.status?.commit ? `@${doc.status.commit}` : '';
+        view.innerHTML = `<div class="rk-file-head">
+            <code>${esc(path)}</code>
+            <span style="font-size:10px;color:var(--muted)">${esc(commit)} ${esc(sa)}</span>
+          </div>
+          <pre class="rk-file-body">${esc(doc.spec?.body || '')}</pre>`;
+      } catch (e) {
+        view.innerHTML = `<div style="padding:16px;color:var(--red)">erro: ${esc(e.message)}</div>`;
+      }
+    });
+  });
+
+  // Toggle de pastas
+  el.querySelectorAll('.rk-file-dir').forEach(dir => {
+    dir.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dir.parentElement.classList.toggle('collapsed');
+    });
+  });
+}
+
+function _wireSnapshot(name, el) {
+  const btn = el.querySelector(`#rk-snap-${CSS.escape(name)}`);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '📸 serializando…';
+    try {
+      const r = await apiFetch(`${API}/_cmd`, {
+        method: 'POST', body: JSON.stringify({text: `/repo snapshot ${name}`}),
+      });
+      toast(r.output ? r.output.slice(0, 120) : 'snapshot concluído');
+    } catch (e) {
+      toast('erro: ' + e.message);
+    }
+    btn.disabled = false; btn.textContent = '📸 Snapshot completo';
+    _tabFiles(name, el); // recarrega a lista
+  });
+}
+
+// Monta árvore aninhada {dirs:{}, files:[{name, doc, path}]} a partir dos paths
+function _buildFileTree(files) {
+  const root = {dirs: {}, files: []};
+  files.forEach(f => {
+    const path = f.labels.path;
+    const parts = path.split('/');
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const d = parts[i];
+      if (!node.dirs[d]) node.dirs[d] = {dirs: {}, files: []};
+      node = node.dirs[d];
+    }
+    node.files.push({name: parts[parts.length - 1], doc: f.name, path});
+  });
+  return root;
+}
+
+function _renderFileTree(node, depth = 0) {
+  let html = '';
+  const dirNames = Object.keys(node.dirs).sort();
+  for (const d of dirNames) {
+    html += `<div class="rk-file-dirwrap">
+      <div class="rk-file-dir" style="padding-left:${depth * 12}px">📂 ${esc(d)}</div>
+      <div class="rk-file-children">${_renderFileTree(node.dirs[d], depth + 1)}</div>
+    </div>`;
+  }
+  node.files.sort((a, b) => a.name.localeCompare(b.name)).forEach(f => {
+    html += `<div class="rk-file-leaf" data-doc="${esc(f.doc)}" style="padding-left:${depth * 12 + 4}px"
+      title="${esc(f.path)}">📄 ${esc(f.name)}</div>`;
+  });
+  return html;
 }
 
 // ── Tab: Log (progresso/resultado de operações) ───────────────────────────────

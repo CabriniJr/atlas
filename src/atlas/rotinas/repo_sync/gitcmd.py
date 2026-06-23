@@ -207,3 +207,9 @@ def file_at(repo_dir: Path, sha: str, path: str) -> bytes | None:
     if proc.returncode != 0:
         return None
     return proc.stdout
+
+
+def list_tree(repo_dir: Path, ref: str = "HEAD") -> list[str]:
+    """Lista todos os paths de arquivo da árvore em ``ref`` (recursivo, sem checkout)."""
+    out = git(["ls-tree", "-r", "--name-only", ref], cwd=repo_dir, check=False)
+    return [ln for ln in out.splitlines() if ln.strip()]

@@ -623,6 +623,21 @@ body.rk-fullscreen #editor
 .rk-log-line.ok{color:var(--green)}
 .rk-log-line.err{color:var(--red)}
 
+/* ── Repo: aba Files (árvore de arquivos serializados) ───────────────────── */
+.rk-files-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.rk-files-wrap{display:flex;flex:1;min-height:0;overflow:hidden}
+.rk-files-tree{width:260px;flex-shrink:0;overflow-y:auto;border-right:1px solid var(--border);padding:6px 0;font-size:12px}
+.rk-files-view{flex:1;overflow:auto;min-width:0;display:flex;flex-direction:column}
+.rk-file-dir{cursor:pointer;padding:3px 8px;color:var(--text);white-space:nowrap;user-select:none}
+.rk-file-dir:hover{background:var(--bg2)}
+.rk-file-dirwrap.collapsed > .rk-file-children{display:none}
+.rk-file-leaf{cursor:pointer;padding:3px 8px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-file-leaf:hover{background:var(--bg2);color:var(--text)}
+.rk-file-leaf.active{background:var(--blue);color:#fff}
+.rk-file-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.rk-file-head code{color:var(--orange);font-size:12px}
+.rk-file-body{flex:1;overflow:auto;margin:0;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-word;line-height:1.5;color:var(--text)}
+
 /* ── RepoGroup: dashboard multirepo ──────────────────────────────────────── */
 .rg-wrap{height:100%;overflow-y:auto;padding:12px 14px}
 .rg-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}

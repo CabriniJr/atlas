@@ -348,6 +348,12 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
             "verbo": "cmd",
             "template": "/repo backfill {name}",
         },
+        {
+            "id": "snapshot",
+            "label": "📸 Snapshot",
+            "verbo": "cmd",
+            "template": "/repo snapshot {name}",
+        },
     ],
     "Agente": [
         {"id": "chat", "label": "💬 Chat", "verbo": "chat", "template": "{name}"},
