@@ -135,6 +135,8 @@ atualizado-em: 2026-06-23
 | E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | **feito** | [ia.py](../../src/atlas/ia.py) |
 | E7-27 | **ADR-0025** — Agente **modo `code`** (Claude Code agêntico 2b no workspace): campo `modo`, `POST /_agent_run` + SSE `GET /_agent_run/{id}/stream`, `ThreadingHTTPServer`, runs assíncronos p/ multitarefa. Atende "ser um Claude Code". | **feito** (núcleo); pendências de segurança no ADR | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md), [api.py](../../src/atlas/api.py), [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
 | E7-28 | **Endurecimento do modo `code`**: workspace restrito, gate de curadoria humana, persistência de runs, allow/deny de tools por Agente | proposto | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md) §Pendências, [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
+| E7-29 | **Agente segue o modelo de objetos da API**: injeta schema vivo (kinds+spec) + instruções no system-prompt do modo `code`, fazendo o agente criar/editar recursos via API REST (não SQLite/arquivos) | **feito** | [api.py](../../src/atlas/api.py) (`_agent_api_context`) |
+| E7-30 | **Multirepo (Kind `RepoGroup`)**: dashboard que agrupa uma série de Repos — resumo agregado + grid de cards clicáveis + "Sync todos" | **feito** | [kinds/repogroup.js](../../src/atlas/dashboard/kinds/repogroup.js), [api_schema.py](../../src/atlas/api_schema.py), [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |
