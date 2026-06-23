@@ -64,6 +64,27 @@ e nas fichas de [`docs/agentes/`](docs/agentes/README.md).
   `main`; commits `tipo(escopo): assunto`; PR com CI verde antes do merge. Prod só
   roda tags. Ver [`docs/processos/politica-de-desenvolvimento.md`](docs/processos/politica-de-desenvolvimento.md).
 
+## 5a. Ambiente de Desenvolvimento (Rasp + Tailnet)
+
+**Atlas roda em produção numa Rasp (1GB RAM) acessível via Tailnet.**
+
+| Recurso | Endereço/Valor |
+|---------|---|
+| **URL de acesso** | `http://guaxinimserver.tail25c9d8.ts.net:8080` |
+| **Hostname Tailscale** | `guaxinimserver.tail25c9d8.ts.net` |
+| **IP Tailscale** | `100.74.97.24` |
+| **IP local (Rasp)** | `192.168.86.28` |
+| **SSH** | `ssh guaxinim@guaxinimserver.tail25c9d8.ts.net` (senha: `xa942006`) |
+| **Repo (Rasp)** | `/home/guaxinim/atlas` com venv em `.venv/` |
+
+**Workflow de desenvolvimento:**
+1. **Aqui** (seu computador): edita código, faz branch, commit, push
+2. **PR**: abre no GitHub, valida em CI
+3. **Rasp**: após merge em `main`, faz `git pull && restart atlas`
+4. **Validação**: testa em `http://guaxinimserver.tail25c9d8.ts.net:8080`
+
+**Documentação completa:** ver [`RASP.md`](RASP.md)
+
 ## 6. O que NUNCA fazer
 
 - Ativar/auto-executar código gerado pelo meta-loop sem revisão humana.
