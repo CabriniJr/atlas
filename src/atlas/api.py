@@ -1753,10 +1753,54 @@ function _alarmCard(r){
   </div>`;
 }
 
-function _diffCard(r){ return ''; }
-function _docCard(r){ return ''; }
-function _promptCard(r){ return ''; }
-function _poolCard(r){ return ''; }
+function _docCard(r){
+  const s=r.spec||{};
+  const body = s.body ? `<div class="md">${markdownToHtml(String(s.body))}</div>` : '<div style="color:var(--muted)">(sem corpo)</div>';
+  return `<div class="r-section">
+    ${s.title?`<div class="sec-title">${esc(s.title)}</div>`:''}
+    ${body}
+    ${s.source?`<div style="margin-top:8px;font-size:10px;color:var(--muted)">src: ${esc(s.source)}</div>`:''}
+  </div>`;
+}
+
+function _diffCard(r){
+  const s=r.spec||{};
+  const head = `${esc(s.subject||s.commit||'')} <span style="color:var(--muted)">${esc(s.commit||'')}</span>`;
+  const stat = `🗂 ${esc(String(s.files_changed??'?'))} arq · +${esc(String(s.insertions??0))}/-${esc(String(s.deletions??0))}`;
+  const arquivos = Array.isArray(s.files_list)&&s.files_list.length ? `<div style="font-size:11px;color:var(--muted);margin:4px 0">${s.files_list.map(esc).join(', ')}</div>` : '';
+  const expl = s.explicacao ? `<div class="sec-title" style="margin-top:10px">🧠 análise</div><div class="md">${markdownToHtml(String(s.explicacao))}</div>` : '';
+  const diff = s.diff_raw ? `<div class="sec-title" style="margin-top:10px">diff</div><pre class="json">${esc(String(s.diff_raw))}</pre>` : '';
+  return `<div class="r-section">
+    <div style="font-size:14px">${head}</div>
+    <div style="font-size:11px;color:var(--muted)">${s.author?esc(s.author)+' · ':''}${esc(fmtDt(s.date))}</div>
+    <div style="margin-top:6px">${stat}</div>
+    ${arquivos}${expl}${diff}
+  </div>`;
+}
+
+function _promptCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  return `<div class="r-section">
+    <div class="sec-title">🧠 template</div>
+    <pre class="json">${esc(String(s.template||''))}</pre>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">modelo: ${esc(s.model||'-')} · fonte: ${esc(s.fonte||'-')}</div>
+    ${st.last_output?`<div class="sec-title" style="margin-top:10px">última saída</div><div class="md">${markdownToHtml(String(st.last_output))}</div>`:''}
+  </div>`;
+}
+
+function _poolCard(r){
+  const s=r.spec||{}, st=r.status||{};
+  const body = s.body ? `<div class="md">${markdownToHtml(String(s.body))}</div>` : '';
+  const done = (r.kind==='Task') ? `<div style="font-size:12px;margin-top:6px">${s.done?'✅ feita':'⬜ pendente'}</div>` : '';
+  const meta = [];
+  if(s.priority!=null) meta.push('prioridade: '+esc(String(s.priority)));
+  if(st.state||st.estado) meta.push('estado: '+esc(String(st.state||st.estado)));
+  return `<div class="r-section">
+    ${body||'<div style="color:var(--muted)">(vazio)</div>'}
+    ${done}
+    ${meta.length?`<div style="font-size:11px;color:var(--muted);margin-top:6px">${meta.join(' · ')}</div>`:''}
+  </div>`;
+}
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
