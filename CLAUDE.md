@@ -64,24 +64,40 @@ e nas fichas de [`docs/agentes/`](docs/agentes/README.md).
   `main`; commits `tipo(escopo): assunto`; PR com CI verde antes do merge. Prod só
   roda tags. Ver [`docs/processos/politica-de-desenvolvimento.md`](docs/processos/politica-de-desenvolvimento.md).
 
-## 5a. Ambiente de Desenvolvimento (Rasp + Tailnet)
+## 5a. Ambiente de Desenvolvimento (Local + Rasp Pseudo-Prod)
 
-**Atlas roda em produção numa Rasp (1GB RAM) acessível via Tailnet.**
+**Dois ambientes:**
 
-| Recurso | Endereço/Valor |
-|---------|---|
-| **URL de acesso** | `http://guaxinimserver.tail25c9d8.ts.net:8080` |
-| **Hostname Tailscale** | `guaxinimserver.tail25c9d8.ts.net` |
-| **IP Tailscale** | `100.74.97.24` |
-| **IP local (Rasp)** | `192.168.86.28` |
-| **SSH** | `ssh guaxinim@guaxinimserver.tail25c9d8.ts.net` (senha: `xa942006`) |
-| **Repo (Rasp)** | `/home/guaxinim/atlas` com venv em `.venv/` |
+### Local (Dev — sua máquina)
+- **URL:** `http://localhost:8080` (ou `http://atlas:8080` com alias)
+- **Rodado via:** `python -m atlas` 
+- **Propósito:** desenvolvimento, testes, iteração rápida
+
+### Rasp (Pseudo-Prod — Tailnet)
+- **URL:** `http://atlas:8080` (após alias em `/etc/hosts`)
+- **Completo:** `http://guaxinimserver.tail25c9d8.ts.net:8080`
+- **IP Tailscale:** `100.74.97.24`
+- **SSH:** `ssh guaxinim@guaxinimserver.tail25c9d8.ts.net` (senha: `xa942006`)
+- **Repo:** `/home/guaxinim/atlas` com venv em `.venv/`
+
+### Setup do alias local (seu computador)
+```bash
+# Adicione uma linha ao /etc/hosts:
+sudo bash -c 'echo "100.74.97.24 atlas" >> /etc/hosts'
+
+# Valide
+grep atlas /etc/hosts
+# Deve mostrar: 100.74.97.24 atlas
+
+# Agora acesse ambos via http://atlas:8080 (Rasp) e http://localhost:8080 (local)
+```
 
 **Workflow de desenvolvimento:**
-1. **Aqui** (seu computador): edita código, faz branch, commit, push
-2. **PR**: abre no GitHub, valida em CI
-3. **Rasp**: após merge em `main`, faz `git pull && restart atlas`
-4. **Validação**: testa em `http://guaxinimserver.tail25c9d8.ts.net:8080`
+1. **Aqui** (seu computador): `python -m atlas` → testa em `http://localhost:8080`
+2. **Branch + commit** → push
+3. **PR no GitHub** → valida CI
+4. **Merge em main** → Rasp: `git pull && restart atlas`
+5. **Validação final:** testa em `http://atlas:8080` (Rasp)
 
 **Documentação completa:** ver [`RASP.md`](RASP.md)
 

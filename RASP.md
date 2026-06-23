@@ -1,15 +1,18 @@
-# Atlas na Rasp (Desenvolvimento)
+# Atlas — Local (Dev) + Rasp (Pseudo-Prod)
 
 ## Acesso
 
-**Atlas está rodando em:**
-```
-http://guaxinimserver.tail25c9d8.ts.net:8080
+### Local (sua máquina)
+```bash
+python -m atlas
+# Acesse: http://localhost:8080 (ou http://atlas:8080 com alias)
 ```
 
-Ou se você estiver na máquina local da Rasp:
+### Rasp (Pseudo-Prod)
 ```
-http://localhost:8080
+http://atlas:8080       # (após alias em /etc/hosts)
+ou
+http://guaxinimserver.tail25c9d8.ts.net:8080
 ```
 
 ## Configuração de Produção
