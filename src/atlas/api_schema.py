@@ -243,6 +243,48 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [{"k": "grupo", "label": "Grupo", "hint": "Agrupa recursos"}],
     },
+    "Agente": {
+        "meta": {
+            "icon": "🤖",
+            "desc": "Analisador configurável: motor + contexto + prompt (ADR-0024)",
+        },
+        "spec": [
+            {
+                "k": "motor",
+                "type": "select",
+                "label": "Motor",
+                "opts": ["claude", "ollama"],
+                "hint": "Provider de IA",
+            },
+            {
+                "k": "modelo",
+                "type": "text",
+                "label": "Modelo",
+                "hint": "claude-haiku-4-5-20251001 / gemma4",
+            },
+            {
+                "k": "nivel_contexto",
+                "type": "select",
+                "label": "Nível de contexto",
+                "opts": ["none", "resumo", "completo"],
+                "hint": "Quanto contexto do projeto entra no prompt",
+            },
+            {
+                "k": "prompt",
+                "type": "area",
+                "label": "Prompt / template",
+                "hint": "Use {mensagem} e {agora}",
+            },
+            {
+                "k": "endpoint",
+                "type": "text",
+                "label": "Endpoint Ollama",
+                "hint": "Ex: http://192.168.86.22:11434 (só para motor=ollama)",
+            },
+            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60"},
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral"}],
+    },
 }
 
 # Ações de domínio por kind (ADR-0017). ``verbo`` indica para qual endpoint a
@@ -269,6 +311,9 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
             "verbo": "cmd",
             "template": "/repo backfill {name}",
         },
+    ],
+    "Agente": [
+        {"id": "chat", "label": "💬 Chat", "verbo": "chat", "template": "{name}"},
     ],
 }
 

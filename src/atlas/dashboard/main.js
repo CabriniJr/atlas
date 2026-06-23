@@ -69,7 +69,7 @@ let subTab  = {};     // tabId → 'card' | 'manifest'
 // ── Kind helpers ──
 function kindIcon(k) {
   const icons = {Doc:'📄',Tracker:'📊',Goal:'🎯',Alarm:'⏰',Timer:'⏱',Routine:'🔄',
-    Idea:'💡',Task:'✅',RoutineRequest:'📋',Repo:'📦',Diff:'🔀',CheckIn:'📍'};
+    Idea:'💡',Task:'✅',RoutineRequest:'📋',Repo:'📦',Diff:'🔀',CheckIn:'📍',Agente:'🤖'};
   return icons[k] || '🗂';
 }
 
@@ -336,6 +336,18 @@ const _KIND_SCHEMA = {
     ],
     labels: [{k:'grupo',label:'Grupo',hint:'Agrupa com outros recursos'}],
   },
+  Agente: {
+    meta: {icon:'🤖', desc:'Analisador configurável: motor + contexto + prompt (ADR-0024)'},
+    spec: [
+      {k:'motor',          type:'select',label:'Motor',             opts:['claude','ollama'],hint:'Provider de IA'},
+      {k:'modelo',         type:'text',  label:'Modelo',            hint:'claude-haiku-4-5-20251001 / gemma4'},
+      {k:'nivel_contexto', type:'select',label:'Nível de contexto', opts:['none','resumo','completo'],hint:'Custo×qualidade'},
+      {k:'prompt',         type:'area',  label:'Prompt/template',   hint:'Use {mensagem} e {agora}'},
+      {k:'endpoint',       type:'text',  label:'Endpoint Ollama',   hint:'http://host:11434'},
+      {k:'timeout',        type:'number',label:'Timeout (s)',        hint:'Default: 60'},
+    ],
+    labels: [{k:'dominio',label:'Domínio',hint:'repo · estudo · geral'}],
+  },
 };
 
 // ── Templates JSON por Kind ────────────────────────────────────────────────────
@@ -351,6 +363,7 @@ const _MANIFEST_TPL = {
   Task:           {kind:'Task',          name:'',labels:{},spec:{body:'',done:false},status:{}},
   Doc:            {kind:'Doc',           name:'',labels:{topic:'user'},spec:{title:'',body:'# Título\n\nConteúdo…'},status:{}},
   RoutineRequest: {kind:'RoutineRequest',name:'',labels:{},spec:{body:''},status:{}},
+  Agente:         {kind:'Agente',        name:'',labels:{},spec:{motor:'claude',modelo:'claude-haiku-4-5-20251001',nivel_contexto:'resumo',prompt:'Responda em PT-BR:\n{mensagem}',timeout:60},status:{}},
   Prompt:         {kind:'Prompt',        name:'',labels:{},spec:{template:'Analise e dê insights em PT-BR:\n{dados}',model:'claude-haiku-4-5-20251001',fonte:'grupo:saude',timeout:90},status:{}},
 };
 

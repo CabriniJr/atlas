@@ -126,13 +126,13 @@ atualizado-em: 2026-06-23
 ### ADRs irmãos (mesmo brainstorm)
 | ID | História | Estado | ADR/doc |
 |---|---|---|---|
-| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | **aceito** (a implementar) | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
+| E7-20 | **ADR-0020** — Views especializadas por Kind (quadro branco genérico: slot de render, kinds ocultos/aninhados, aba) | **feito** | [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md), [dashboard/](../../src/atlas/dashboard/) |
 | E7-21 | **ADR-0021** — Renomeação Rotina → **Job** em código/docs/API/front | **aceito** (a implementar) | [ADR-0021](../arquitetura/adr/ADR-0021-rotina-para-job.md) |
-| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local, baixa prio) | **aceito** (a implementar) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
-| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | **aceito** (a implementar) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
+| E7-22 | **ADR-0022** — Motor de IA selecionável e plugável (incl. Ollama/Gemma local) | **feito** | [ia.py](../../src/atlas/ia.py), [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
+| E7-23 | **ADR-0024** — Kind **`Agente`** (analisador configurável: motor + nível de contexto + prompt + política) | **feito** (schema + `/_chat`) | [api_schema.py](../../src/atlas/api_schema.py), [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md) |
 | E7-24 | **Agente Builder**: prompt natural → configura Kind Agente automaticamente — **CRÍTICO p/ curadoria automática** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0013](../arquitetura/adr/ADR-0013-barreira-de-entrada.md), [[autonomous-dev-loop]] |
-| E7-25 | **Render chat do Agente** (quad. branco, E7 spec b): interface interativa via motor plugável — **CRÍTICO p/ IDE integrado** | pronto (design) | [ADR-0024](../arquitetura/adr/ADR-0024-kind-agente.md), [ADR-0020](../arquitetura/adr/ADR-0020-views-especializadas-por-kind.md) |
-| E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | pronto (design) | [ADR-0022](../arquitetura/adr/ADR-0022-motor-de-ia-plugavel.md) |
+| E7-25 | **Render chat do Agente** (quad. branco): interface interativa via motor plugável — **CRÍTICO p/ IDE integrado** | **feito** | [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
+| E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | **feito** | [ia.py](../../src/atlas/ia.py) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |

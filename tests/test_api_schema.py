@@ -55,6 +55,18 @@ def test_kinds_ocultos_branch_commit_diff():
         assert kinds[k]["meta"].get("hidden") is True
 
 
+def test_agente_no_schema(tmp_path):
+    """E7-23: Kind Agente aparece no schema com motor/modelo/nivel_contexto."""
+    kinds = schema_payload()["kinds"]
+    assert "Agente" in kinds
+    a = kinds["Agente"]
+    campos = {c["k"]: c for c in a["spec"]}
+    assert "motor" in campos and "ollama" in campos["motor"]["opts"]
+    assert "nivel_contexto" in campos
+    assert "prompt" in campos
+    assert any(x["id"] == "chat" for x in a["actions"])
+
+
 def test_serializa_para_json():
     import json
 

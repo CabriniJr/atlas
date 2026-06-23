@@ -214,6 +214,11 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
+        # Chat interativo do Kind Agente (E7-25, ADR-0024).
+        if path == _API_PREFIX + "/_chat":
+            self._json(200, _agente_chat(body.get("agente", ""), body.get("mensagem", ""), _store))
+            return
+
         if path != _API_PREFIX + "/_cmd":
             self._json(404, {"error": "not found"})
             return
@@ -623,6 +628,47 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
         "insight": resposta,
         "doc": doc_name,
     }
+
+
+def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
+    """Executa o Kind Agente em modo chat (E7-25, ADR-0024).
+
+    Busca o recurso Agente, constrói o prompt com o template e chama o motor
+    selecionado. Devolve ``{response, motor, modelo}`` ou ``{error}``.
+    """
+    from atlas.ia import InvocarErro, invocar
+
+    if not agente_name or not mensagem:
+        return {"error": "agente e mensagem são obrigatórios"}
+    agente = store.get("Agente", agente_name)
+    if agente is None:
+        return {"error": f"Agente '{agente_name}' não encontrado"}
+
+    spec = agente.spec or {}
+    motor = spec.get("motor", "claude")
+    modelo = spec.get("modelo") or (
+        "claude-haiku-4-5-20251001" if motor == "claude" else "gemma4"
+    )
+    timeout = int(spec.get("timeout") or 60)
+    endpoint = spec.get("endpoint") or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    template = spec.get("prompt") or "{mensagem}"
+    agora_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    prompt = template.replace("{mensagem}", mensagem).replace("{agora}", agora_str)
+
+    invoke_kwargs: dict = {"modelo": modelo, "timeout": timeout, "motor": motor}
+    if motor == "ollama" and endpoint:
+        import atlas.ia as _ia_mod
+        try:
+            resposta = _ia_mod.invocar_ollama(prompt, modelo, endpoint, timeout)
+        except InvocarErro as e:
+            return {"error": str(e), "motor": motor, "modelo": modelo}
+    else:
+        try:
+            resposta = invocar(prompt, **invoke_kwargs)
+        except InvocarErro as e:
+            return {"error": str(e), "motor": motor, "modelo": modelo}
+
+    return {"response": resposta, "motor": motor, "modelo": modelo}
 
 
 def _salvar_insight_doc(scope: str, name: str, texto: str, model: str) -> str | None:
