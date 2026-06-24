@@ -26,9 +26,15 @@
   <input id="filter" type="text" placeholder="filtrar…" autocomplete="off">
   <span class="spacer"></span>
   <button class="btn" onclick="newResource()" title="Novo recurso  Ctrl+N" style="padding:3px 10px;font-size:11px">＋ Novo</button>
-  <button class="view-btn active" id="btn-status" onclick="setView('status')">◉ Status</button>
-  <button class="view-btn" id="btn-explorer" onclick="setView('explorer')">≡ Explorer</button>
-  <button class="view-btn" id="btn-graph" onclick="setView('graph')">⬡ Graph</button>
+  <button class="view-btn active" id="btn-home" onclick="setView('home')">🏠 Home</button>
+  <div class="nav-menu">
+    <button class="view-btn" id="btn-nav" onclick="toggleNavMenu()" title="Mais visões (por baixo do capô)">☰ Mais ▾</button>
+    <div class="nav-dropdown" id="nav-dropdown">
+      <button class="view-btn" id="btn-status" onclick="setView('status');toggleNavMenu(false)">◉ Status</button>
+      <button class="view-btn" id="btn-explorer" onclick="setView('explorer');toggleNavMenu(false)">≡ Explorer</button>
+      <button class="view-btn" id="btn-graph" onclick="setView('graph');toggleNavMenu(false)">⬡ Graph</button>
+    </div>
+  </div>
   <span style="font-size:11px;color:var(--muted);margin-left:6px" id="status-bar">—</span>
 </div>
 
@@ -117,6 +123,38 @@
   </div>
 </div>
 
+<!-- Home / landing hub view -->
+<div id="home-view">
+  <div class="home-scroll">
+    <section class="home-hero">
+      <div class="home-hero-head">
+        <span class="home-hero-icon">🤖</span>
+        <div>
+          <div class="home-hero-title">Construir com IA</div>
+          <div class="home-hero-sub">Descreva o que quer criar — o <strong>atlas-builder</strong> monta os objetos seguindo o schema da API.</div>
+        </div>
+      </div>
+      <div class="home-builder">
+        <textarea id="home-ai-input" rows="2" placeholder="ex: crie um tracker de água em ml com sintaxe agua: …"></textarea>
+        <button class="btn home-ai-send" id="home-ai-send">Executar ▶</button>
+      </div>
+      <div id="home-ai-log" class="home-ai-log"></div>
+    </section>
+
+    <section class="home-section">
+      <div class="home-sec-head"><span>📊 O que existe</span>
+        <button class="btn" onclick="loadHome()" style="font-size:11px;padding:2px 8px">↻</button></div>
+      <div id="home-tracking"><div class="sv-empty">carregando…</div></div>
+    </section>
+
+    <section class="home-section">
+      <div class="home-sec-head"><span>🎨 Quadro branco</span>
+        <span style="font-size:11px;color:var(--muted)">renders especializados dos itens que existem</span></div>
+      <div id="home-whiteboard"><div class="sv-empty">carregando…</div></div>
+    </section>
+  </div>
+</div>
+
 <!-- Status / overview view -->
 <div id="status-view">
   <div id="sv-head">
@@ -153,5 +191,6 @@
 <script src="/dashboard/kinds/repo.js"></script>
 <script src="/dashboard/kinds/repogroup.js"></script>
 <script src="/dashboard/kinds/agente.js"></script>
+<script src="/dashboard/home.js"></script>
 </body>
 </html>

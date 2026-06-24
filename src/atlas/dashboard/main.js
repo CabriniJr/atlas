@@ -1446,13 +1446,17 @@ document.addEventListener('click', e => { if (!e.target.closest('#cli-bar')) hid
 // ── View switcher ──
 function setView(v) {
   document.body.dataset.view = v;
-  document.getElementById('btn-status').classList.toggle('active', v==='status');
-  document.getElementById('btn-explorer').classList.toggle('active', v==='explorer');
-  document.getElementById('btn-graph').classList.toggle('active', v==='graph');
+  document.getElementById('btn-home')?.classList.toggle('active', v==='home');
+  document.getElementById('btn-status')?.classList.toggle('active', v==='status');
+  document.getElementById('btn-explorer')?.classList.toggle('active', v==='explorer');
+  document.getElementById('btn-graph')?.classList.toggle('active', v==='graph');
+  // realça o botão "Mais" quando uma view secundária está ativa
+  document.getElementById('btn-nav')?.classList.toggle('active', ['status','explorer','graph'].includes(v));
   localStorage.setItem('atlas_view', v);
   if (v==='graph') { if (Object.keys(GV.data).length===0) loadGraph(); else renderGraph(); }
   clearInterval(_svTimer); _svTimer=null;
   if (v==='status') { loadStatus(); _svTimer=setInterval(loadStatus, 30000); }
+  if (v==='home' && typeof loadHome==='function') loadHome();
 }
 
 // ── Status / overview view ──
@@ -2406,7 +2410,7 @@ cliAppend('─'.repeat(40), 'cli-sep');
 if (TOKEN) { init(); } else { showTokenOverlay(); }
 
 // restore view (default: status — ver o que está rodando ao abrir)
-(function(){ const v=localStorage.getItem('atlas_view')||'status'; setView(v); })();
+(function(){ const v=localStorage.getItem('atlas_view')||'home'; setView(v); })();
 
 // Auto-refresh kinds a cada 20s
 setInterval(async () => {
