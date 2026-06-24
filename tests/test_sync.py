@@ -60,9 +60,9 @@ def test_sync_routines_do_toml():
         Rotina(nome="ping", descricao="Ping", agenda="@every 1m", ativa=False),
     ]
     sincronizar_store(db, store, rotinas, agora=T0)
-    assert store.get("Routine", "treino") is not None
-    assert store.get("Routine", "ping") is not None
-    r = store.get("Routine", "treino")
+    assert store.get("Job", "treino") is not None
+    assert store.get("Job", "ping") is not None
+    r = store.get("Job", "treino")
     assert r.spec["active"] is True
 
 
@@ -114,4 +114,4 @@ def test_resources_mostra_tudo_pos_sync():
     resposta = responder("/resources", db, T0, store=store)
     assert "Tracker" in resposta
     assert "Alarm" in resposta
-    assert "Routine" in resposta
+    assert "Job" in resposta

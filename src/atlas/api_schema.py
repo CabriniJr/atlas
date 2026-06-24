@@ -71,8 +71,8 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [],
     },
-    "Routine": {
-        "meta": {"icon": "🧩", "desc": "Rotina agendada ou por trigger"},
+    "Job": {
+        "meta": {"icon": "🧩", "desc": "Job agendado ou por trigger (ex-Routine, ADR-0021)"},
         "spec": [
             {"k": "agenda", "type": "cron", "label": "Agenda", "hint": "Preset ou cron"},
             {
@@ -94,12 +94,39 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "coletar",
                 "type": "text",
                 "label": "Collect fn",
-                "hint": "default = nome da rotina",
+                "hint": "default = nome do job",
             },
         ],
         "labels": [
             {"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}
         ],
+    },
+    "Routine": {
+        "meta": {
+            "icon": "🧩",
+            "desc": "⚠️ Depreciado — use Job (ADR-0021)",
+            "hidden": True,
+        },
+        "spec": [],
+        "labels": [],
+    },
+    "RepoGroup": {
+        "meta": {"icon": "🗂", "desc": "Multirepo: agrupa uma série de Repos num dashboard"},
+        "spec": [
+            {
+                "k": "repos",
+                "type": "text",
+                "label": "Repos",
+                "hint": "Nomes de Repo separados por vírgula (ex.: nora, atlas)",
+            },
+            {
+                "k": "description",
+                "type": "area",
+                "label": "Descrição",
+                "hint": "Para que serve este grupo",
+            },
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "trabalho · pessoal · estudo"}],
     },
     "Repo": {
         "meta": {"icon": "📦", "desc": "Repositório git monitorado (repo-sync, multi-branch)"},
@@ -243,6 +270,55 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [{"k": "grupo", "label": "Grupo", "hint": "Agrupa recursos"}],
     },
+    "Agente": {
+        "meta": {
+            "icon": "🤖",
+            "desc": "Analisador configurável: motor + contexto + prompt (ADR-0024)",
+        },
+        "spec": [
+            {
+                "k": "modo",
+                "type": "select",
+                "label": "Modo",
+                "opts": ["chat", "code"],
+                "hint": "chat = resposta simples; code = Claude Code agêntico (edita arquivos)",
+            },
+            {
+                "k": "motor",
+                "type": "select",
+                "label": "Motor",
+                "opts": ["claude", "ollama"],
+                "hint": "Provider de IA",
+            },
+            {
+                "k": "modelo",
+                "type": "text",
+                "label": "Modelo",
+                "hint": "claude-haiku-4-5-20251001 / claude-sonnet-4-6 / gemma4",
+            },
+            {
+                "k": "nivel_contexto",
+                "type": "select",
+                "label": "Nível de contexto",
+                "opts": ["none", "resumo", "completo"],
+                "hint": "Quanto contexto do projeto entra no prompt (só modo=chat)",
+            },
+            {
+                "k": "prompt",
+                "type": "area",
+                "label": "Prompt / template",
+                "hint": "Use {mensagem} e {agora} no modo chat; instrução de sistema no modo code",
+            },
+            {
+                "k": "endpoint",
+                "type": "text",
+                "label": "Endpoint Ollama",
+                "hint": "Ex: http://192.168.86.22:11434 (só para motor=ollama)",
+            },
+            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60 (chat) / 300 (code)"},
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral · dev"}],
+    },
 }
 
 # Ações de domínio por kind (ADR-0017). ``verbo`` indica para qual endpoint a
@@ -254,6 +330,9 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
     ],
     "Tracker": [
         {"id": "register", "label": "📝 Registrar", "verbo": "cmd", "template": "{syntax} {valor}"},
+    ],
+    "Job": [
+        {"id": "run", "label": "▶ Executar", "verbo": "run", "template": "{name}"},
     ],
     "Routine": [
         {"id": "run", "label": "▶ Executar", "verbo": "run", "template": "{name}"},
@@ -269,6 +348,15 @@ _ACTIONS: dict[str, list[dict[str, str]]] = {
             "verbo": "cmd",
             "template": "/repo backfill {name}",
         },
+        {
+            "id": "snapshot",
+            "label": "📸 Snapshot",
+            "verbo": "cmd",
+            "template": "/repo snapshot {name}",
+        },
+    ],
+    "Agente": [
+        {"id": "chat", "label": "💬 Chat", "verbo": "chat", "template": "{name}"},
     ],
 }
 

@@ -3,7 +3,8 @@
 *.sqlite3
 *.db
 .env
-.env.*
+.env.local
+.env.*.local
 secrets/
 *.secret
 

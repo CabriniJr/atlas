@@ -61,9 +61,11 @@ _KIND_ALIASES: dict[str, str] = {
     "ideas": "Idea",
     "task": "Task",
     "tasks": "Task",
-    "routine": "Routine",
-    "routines": "Routine",
-    "rot": "Routine",
+    "job": "Job",
+    "jobs": "Job",
+    "routine": "Job",   # alias legado → Job (ADR-0021)
+    "routines": "Job",
+    "rot": "Job",
     "doc": "Doc",
     "docs": "Doc",
     "rr": "RoutineRequest",
@@ -144,12 +146,12 @@ _SNIPS: dict[str, str] = {
         "  /pool <id> done         → ativar\n"
         "  /pool <id> archive      → arquivar"
     ),
-    "Routine": (
-        "📋 Snip — Kind Routine\n\n"
+    "Job": (
+        "📋 Snip — Kind Job (ex-Routine, ADR-0021)\n\n"
         "Listar:\n"
-        "  /routines\n\n"
+        "  /jobs\n\n"
         "Detalhe:\n"
-        "  /routine <nome>\n\n"
+        "  /job <nome>\n\n"
         "Executar agora:\n"
         "  /run <nome>\n\n"
         "Testar collect (harness, sem IA):\n"
@@ -158,14 +160,14 @@ _SNIPS: dict[str, str] = {
         "  /activate <nome>\n"
         "  /deactivate <nome>\n\n"
         "Editar agenda:\n"
-        "  /routine <nome> set agenda 0 20 * * *"
+        "  /job <nome> set agenda 0 20 * * *"
     ),
     "Repo": (
         "📋 Snip — Kind Repo\n\n"
         "Criar (obrigatório antes de ativar repo-sync):\n"
         "  /apply Repo <nome> spec.url=https://github.com/user/repo\n"
         "  /apply Repo nora spec.url=https://github.com/sys0xFF/nora\n\n"
-        "Routine TOML para monitorar:\n"
+        "Job TOML para monitorar:\n"
         '  nome     = "<nome>-sync"\n'
         '  label    = "<nome>"          # = nome do Repo Resource\n'
         '  coletar  = "repo-sync"\n'

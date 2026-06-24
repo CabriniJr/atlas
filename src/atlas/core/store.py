@@ -40,6 +40,13 @@ class ResourceNaoEncontrado(Exception):
     """``patch``/``set_status`` em um objeto que não existe."""
 
 
+# Alias de compatibilidade (ADR-0021 / E7-21): leitura de Job inclui Routine.
+# Remove após migração completa de todos os recursos existentes.
+_KIND_READ_ALIASES: dict[str, tuple[str, ...]] = {
+    "Job": ("Job", "Routine"),
+}
+
+
 class ResourceStore:
     """Store de objetos sobre SQLite. Cria o schema ao abrir (aditivo)."""
 
@@ -100,10 +107,13 @@ class ResourceStore:
     # --- leitura -----------------------------------------------------------
 
     def get(self, kind: str, name: str) -> Resource | None:
-        row = self.connection.execute(
-            "SELECT * FROM resources WHERE kind = ? AND name = ?", (kind, name)
-        ).fetchone()
-        return self._row_to_resource(row) if row is not None else None
+        for k in _KIND_READ_ALIASES.get(kind, (kind,)):
+            row = self.connection.execute(
+                "SELECT * FROM resources WHERE kind = ? AND name = ?", (k, name)
+            ).fetchone()
+            if row is not None:
+                return self._row_to_resource(row)
+        return None
 
     def list(
         self,
@@ -114,10 +124,14 @@ class ResourceStore:
         """Lista um kind, opcionalmente filtrando por labels (match exato AND).
 
         ``labels`` é o nome K8s-idiomático; ``selector`` é um alias legado.
+        Respeita _KIND_READ_ALIASES (ADR-0021): listar ``Job`` inclui ``Routine``.
         """
         selector = selector or labels
+        kinds_sql = _KIND_READ_ALIASES.get(kind, (kind,))
+        placeholders = ",".join("?" * len(kinds_sql))
         rows = self.connection.execute(
-            "SELECT * FROM resources WHERE kind = ? ORDER BY name", (kind,)
+            f"SELECT * FROM resources WHERE kind IN ({placeholders}) ORDER BY name",
+            kinds_sql,
         ).fetchall()
         out: list[Resource] = []
         for row in rows:
@@ -133,7 +147,12 @@ class ResourceStore:
         rows = self.connection.execute(
             "SELECT DISTINCT kind FROM resources ORDER BY kind"
         ).fetchall()
-        return [r["kind"] for r in rows]
+        raw = {r["kind"] for r in rows}
+        # Se há recursos Routine, expõe Job (novo nome canônico) em vez de Routine.
+        if "Routine" in raw:
+            raw.discard("Routine")
+            raw.add("Job")
+        return sorted(raw)
 
     # --- internos ----------------------------------------------------------
 

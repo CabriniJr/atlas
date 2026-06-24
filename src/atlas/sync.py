@@ -228,18 +228,18 @@ def _sync_docs(store: ResourceStore, agora: datetime) -> None:
             "Priorizar: /pool <id> prio <n>\n"
             "Filtrar: /list Idea -l estado=capturada",
         ),
-        "kind-routine": (
-            "Routine",
-            "Routine — rotina carregada de routines/<nome>/routine.toml\n\n"
+        "kind-job": (
+            "Job",
+            "Job — job agendado ou por trigger (ex-Routine, ADR-0021)\n\n"
             "spec: description, schedule (cron), model, triggers, active\n"
             "status: last_run, run_count\n"
             "labels: model, active\n\n"
-            "Listar: /routines\n"
-            "Detalhe: /routine <nome>\n"
+            "Listar: /jobs\n"
+            "Detalhe: /job <nome>\n"
             "Executar: /run <nome>\n"
             "Ativar/Desativar: /activate <nome>   /deactivate <nome>\n"
-            "Editar agenda: /routine <nome> set agenda '0 20 * * *'\n"
-            "Inspecionar: /describe Routine treino",
+            "Editar agenda: /job <nome> set agenda '0 20 * * *'\n"
+            "Inspecionar: /describe Job treino",
         ),
         "kind-doc": (
             "Doc",
@@ -269,7 +269,7 @@ def _sync_docs(store: ResourceStore, agora: datetime) -> None:
 def _sync_routines(rotinas: list[Rotina], store: ResourceStore, agora: datetime) -> None:
     for rot in rotinas:
         res = Resource(
-            kind="Routine",
+            kind="Job",
             name=rot.nome,
             labels={"model": rot.modelo, "active": str(rot.ativa).lower()},
             spec={

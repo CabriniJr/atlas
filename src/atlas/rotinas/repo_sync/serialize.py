@@ -144,6 +144,32 @@ def _slug(path: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "-", path).strip("-").lower()
 
 
+def _serializar_um(
+    repo_dir, label: str, sha: str, path: str,
+    preset: str, extra_globs: list[str], store: ResourceStore, ctx,
+) -> bool:
+    """Serializa um único ``path`` (no commit ``sha``) → Doc. True se persistiu."""
+    if not should_serialize(path, preset, extra_globs):
+        return False
+    data = gitcmd.file_at(repo_dir, sha, path)
+    if data is None:  # arquivo ausente nesse commit
+        return False
+    texto = extrair(data, path)
+    if not texto:
+        return False
+    store.apply(
+        Resource(
+            kind="Doc",
+            name=f"repo-{label}-file-{_slug(path)}",
+            labels={"topic": "repo", "repo": label, "path": path, "tipo": "serial"},
+            spec={"title": f"{label} · {path}", "body": texto, "source": path},
+            status={"serialized_at": ctx.agora.isoformat(), "commit": sha[:7]},
+        ),
+        ctx.agora,
+    )
+    return True
+
+
 def serializar_arquivos(
     repo_dir,
     label: str,
@@ -162,23 +188,45 @@ def serializar_arquivos(
         return []
     serializados: list[str] = []
     for path in files:
-        if not should_serialize(path, preset, extra_globs):
-            continue
-        data = gitcmd.file_at(repo_dir, sha, path)
-        if data is None:  # arquivo removido nesse commit
-            continue
-        texto = extrair(data, path)
-        if not texto:
-            continue
-        store.apply(
-            Resource(
-                kind="Doc",
-                name=f"repo-{label}-file-{_slug(path)}",
-                labels={"topic": "repo", "repo": label, "path": path, "tipo": "serial"},
-                spec={"title": f"{label} · {path}", "body": texto, "source": path},
-                status={"serialized_at": ctx.agora.isoformat(), "commit": sha[:7]},
-            ),
-            ctx.agora,
-        )
-        serializados.append(path)
+        if _serializar_um(repo_dir, label, sha, path, preset, extra_globs, store, ctx):
+            serializados.append(path)
     return serializados
+
+
+def snapshot_tree(
+    repo_dir,
+    label: str,
+    preset: str,
+    extra_globs: list[str],
+    store: ResourceStore,
+    ctx,
+    ref: str = "HEAD",
+    *,
+    max_files: int = 2000,
+) -> dict:
+    """Serializa a **árvore inteira** em ``ref`` (não só o que mudou) → Docs.
+
+    Sob demanda: permite acompanhar o conteúdo atual de todos os arquivos do repo
+    que casam o preset. 0 IA. Devolve {serializados, total, pulados, truncado}.
+    """
+    if preset == "off":
+        return {"serializados": 0, "total": 0, "pulados": 0, "truncado": False, "erro": "serialize=off"}
+    sha = gitcmd.branch_head(repo_dir, ref) if ref != "HEAD" else gitcmd.git(
+        ["rev-parse", "HEAD"], cwd=repo_dir, check=False
+    ).strip()
+    paths = gitcmd.list_tree(repo_dir, ref)
+    candidatos = [p for p in paths if should_serialize(p, preset, extra_globs)]
+    truncado = len(candidatos) > max_files
+    candidatos = candidatos[:max_files]
+    feitos = 0
+    for path in candidatos:
+        if _serializar_um(repo_dir, label, sha, path, preset, extra_globs, store, ctx):
+            feitos += 1
+    return {
+        "serializados": feitos,
+        "total": len(paths),
+        "candidatos": len(candidatos),
+        "pulados": len(candidatos) - feitos,
+        "truncado": truncado,
+        "commit": (sha or "")[:7],
+    }
