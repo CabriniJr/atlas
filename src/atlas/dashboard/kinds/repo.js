@@ -779,13 +779,13 @@ async function _runBackfill(name, container) {
 }
 
 async function _runSync(name, container) {
-  const jobName = name + '-sync';
-  _repoLogs[name] = {lines: [`↻ iniciando ${jobName}…`], running: true};
+  // Resolve o Job de sync POR LABEL no backend (spec.coletar=repo-sync, spec.label=<repo>)
+  _repoLogs[name] = {lines: [`↻ iniciando sync de ${name}…`], running: true};
   _activateLogTab(name, container);
   try {
     const r = await apiFetch(`${API}/_run`, {
       method: 'POST',
-      body: JSON.stringify({routine: jobName}),
+      body: JSON.stringify({repo: name}),
     });
     if (r.ok) {
       _appendLog(name, '✅ sync concluído');

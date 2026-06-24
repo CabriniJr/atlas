@@ -187,9 +187,9 @@ async function _rgSyncAll(name, r, container) {
   if (!repoNames.length) return;
   const btn = container.querySelector('[data-action="syncall"]');
   if (btn) { btn.disabled = true; btn.textContent = '↻ sincronizando…'; }
-  // Dispara o Job <repo>-sync de cada repo (mesmo padrão do repo.js)
+  // Dispara o sync de cada repo — resolvido POR LABEL no backend (não por nome)
   await Promise.all(repoNames.map(n =>
-    apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({routine: n + '-sync'})})
+    apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({repo: n})})
       .catch(() => null)));
   if (btn) { btn.disabled = false; btn.textContent = '↻ Sync todos'; }
   _loadRgTab(name, r, 'overview', container);
