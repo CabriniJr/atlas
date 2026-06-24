@@ -158,6 +158,12 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "hint": "Além do preset, ex.: *.cfg",
             },
             {
+                "k": "analyze_agente",
+                "type": "text",
+                "label": "Agente de análise",
+                "hint": "Nome de um Agente (default: repo-analyzer) — faz insight manual e automático",
+            },
+            {
                 "k": "analyze_branches",
                 "type": "text",
                 "label": "Analisar (IA) branches",
@@ -270,10 +276,45 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [{"k": "grupo", "label": "Grupo", "hint": "Agrupa recursos"}],
     },
+    "LLMProvider": {
+        "meta": {
+            "icon": "🔌",
+            "desc": "Provider de IA/LLM reutilizável (motor + modelo + endpoint) — ADR-0022/0026",
+        },
+        "spec": [
+            {
+                "k": "motor",
+                "type": "select",
+                "label": "Motor / adapter",
+                "opts": ["claude", "ollama"],
+                "hint": "claude = CLI da assinatura; ollama = endpoint local",
+            },
+            {
+                "k": "modelo",
+                "type": "text",
+                "label": "Modelo padrão",
+                "hint": "Ex: claude-sonnet-4-6, claude-haiku-4-5-20251001, gemma4",
+            },
+            {
+                "k": "endpoint",
+                "type": "text",
+                "label": "Endpoint",
+                "hint": "Só p/ ollama/custom: http://192.168.86.22:11434",
+            },
+            {
+                "k": "token_env",
+                "type": "text",
+                "label": "Var de token (env)",
+                "hint": "Nome da env var com o token (NUNCA o segredo em si)",
+            },
+            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60"},
+        ],
+        "labels": [],
+    },
     "Agente": {
         "meta": {
             "icon": "🤖",
-            "desc": "Analisador configurável: motor + contexto + prompt (ADR-0024)",
+            "desc": "Analisador configurável: provider + contexto + prompt (ADR-0024)",
         },
         "spec": [
             {
@@ -284,17 +325,23 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "hint": "chat = resposta simples; code = Claude Code agêntico (edita arquivos)",
             },
             {
+                "k": "provider",
+                "type": "text",
+                "label": "Provider (LLM)",
+                "hint": "Nome de um LLMProvider — dita motor/modelo. Vazio = usa campos abaixo",
+            },
+            {
                 "k": "motor",
                 "type": "select",
-                "label": "Motor",
+                "label": "Motor (fallback)",
                 "opts": ["claude", "ollama"],
-                "hint": "Provider de IA",
+                "hint": "Usado só se provider vazio",
             },
             {
                 "k": "modelo",
                 "type": "text",
-                "label": "Modelo",
-                "hint": "claude-haiku-4-5-20251001 / claude-sonnet-4-6 / gemma4",
+                "label": "Modelo (override)",
+                "hint": "Sobrepõe o modelo do provider; vazio = usa o do provider",
             },
             {
                 "k": "nivel_contexto",

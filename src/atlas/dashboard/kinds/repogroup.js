@@ -134,23 +134,52 @@ async function _rgTabOverview(name, r, el) {
     const stats = (st.files_changed || st.insertions || st.deletions)
       ? `<span class="rg-card-stats">${st.files_changed || 0} ✱ <span style="color:var(--green)">+${st.insertions || 0}</span> <span style="color:var(--red)">-${st.deletions || 0}</span></span>`
       : '';
-    return `<div class="rg-card" onclick="openResource('Repo','${escJs(rp.name)}')" title="Abrir ${esc(rp.name)}">
-      <div class="rg-card-head">
-        <span>📦</span><strong>${esc(rp.name)}</strong>
-        <span class="rg-card-branches">🌿 ${bc}</span>
+    return `<div class="rg-card">
+      <div class="rg-card-clickable" onclick="openResource('Repo','${escJs(rp.name)}')" title="Abrir ${esc(rp.name)}">
+        <div class="rg-card-head">
+          <span>📦</span><strong>${esc(rp.name)}</strong>
+          <span class="rg-card-branches">🌿 ${bc}</span>
+        </div>
+        <div class="rg-card-commit">${commit}</div>
+        <div class="rg-card-foot">
+          <span style="font-size:10px;color:var(--muted)">${esc(sync)}</span>
+          ${stats}
+        </div>
       </div>
-      <div class="rg-card-commit">${commit}</div>
-      <div class="rg-card-foot">
-        <span style="font-size:10px;color:var(--muted)">${esc(sync)}</span>
-        ${stats}
+      <div class="rg-card-actions">
+        <button class="btn rg-insight-btn" data-repo="${esc(rp.name)}" title="Gerar insight (IA) deste repo">🧠 Insight</button>
+        <span class="rg-insight-out" id="rg-ins-${esc(rp.name)}"></span>
       </div>
     </div>`;
   }).join('');
 
   el.innerHTML = `<div class="rg-wrap">
     ${summary}
+    <div class="home-subhead" style="margin-top:0">🧠 Análise por IA — cada repo usa seu Agente configurado (manual aqui; automático no sync)</div>
     <div class="rg-grid">${cards}</div>
   </div>`;
+
+  // Insight por repo (manual) — não propaga o clique do card
+  el.querySelectorAll('.rg-insight-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const repo = btn.dataset.repo;
+      const out = el.querySelector(`#rg-ins-${CSS.escape(repo)}`);
+      btn.disabled = true; btn.textContent = '🧠 …';
+      if (out) { out.textContent = 'analisando…'; out.className = 'rg-insight-out'; }
+      try {
+        const r = await apiFetch(`${API}/_insight`, {
+          method: 'POST', body: JSON.stringify({scope: 'repo', name: repo}),
+        });
+        if (r.error) throw new Error(r.error);
+        if (out) { out.textContent = `✅ via ${r.agente || 'IA'} (${r.model || ''})`; out.className = 'rg-insight-out ok'; }
+        toast(`insight de ${repo} gerado`);
+      } catch (err) {
+        if (out) { out.textContent = '❌ ' + err.message; out.className = 'rg-insight-out err'; }
+      }
+      btn.disabled = false; btn.textContent = '🧠 Insight';
+    });
+  });
 }
 
 async function _rgSyncAll(name, r, container) {

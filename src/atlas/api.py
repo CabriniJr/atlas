@@ -626,7 +626,12 @@ def _run_routine(name: str) -> dict:
 
 
 def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251001") -> dict:
-    """Gera um insight por IA sobre o sistema ou um repositório (sob demanda)."""
+    """Gera um insight por IA sobre o sistema ou um repositório (sob demanda).
+
+    Para repo, a análise é feita pelo **Agente configurado** em
+    ``Repo.spec.analyze_agente`` (default ``repo-analyzer``) — o Agente dita
+    motor/modelo (via LLMProvider, ADR-0022/0026) e a persona/prompt (ADR-0024).
+    """
     from atlas.ia import InvocarErro, invocar
 
     if _store is None:
@@ -650,6 +655,22 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
             d = sorted(diffs, key=lambda x: (x.status or {}).get("synced_at", ""))[-1]
             ctx_txt += f"Arquivos: {', '.join(d.spec.get('files_list', [])[:15])}\n"
             ctx_txt += f"\nDiff (parcial):\n{d.spec.get('diff_raw', '')[:3500]}\n"
+
+        # Despacha ao Agente de análise configurado (ADR-0024).
+        agente_name = (rp.spec.get("analyze_agente") or "repo-analyzer").strip()
+        agente = _store.get("Agente", agente_name)
+        if agente is not None:
+            res = _agente_chat(agente_name, ctx_txt, _store)
+            if res.get("error"):
+                return {"ok": False, "error": res["error"]}
+            resposta = res.get("response", "")
+            used_model = res.get("modelo", model)
+            doc_name = _salvar_insight_doc(scope, name, resposta, used_model)
+            return {
+                "ok": True, "scope": scope, "name": name, "model": used_model,
+                "agente": agente_name, "insight": resposta, "doc": doc_name,
+            }
+        # Fallback: Agente ausente → prompt embutido (retrocompat)
         prompt = (
             "Você é um revisor técnico. Analise a última atualização deste repositório com "
             "os metadados fornecidos (NÃO peça acesso ao repo; trabalhe com o que há). "
@@ -688,13 +709,54 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
     }
 
 
+def _resolve_engine(agente_spec: dict, store: ResourceStore) -> dict:
+    """Resolve motor/modelo/endpoint/timeout de um Agente (ADR-0022/0026).
+
+    Ordem: se ``spec.provider`` aponta para um ``LLMProvider`` existente, ele dita
+    motor/endpoint/timeout e o modelo padrão; ``spec.modelo`` (se houver) sobrepõe
+    o modelo do provider. Sem provider, usa os campos próprios do Agente (fallback
+    retrocompatível).
+    """
+    spec = agente_spec or {}
+    prov_name = (spec.get("provider") or "").strip()
+    prov_spec: dict = {}
+    if prov_name and store is not None:
+        prov = store.get("LLMProvider", prov_name)
+        if prov is not None:
+            prov_spec = prov.spec or {}
+
+    motor = (prov_spec.get("motor") or spec.get("motor") or "claude").strip()
+    # modelo: override do Agente > modelo do provider > default por motor
+    modelo = (
+        (spec.get("modelo") or "").strip()
+        or (prov_spec.get("modelo") or "").strip()
+        or ("claude-haiku-4-5-20251001" if motor == "claude" else "gemma4")
+    )
+    endpoint = (
+        (prov_spec.get("endpoint") or "").strip()
+        or (spec.get("endpoint") or "").strip()
+        or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    )
+    try:
+        timeout = int(spec.get("timeout") or prov_spec.get("timeout") or 60)
+    except (TypeError, ValueError):
+        timeout = 60
+    return {
+        "motor": motor,
+        "modelo": modelo,
+        "endpoint": endpoint,
+        "timeout": timeout,
+        "provider": prov_name or None,
+    }
+
+
 def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
     """Executa o Kind Agente em modo chat (E7-25, ADR-0024).
 
     Busca o recurso Agente, constrói o prompt com o template e chama o motor
-    selecionado. Suporta nivel_contexto (resumo|completo) para injetar schema
-    e contexto do projeto (E7-24 — builder). Devolve {response, motor, modelo,
-    commands?} ou {error}.
+    resolvido (via LLMProvider ou campos próprios — ADR-0026). Suporta
+    nivel_contexto (resumo|completo) para injetar schema e contexto do projeto
+    (E7-24 — builder). Devolve {response, motor, modelo, commands?} ou {error}.
     """
     from atlas.ia import InvocarErro, invocar
 
@@ -705,12 +767,11 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
         return {"error": f"Agente '{agente_name}' não encontrado"}
 
     spec = agente.spec or {}
-    motor = spec.get("motor", "claude")
-    modelo = spec.get("modelo") or (
-        "claude-haiku-4-5-20251001" if motor == "claude" else "gemma4"
-    )
-    timeout = int(spec.get("timeout") or 60)
-    endpoint = spec.get("endpoint") or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    eng = _resolve_engine(spec, store)
+    motor = eng["motor"]
+    modelo = eng["modelo"]
+    timeout = eng["timeout"]
+    endpoint = eng["endpoint"]
     template = spec.get("prompt") or "{mensagem}"
     nivel = spec.get("nivel_contexto", "none")
     agora_str = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -836,9 +897,13 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         return
 
     spec = agente.spec or {}
-    modelo = spec.get("modelo") or "claude-sonnet-4-6"
+    eng = _resolve_engine(spec, store)
+    # modo code roda sempre via claude CLI; o provider dita o modelo (default sonnet)
+    modelo = eng["modelo"] if eng["modelo"] not in ("gemma4",) else "claude-sonnet-4-6"
+    if not spec.get("modelo") and not (eng.get("provider")):
+        modelo = "claude-sonnet-4-6"
     system_prompt = spec.get("prompt", "")
-    timeout = int(spec.get("timeout") or 300)
+    timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
     cwd = _PROJECT_DIR
 
     try:

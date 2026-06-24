@@ -93,17 +93,23 @@ async function _loadRepoTab(name, tab, container) {
   }
 }
 
-// ── Tab: Overview (contexto + diffs recentes) ─────────────────────────────────
+// ── Tab: Overview (análise IA + contexto + diffs recentes) ────────────────────
 async function _tabOverview(name, el) {
   el.innerHTML = `
+    <div class="rk-section" id="rk-insight-sec-${esc(name)}">
+      <div class="rk-sec-title">🧠 Análise por IA</div>
+      <div id="rk-insight-${esc(name)}" style="color:var(--muted)">carregando…</div>
+    </div>
     <div class="rk-section">
-      <div class="rk-sec-title">🧠 Contexto do projeto</div>
+      <div class="rk-sec-title">📚 Contexto do projeto</div>
       <div id="rk-ctx-${esc(name)}" style="color:var(--muted)">carregando…</div>
     </div>
     <div class="rk-section">
       <div class="rk-sec-title">🔄 Diffs recentes</div>
       <div id="rk-diffs-${esc(name)}" style="color:var(--muted)">carregando…</div>
     </div>`;
+
+  _renderInsightSection(name, el);
 
   const [ctxEl, diffsEl] = [
     el.querySelector(`#rk-ctx-${CSS.escape(name)}`),
@@ -144,6 +150,61 @@ async function _tabOverview(name, el) {
         : '<span style="color:var(--muted)">sem diffs ainda</span>';
     })
     .catch(() => { if (diffsEl) diffsEl.textContent = 'diffs indisponíveis'; });
+}
+
+// Seção de análise por IA: deixa claro manual × automático + Agente configurado.
+async function _renderInsightSection(name, el) {
+  const box = el.querySelector(`#rk-insight-${CSS.escape(name)}`);
+  if (!box) return;
+
+  // qual Agente analisa este repo + último insight (Doc tipo=insight)
+  const [repo, docs] = await Promise.all([
+    apiFetch(`${API}/Repo/${encodeURIComponent(name)}`).catch(() => ({})),
+    apiFetch(`${API}/Doc`).catch(() => []),
+  ]);
+  const agente = (repo.spec?.analyze_agente || 'repo-analyzer');
+  const insights = (docs || [])
+    .filter(d => d.labels?.repo === name && d.labels?.tipo === 'insight')
+    .sort((a, b) => String(b.status?.gerado_em || b.criado_em || '')
+      .localeCompare(String(a.status?.gerado_em || a.criado_em || '')));
+  const last = insights[0];
+  const lastHtml = last
+    ? `<details class="rk-insight-last">
+         <summary>último insight · ${esc(fmtDt(last.status?.gerado_em || last.criado_em))} <span style="color:var(--muted)">(${insights.length})</span></summary>
+         <div class="md">${markdownToHtml(String(last.spec?.body || ''))}</div>
+       </details>`
+    : '<div style="color:var(--muted);font-size:11px">Nenhum insight gerado ainda.</div>';
+
+  box.innerHTML = `
+    <div class="rk-insight-bar">
+      <div class="rk-insight-meta">
+        <span>Agente: <strong onclick="openWhiteboard('Agente','${escJs(agente)}')" style="color:var(--purple);cursor:pointer">🤖 ${esc(agente)}</strong></span>
+        <span class="rk-insight-modes">
+          <span title="Gerado quando você pede">manual</span> ·
+          <span title="Roda a cada sync nos commits que passam na política">automático no sync</span>
+        </span>
+      </div>
+      <button class="btn" id="rk-insight-btn-${esc(name)}" style="border-color:var(--purple);color:var(--purple)">🧠 Gerar insight agora</button>
+    </div>
+    <div id="rk-insight-out-${esc(name)}">${lastHtml}</div>`;
+
+  const btn = box.querySelector(`#rk-insight-btn-${CSS.escape(name)}`);
+  btn?.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '🧠 analisando…';
+    const out = box.querySelector(`#rk-insight-out-${CSS.escape(name)}`);
+    if (out) out.innerHTML = '<div style="color:var(--muted);padding:8px 0"><span class="ag-spin"></span>gerando insight…</div>';
+    try {
+      const r = await apiFetch(`${API}/_insight`, {
+        method: 'POST', body: JSON.stringify({scope: 'repo', name}),
+      });
+      if (r.error) throw new Error(r.error);
+      if (out) out.innerHTML = `<div style="font-size:10px;color:var(--muted);margin-bottom:4px">via ${esc(r.agente || 'IA')} · ${esc(r.model || '')}</div>
+        <div class="md">${markdownToHtml(String(r.insight || ''))}</div>`;
+    } catch (e) {
+      if (out) out.innerHTML = `<div style="color:var(--red)">erro: ${esc(e.message)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '🧠 Gerar insight agora';
+  });
 }
 
 // ── Tab: Branches ─────────────────────────────────────────────────────────────

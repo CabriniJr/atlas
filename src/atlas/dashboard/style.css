@@ -667,6 +667,14 @@ body.rk-fullscreen #editor
 .rk-log-line.ok{color:var(--green)}
 .rk-log-line.err{color:var(--red)}
 
+/* ── Repo: seção de análise por IA (manual × automático) ─────────────────── */
+.rk-insight-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.rk-insight-meta{display:flex;flex-direction:column;gap:2px;font-size:12px}
+.rk-insight-modes{font-size:10px;color:var(--muted)}
+.rk-insight-last{margin-top:4px}
+.rk-insight-last > summary{cursor:pointer;font-size:11px;color:var(--blue);padding:2px 0}
+.rk-insight-last .md{margin-top:6px;font-size:12px}
+
 /* ── Repo: aba Files (árvore de arquivos serializados) ───────────────────── */
 .rk-files-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
 .rk-files-wrap{display:flex;flex:1;min-height:0;overflow:hidden}
@@ -689,10 +697,14 @@ body.rk-fullscreen #editor
 .rg-stat-n{font-size:20px;font-weight:700;color:var(--text);line-height:1.1}
 .rg-stat-l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
 .rg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-.rg-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s,transform .1s;display:flex;flex-direction:column;gap:6px}
-.rg-card:hover{border-color:var(--blue);transform:translateY(-1px)}
+.rg-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;transition:border-color .15s;display:flex;flex-direction:column;gap:6px}
+.rg-card:hover{border-color:var(--blue)}
+.rg-card-clickable{cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.rg-card-actions{display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding-top:6px;margin-top:2px}
+.rg-insight-btn{font-size:11px;padding:2px 8px;border-color:var(--purple);color:var(--purple)}
+.rg-insight-out{font-size:10px;color:var(--muted)}.rg-insight-out.ok{color:var(--green)}.rg-insight-out.err{color:var(--red)}
 .rg-card-missing{cursor:default;opacity:.7;border-style:dashed}
-.rg-card-missing:hover{border-color:var(--border);transform:none}
+.rg-card-missing:hover{border-color:var(--border)}
 .rg-card-head{display:flex;align-items:center;gap:6px;font-size:13px}
 .rg-card-head strong{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rg-card-branches{font-size:10px;color:var(--muted);flex-shrink:0}
