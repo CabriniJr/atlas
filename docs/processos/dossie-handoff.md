@@ -15,6 +15,7 @@ atualizado-em: 2026-06-26
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-26 | Tech Lead | Criação — handoff do trabalho recente (E7-24..44, ADR-0025/0026/0027) p/ outro agente | — |
 | 1.1    | 2026-06-26 | Tech Lead | Épico multiusuário (ADR-0027) concluído e mergeado em `main` (Fases 1–5 + UI); estado/branches/testes atualizados | — |
+| 1.2    | 2026-06-26 | Tech Lead | E7-28 em curso (ADR-0028): workspace restrito + allow/deny de tools + teto de concorrência + flag de gate | — |
 
 ---
 
@@ -174,8 +175,14 @@ admin sem tela de login.
 
 ## 7. Pendências/known issues abertas
 
-- **E7-28** — endurecer o modo `code` (workspace restrito, gate de curadoria humana,
-  persistência de runs, allow/deny de tools por Agente).
+- **E7-28** — endurecer o modo `code`. **Em curso** (ADR-0028, branch
+  `feat/hardening-agente-code`): já entraram **workspace restrito**
+  (`resolve_workspace` confina cwd/`--add-dir`, recusa traversal/symlink),
+  **allow/deny de tools** (`build_tool_args` → `--allowedTools`/`--disallowedTools`,
+  campos `allowed_tools`/`denied_tools` no schema), **teto de concorrência**
+  (`active_runs_count` + `ATLAS_AGENT_MAX_CONCURRENT`, default 3 → 429) e **flag de
+  gate** (`spec.gate`, carimbada no `init`). **Falta:** persistência de runs e UI de
+  curadoria (revisar/promover/descartar diff).
 - **Sessões em memória** — perdidas no restart (usuário refaz login). Persistir é
   evolução (ADR-0027 §Pendências).
 - **Runs agênticos em memória** — perdidos no restart (sem persistência ainda).

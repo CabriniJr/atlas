@@ -385,7 +385,15 @@ class _Handler(BaseHTTPRequestHandler):
             if not agente_name or not mensagem:
                 self._json(400, {"error": "agente e mensagem obrigatórios"})
                 return
+            # Teto de concorrência (ADR-0028 §3): protege a Rasp e a assinatura.
+            if active_runs_count() >= _RUNS_CONCURRENT_MAX:
+                self._json(429, {
+                    "error": f"limite de {_RUNS_CONCURRENT_MAX} runs simultâneos atingido",
+                    "retry": True,
+                })
+                return
             run = _new_run(agente_name, mensagem)
+            run["owner"] = self._owner()
             threading.Thread(
                 target=_run_agent_bg, args=(run, _store),
                 daemon=True, name=f"agent-run-{run['id']}",
@@ -1116,6 +1124,57 @@ def _schema_context(store: ResourceStore, *, completo: bool = False) -> str:
 _runs: dict[str, dict] = {}
 _runs_lock = threading.Lock()
 _RUNS_MAX = 30
+# Teto de runs agênticos simultâneos (ADR-0028 §3). Protege CPU/IO + assinatura.
+_RUNS_CONCURRENT_MAX = int(os.environ.get("ATLAS_AGENT_MAX_CONCURRENT", "3"))
+
+
+def _csv_clean(value: str | None) -> str:
+    """Normaliza um csv: tira espaços, descarta itens vazios. ``"a, ,b,"`` → ``"a,b"``."""
+    if not value:
+        return ""
+    return ",".join(part.strip() for part in value.split(",") if part.strip())
+
+
+def build_tool_args(allowed: str | None, denied: str | None) -> list[str]:
+    """Monta os flags de allow/deny de tools do `claude` CLI (ADR-0028 §2).
+
+    Função pura: csv vazio → sem flag (comportamento atual preservado).
+    """
+    args: list[str] = []
+    allow = _csv_clean(allowed)
+    deny = _csv_clean(denied)
+    if allow:
+        args += ["--allowedTools", allow]
+    if deny:
+        args += ["--disallowedTools", deny]
+    return args
+
+
+def resolve_workspace(project_dir: str, sub: str | None) -> str:
+    """Resolve o workspace confinado de um run modo `code` (ADR-0028 §1).
+
+    Retorna o caminho absoluto de ``<project_dir>/<sub>``, garantindo que ele fica
+    **dentro** de ``project_dir`` (recusa traversal ``..``, caminho absoluto e
+    symlink que escapa). Recusa caminho inexistente. ``sub`` vazio = a raiz.
+    """
+    root = Path(project_dir).resolve()
+    if not sub or not sub.strip():
+        return str(root)
+    sub = sub.strip()
+    if Path(sub).is_absolute():
+        raise ValueError(f"workspace deve ser relativo, não absoluto: {sub!r}")
+    target = (root / sub).resolve()
+    if target != root and root not in target.parents:
+        raise ValueError(f"workspace {sub!r} escapa da raiz do projeto")
+    if not target.is_dir():
+        raise ValueError(f"workspace {sub!r} não existe sob a raiz do projeto")
+    return str(target)
+
+
+def active_runs_count() -> int:
+    """Quantos runs agênticos ainda não terminaram (ADR-0028 §3)."""
+    with _runs_lock:
+        return sum(1 for r in _runs.values() if not r.get("done"))
 
 
 def _new_run(agente_name: str, mensagem: str) -> dict:
@@ -1172,7 +1231,14 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         modelo = "claude-sonnet-4-6"
     system_prompt = spec.get("prompt", "")
     timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
-    cwd = _PROJECT_DIR
+
+    # Workspace restrito (ADR-0028 §1): confina cwd/--add-dir ao subdir permitido.
+    try:
+        cwd = resolve_workspace(_PROJECT_DIR, spec.get("workspace"))
+    except ValueError as exc:
+        _emit(run, {"type": "error", "message": f"workspace inválido: {exc}"})
+        _finish_run(run)
+        return
 
     try:
         claude_bin = _resolver_claude()
@@ -1197,9 +1263,21 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         "--add-dir", cwd,
         "--append-system-prompt", full_system,
     ]
+    # Allow/deny de tools por Agente (ADR-0028 §2) — vazios = sem restrição.
+    args += build_tool_args(spec.get("allowed_tools"), spec.get("denied_tools"))
     args += [mensagem]
 
-    _emit(run, {"type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd})
+    # Gate de curadoria (ADR-0028 §4): default true p/ code. Nada gerado aqui é
+    # auto-comitado/ativado — a promoção é a revisão humana do diff (CLAUDE.md §6).
+    gate_raw = spec.get("gate", True)
+    gated = gate_raw if isinstance(gate_raw, bool) else str(gate_raw).strip().lower() not in (
+        "false", "0", "no", "",
+    )
+    amplo = cwd == str(Path(_PROJECT_DIR).resolve())
+    _emit(run, {
+        "type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd,
+        "workspace_amplo": amplo, "gated": gated,
+    })
 
     proc = None
     try:

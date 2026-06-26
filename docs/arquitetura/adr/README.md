@@ -26,6 +26,7 @@ atualizado-em: 2026-06-23
 | 1.10   | 2026-06-23 | Tech Lead | ADR-0025 (Agente modo `code` — Claude Code 2b no workspace) — proposto | — |
 | 1.11   | 2026-06-23 | Tech Lead | ADR-0026 (Kind `LLMProvider` — config de IA reutilizável; análise de repo por Agente) — proposto | — |
 | 1.12   | 2026-06-26 | Tech Lead | ADR-0027 (Multiusuário, auth e credenciais cifradas) — **aceito**; épico implementado (Fases 1–5 + UI) | PO/PM |
+| 1.13   | 2026-06-26 | Tech Lead | ADR-0028 (Endurecimento do Agente modo `code` — workspace restrito, allow/deny de tools, concorrência, gate) — proposto | — |
 
 ---
 
@@ -74,6 +75,7 @@ atualizado-em: 2026-06-23
 | [0025](ADR-0025-agente-modo-code.md) | **Agente modo `code`** (Claude Code agêntico 2b no workspace) | proposto | Pedido do PO ("ser um Claude Code") |
 | [0026](ADR-0026-llm-provider.md) | **Kind `LLMProvider`** (config de IA reutilizável; análise de repo por Agente) | proposto | Pedido do PO ("ia provider/llm") |
 | [0027](ADR-0027-multiusuario-credenciais.md) | **Multiusuário (isolamento total), auth e credenciais cifradas** (cofre Fernet, User/Credential, GitHub device flow, sessão, escopo por `labels.owner`) | **aceito** | Pedido do PO ("multiusuário + segurança") |
+| [0028](ADR-0028-endurecimento-agente-code.md) | **Endurecimento do Agente modo `code`** (workspace restrito, allow/deny de tools, limite de concorrência, gate de curadoria, runs persistentes) | proposto | Hardening Tema 1 (fecha §Pendências do ADR-0025) |
 
 ## Lastro
 
