@@ -45,7 +45,8 @@ exceto o multiusuário (branch ativa):
 | Job schema unificado | `schedule`/`model`/`active` (era `agenda`/`modelo`/`ativa`) | — |
 | **Multiusuário (em andamento)** | ADR-0027 + Fase 1 (cofre cifrado) na branch `feat/multiuser-credentials` | ADR-0027 |
 
-**Branch ativa:** `feat/multiuser-credentials` (ainda **sem PR/merge**). Resto em `main`.
+**Branches ativas:** `feat/multiuser-credentials` (Fases 1–2, PR aberto) e
+`feat/github-device-flow` (Fase 3, empilhada sobre a anterior). Resto em `main`.
 
 ## 2. Como rodar, testar e fazer deploy
 
@@ -108,8 +109,8 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 | Fase | O quê | Estado |
 |---|---|---|
 | 1 | Cofre cifrado `secrets_store` (Fernet) | **feito** (branch) |
-| 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | a fazer |
-| 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | a fazer |
+| 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | **feito** (branch) |
+| 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | **feito** (branch `feat/github-device-flow`) |
 | 4 | Auth/sessão (login; admin via token/loopback) | a fazer |
 | 5 | Isolamento por `labels.owner` no store/API + migração | a fazer |
 
@@ -118,9 +119,21 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 `secrets/secret.key` (0600). Segredo **nunca** no spec nem no front. Dep nova:
 `cryptography` (no `pyproject.toml`). Testes: `tests/test_secrets_store.py`.
 
-**Como continuar (Fase 2):** criar `User` e `Credential` em `api_schema.py` (P11 —
-metadados só; o segredo vai no cofre via `secrets_store.put_secret(<cid>, token)`).
-Ver ADR-0027 §Fases para o desenho de cada etapa e as pendências.
+**Fase 3 entregue** (branch `feat/github-device-flow`):
+[`src/atlas/github_auth.py`](../../src/atlas/github_auth.py) — device flow
+(`start_device_flow`/`poll_access_token`/`complete_device_login`), fallback PAT
+(`connect_via_pat`), resolução de token (`token_for_owner`) e git helper escopado
+(`git_auth_args` → `gitcmd.git(..., auth_args=...)`, sem persistir o token no
+`.git/config`). Endpoints: `POST /_github/device/start`, `/_github/device/poll`,
+`/_github/pat`. O repo-sync resolve o token do dono (`labels.owner`) e autentica
+clone/fetch (`_auth_args_for_repo`). Config: `ATLAS_GITHUB_CLIENT_ID` (OAuth App);
+sem ele, só o fallback de PAT funciona. HTTP é stdlib (`urllib`), injetável em teste.
+
+**Como continuar (Fase 4 — auth/sessão):** login → sessão (token opaco, cookie
+httpOnly) identifica o usuário por request; `ATLAS_API_TOKEN`/loopback segue como
+admin. Hoje o dono das credenciais/recursos vem do corpo do request ou de
+`ATLAS_DEFAULT_OWNER` (default `admin`); a Fase 4 troca isso pela sessão e a Fase 5
+escopa o store por `labels.owner`. Ver ADR-0027 §Fases.
 
 ## 6. Convenções de trabalho (não-negociáveis)
 

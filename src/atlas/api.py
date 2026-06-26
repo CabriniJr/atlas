@@ -29,6 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from atlas import github_auth
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 
@@ -36,6 +37,8 @@ _log = logging.getLogger("atlas.api")
 
 _API_PREFIX = "/apis/atlas/v1"
 _TOKEN = os.environ.get("ATLAS_API_TOKEN", "")
+# Dono default enquanto a sessão (Fase 4) não existe; o portador do token é admin.
+_DEFAULT_OWNER = os.environ.get("ATLAS_DEFAULT_OWNER", "admin")
 _PORT = int(os.environ.get("ATLAS_API_PORT", "8080"))
 # Raiz do projeto Atlas — usada pelo agente modo=code para cwd + --add-dir
 _PROJECT_DIR = str(
@@ -287,6 +290,27 @@ class _Handler(BaseHTTPRequestHandler):
                 daemon=True, name=f"agent-run-{run['id']}",
             ).start()
             self._json(202, {"run_id": run["id"], "agente": agente_name})
+            return
+
+        # GitHub device flow (ADR-0027 F3): conectar a conta do usuário sem callback.
+        if path == _API_PREFIX + "/_github/device/start":
+            self._json(200, _github_device_start(body.get("scope", "")))
+            return
+        if path == _API_PREFIX + "/_github/device/poll":
+            self._json(200, _github_device_poll(
+                _store,
+                owner=body.get("owner", "").strip(),
+                device_code=body.get("device_code", "").strip(),
+            ))
+            return
+        # Fallback: colar um PAT quando o OAuth App não está configurado.
+        if path == _API_PREFIX + "/_github/pat":
+            self._json(200, _github_pat(
+                _store,
+                owner=body.get("owner", "").strip(),
+                token=body.get("token", "").strip(),
+                account=body.get("account", "").strip(),
+            ))
             return
 
         if path != _API_PREFIX + "/_cmd":
@@ -801,6 +825,40 @@ def _resolve_engine(agente_spec: dict, store: ResourceStore) -> dict:
         "timeout": timeout,
         "provider": prov_name or None,
     }
+
+
+# ── GitHub device flow + PAT (ADR-0027 Fase 3) ────────────────────────────────
+
+
+def _github_device_start(scope: str = "") -> dict:
+    """Inicia o device flow do GitHub. Devolve user_code/verification_uri ou {error}."""
+    try:
+        return github_auth.start_device_flow(scope=scope or github_auth.DEFAULT_SCOPE)
+    except github_auth.GitHubAuthError as exc:
+        return {"error": str(exc)}
+
+
+def _github_device_poll(store: ResourceStore, *, owner: str, device_code: str) -> dict:
+    """Faz um poll; ao obter o token, cifra e grava a Credential do dono."""
+    if not device_code:
+        return {"error": "device_code obrigatório"}
+    try:
+        return github_auth.complete_device_login(
+            store, owner=owner or _DEFAULT_OWNER, device_code=device_code
+        )
+    except github_auth.GitHubAuthError as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+def _github_pat(store: ResourceStore, *, owner: str, token: str, account: str = "") -> dict:
+    """Fallback: salva um PAT colado como Credential cifrada do dono."""
+    try:
+        cid = github_auth.connect_via_pat(
+            store, owner=owner or _DEFAULT_OWNER, token=token, account=account
+        )
+        return {"status": "connected", "credential": cid}
+    except github_auth.GitHubAuthError as exc:
+        return {"error": str(exc)}
 
 
 def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:

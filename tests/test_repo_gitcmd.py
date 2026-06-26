@@ -96,3 +96,63 @@ def test_file_at(origin_e_clone):
     conteudo = gitcmd.file_at(clone, head, "b.py")
     assert conteudo == b"y = 3\nz = 4\n"
     assert gitcmd.file_at(clone, head, "nao-existe.txt") is None
+
+
+# ── git helper escopado (ADR-0027 F3) ───────────────────────────────────────
+
+
+def test_git_prepende_auth_args(monkeypatch):
+    capturado = {}
+
+    def fake_run(args, **kwargs):
+        capturado["args"] = args
+
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    gitcmd.git(["fetch", "origin"], auth_args=["-c", "http.extraheader=Authorization: Basic X"])
+    # auth_args vêm logo após "git", antes do subcomando
+    assert capturado["args"][:4] == [
+        "git", "-c", "http.extraheader=Authorization: Basic X", "fetch",
+    ]
+
+
+def test_git_sem_auth_args_mantem_comando(monkeypatch):
+    capturado = {}
+
+    def fake_run(args, **kwargs):
+        capturado["args"] = args
+
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    gitcmd.git(["status"])
+    assert capturado["args"] == ["git", "status"]
+
+
+def test_fetch_all_repassa_auth_args(monkeypatch):
+    capturado = {}
+
+    def fake_run(args, **kwargs):
+        capturado["args"] = args
+
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return R()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    gitcmd.fetch_all(Path("/tmp/x"), depth=None, auth_args=["-c", "FOO=bar"])
+    assert capturado["args"][:3] == ["git", "-c", "FOO=bar"]

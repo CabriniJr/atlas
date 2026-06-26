@@ -176,3 +176,31 @@ def test_serialize_off_nao_gera_doc(db, tmp_path, monkeypatch):
     store = _store(tmp_path, {"url": str(origin), "serialize": "off"})
     _rodar(db, store, monkeypatch, tmp_path)
     assert store.list("Doc", labels={"repo": "nora", "tipo": "serial"}) == []
+
+
+# ── git helper escopado por dono do Repo (ADR-0027 F3) ───────────────────────
+
+
+def test_auth_args_for_repo_usa_token_do_dono(tmp_path, monkeypatch):
+    import atlas.secrets_store as sec
+    from atlas import github_auth as gh
+    from atlas.rotinas import repo_sync
+
+    monkeypatch.setenv("ATLAS_SECRETS_DIR", str(tmp_path / "secrets"))
+    monkeypatch.delenv("ATLAS_SECRET_KEY", raising=False)
+    sec.reset_cache()
+    store = ResourceStore(str(tmp_path / "t.db"))
+    gh.connect_via_pat(store, owner="luigi", token="ghp_TOK")
+    repo_res = Resource(kind="Repo", name="nora", labels={"owner": "luigi"}, spec={})
+
+    args = repo_sync._auth_args_for_repo(repo_res, store)
+    assert args[0] == "-c" and "http.extraheader=Authorization: Basic " in args[1]
+    sec.reset_cache()
+
+
+def test_auth_args_for_repo_sem_dono_eh_vazio(tmp_path):
+    from atlas.rotinas import repo_sync
+
+    store = ResourceStore(str(tmp_path / "t2.db"))
+    repo_res = Resource(kind="Repo", name="pub", labels={}, spec={})
+    assert repo_sync._auth_args_for_repo(repo_res, store) == []

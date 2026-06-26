@@ -88,12 +88,30 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         return CollectResult(data={"_saida": f"⚠️ repo-sync/{label}: {exc}"})
 
 
+# ── credencial escopada por dono do Repo (ADR-0027 F3) ─────────────────────────
+
+
+def _auth_args_for_repo(repo_res, store) -> list[str]:
+    """Args ``-c`` de autenticação git com o token GitHub do dono do Repo.
+
+    O dono vem de ``labels.owner`` (P11). Sem dono/credencial ⇒ ``[]`` (repos
+    públicos seguem clonando sem token). Import tardio: github_auth puxa o cofre.
+    """
+    owner = (repo_res.labels or {}).get("owner") if repo_res is not None else None
+    if not owner:
+        return []
+    from atlas import github_auth
+
+    return github_auth.git_auth_args(github_auth.token_for_owner(store, owner))
+
+
 # ── clone inicial ─────────────────────────────────────────────────────────────
 
 
 def _clonar(url, repo_dir, label, store, ctx) -> CollectResult:
     repo_dir.parent.mkdir(parents=True, exist_ok=True)
-    gitcmd.git(["clone", "--depth=100", url, str(repo_dir)])
+    auth = _auth_args_for_repo(store.get("Repo", label), store)
+    gitcmd.git(["clone", "--depth=100", url, str(repo_dir)], auth_args=auth)
     repo_res = store.get("Repo", label)
     if repo_res is not None:
         context._gerar_contexto(repo_res, repo_dir, store, ctx)
@@ -133,7 +151,7 @@ def _excluida(branch: str, globs: list[str]) -> bool:
 def _processar(repo_dir, label, store, ctx, *, analisar: bool) -> dict:
     """Fetch + materialização multi-branch. Devolve um resumo para a notificação."""
     repo_res = store.get("Repo", label)
-    gitcmd.fetch_all(repo_dir)
+    gitcmd.fetch_all(repo_dir, auth_args=_auth_args_for_repo(repo_res, store))
 
     default = repo_res.spec.get("default_branch") or gitcmd.default_branch(repo_dir)
     excl = _csv(repo_res.spec.get("branches_exclude"))

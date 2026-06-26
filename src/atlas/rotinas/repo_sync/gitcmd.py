@@ -22,10 +22,21 @@ def data_dir() -> Path:
     return Path(db).resolve().parent
 
 
-def git(args: list[str], cwd: Path | None = None, *, check: bool = True) -> str:
-    """Roda ``git`` e devolve stdout. Levanta ``RuntimeError`` se ``check`` e falhar."""
+def git(
+    args: list[str],
+    cwd: Path | None = None,
+    *,
+    check: bool = True,
+    auth_args: list[str] | None = None,
+) -> str:
+    """Roda ``git`` e devolve stdout. Levanta ``RuntimeError`` se ``check`` e falhar.
+
+    ``auth_args`` (ex.: ``["-c", "http.extraheader=..."]``, de
+    :func:`atlas.github_auth.git_auth_args`) são injetados logo após ``git`` —
+    autenticam por invocação, sem persistir o token em ``.git/config``.
+    """
     proc = subprocess.run(
-        ["git", *args],
+        ["git", *(auth_args or []), *args],
         capture_output=True,
         text=True,
         cwd=str(cwd) if cwd else None,
@@ -39,12 +50,14 @@ def git(args: list[str], cwd: Path | None = None, *, check: bool = True) -> str:
 # ── fetch / branches ───────────────────────────────────────────────────────────
 
 
-def fetch_all(repo_dir: Path, depth: int | None = 100) -> None:
+def fetch_all(
+    repo_dir: Path, depth: int | None = 100, *, auth_args: list[str] | None = None
+) -> None:
     """Busca **todas** as branches remotas em ``refs/remotes/origin/*`` (sem checkout)."""
     args = ["fetch", "origin", "+refs/heads/*:refs/remotes/origin/*", "--prune"]
     if depth:
         args.append(f"--depth={depth}")
-    git(args, cwd=repo_dir)
+    git(args, cwd=repo_dir, auth_args=auth_args)
 
 
 def fetch_unshallow(repo_dir: Path) -> None:

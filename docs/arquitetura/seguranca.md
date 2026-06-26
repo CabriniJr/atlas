@@ -5,7 +5,7 @@ status: aprovado
 versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-16
+atualizado-em: 2026-06-26
 ---
 
 # Segurança e privacidade
@@ -14,6 +14,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
+| 1.1    | 2026-06-26 | Tech Lead | Multiusuário/credenciais cifradas (ADR-0027, Fases 1–3): cofre Fernet, Credential sem segredo, GitHub device flow + git helper escopado | — |
 
 ---
 
@@ -53,8 +54,31 @@ Texto externo (diff, JSON do Librera, mensagens) que vá a um prompt entra em
 ser tool-less. Ver [ciclo-de-vida-rotina](ciclo-de-vida-rotina.md) e
 [ADR-0004](adr/ADR-0004-contrato-collect.md).
 
+## Multiusuário e credenciais cifradas (ADR-0027)
+
+> Evolução para multiusuário com **isolamento total**. Ver
+> [ADR-0027](adr/ADR-0027-multiusuario-credenciais.md). Implementado em fases.
+
+- **Cofre de segredos em repouso (Fase 1).** Valores sensíveis (tokens GitHub etc.)
+  são cifrados com **Fernet** (AES-128-CBC + HMAC, lib `cryptography`) por
+  [`secrets_store`](../../src/atlas/secrets_store.py). Chave mestra em
+  `ATLAS_SECRET_KEY` (env) ou `secrets/secret.key` (`0600`, fora do git). Blobs em
+  `secrets/credentials/<id>.enc` (`0600`). **Perder a chave = perder os segredos.**
+- **Segredo nunca no spec nem no front (Fase 2).** O Kind `Credential` guarda só
+  metadados (`provider`, `account`, `scopes`, `status`, `labels.owner`); o token vai
+  ao cofre. A UI vê "conectado", nunca o valor.
+- **GitHub por device flow (Fase 3).** "Conectar GitHub" usa o **device flow** (sem
+  callback público — funciona na Tailnet): o backend faz polling e, ao obter o token,
+  **cifra e guarda** como `Credential` do dono. Requer `ATLAS_GITHUB_CLIENT_ID`
+  (OAuth App); **fallback**: colar um PAT. O repo-sync autentica clone/fetch com o
+  token do dono via header por invocação (`git -c http.extraheader=...`), **sem**
+  persistir o token em `.git/config`. O segredo só é descifrado na hora de chamar o
+  git; nunca trafega para o front.
+
 ## Pendências
 
 - Política de retenção do `texto_cru` em `activities` (dados sensíveis) — backlog.
 - Revisão de segurança automatizada de rotinas geradas antes do `/ativar` — a
   avaliar como rotina built-in futura.
+- Auth/sessão por usuário (Fase 4) e escopo do store por `labels.owner` (Fase 5);
+  rotação/backup da chave mestra do cofre.

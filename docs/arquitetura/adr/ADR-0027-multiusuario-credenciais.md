@@ -16,6 +16,7 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-06-25 | Tech Lead | Proposta — identidade, isolamento por usuário, credenciais cifradas, GitHub device flow, Claude compartilhado | — |
+| 0.2    | 2026-06-26 | Tech Lead | Fase 3 implementada (`github_auth`: device flow + PAT + git helper escopado; endpoints `/_github/*`; repo-sync autentica por dono) | — |
 
 ---
 
@@ -107,6 +108,13 @@ fica registrado como evolução possível, fora do escopo agora.)
    não-destrutiva, com testes. **(esta entrega)**
 2. **Kind `User`** + **Kind `Credential`** (metadados) — objetos, não-destrutivo.
 3. **GitHub device flow** (start/poll) → grava `Credential` cifrada + git helper escopado.
+   **(feito)** — [`github_auth.py`](../../../src/atlas/github_auth.py): `start_device_flow`/
+   `poll_access_token`/`complete_device_login`, fallback `connect_via_pat`,
+   `token_for_owner` + `git_auth_args`. Endpoints `POST /_github/device/start|poll`,
+   `/_github/pat`. O repo-sync resolve o token do dono (`labels.owner`) e autentica
+   clone/fetch via `gitcmd.git(..., auth_args=...)` (header por invocação, sem persistir).
+   Config: `ATLAS_GITHUB_CLIENT_ID`. **Pendente:** UI "Conectar GitHub" no front (hoje
+   via API/`curl`); o dono vem do corpo do request / `ATLAS_DEFAULT_OWNER` até a Fase 4.
 4. **Auth/sessão** (login) mantendo admin via token/loopback.
 5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
 
