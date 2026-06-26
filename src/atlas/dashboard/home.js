@@ -131,7 +131,7 @@ async function _loadHomeWhiteboard() {
   if (!el) return;
   // Kinds que têm render especializada (quadro branco)
   const kinds = (typeof RENDER_REGISTRY !== 'undefined') ? Object.keys(RENDER_REGISTRY) : ['Repo', 'RepoGroup', 'Agente'];
-  const icons = {Repo: '📦', RepoGroup: '🗂', Agente: '🤖'};
+  const icons = {Repo: '📦', RepoGroup: '🗂', Agente: '🤖', Job: '🧩', LLMProvider: '🔌'};
 
   const groups = await Promise.all(kinds.map(async k => {
     const items = await apiFetch(`${API}/${k}`).catch(() => []);
@@ -170,7 +170,14 @@ function _wbSubtitle(kind, r) {
     return `${n} repo${n !== 1 ? 's' : ''}`;
   }
   if (kind === 'Agente') {
-    return `${esc(s.modo || 'chat')} · ${esc(s.modelo || s.motor || 'claude')}`;
+    return `${esc(s.modo || 'chat')} · ${esc(s.modelo || s.provider || s.motor || 'claude')}`;
+  }
+  if (kind === 'Job') {
+    const st = s.active ? '● ativo' : '○ inativo';
+    return `${st}${s.schedule ? ' · 🕒 ' + esc(s.schedule) : ''}`;
+  }
+  if (kind === 'LLMProvider') {
+    return `${esc(s.motor || '')} · ${esc(s.modelo || '')}`;
   }
   return esc(s.description || '');
 }

@@ -49,6 +49,7 @@ function _repoShell(r) {
       <button class="rk-tab" data-tab="commits">📝 Commits</button>
       <button class="rk-tab" data-tab="graph">⬡ Graph</button>
       <button class="rk-tab" data-tab="files">📁 Files</button>
+      <button class="rk-tab" data-tab="jobs">🧩 Jobs</button>
       <button class="rk-tab" data-tab="log" id="rk-log-tab-${esc(r.name)}">📋 Log</button>
       <button class="rk-tab" data-tab="config">⚙️ Config</button>
     </div>
@@ -85,6 +86,7 @@ async function _loadRepoTab(name, tab, container) {
       case 'commits':   await _tabCommits(name, body); break;
       case 'graph':     await _tabGraph(name, body); break;
       case 'files':     await _tabFiles(name, body); break;
+      case 'jobs':      await _tabJobs(name, body); break;
       case 'log':       _tabLog(name, body); break;
       case 'config':    await _tabConfig(name, body); break;
     }
@@ -485,6 +487,78 @@ async function _tabGraph(name, el) {
       const arrow = row.querySelector('.rk-gv-arrow');
       if (arrow) arrow.textContent = row.classList.contains('open') ? '▼' : '▶';
     });
+  });
+}
+
+// ── Tab: Jobs (Jobs relacionados ao repo POR LABEL) ───────────────────────────
+async function _tabJobs(name, el) {
+  // Vínculo por label (P11): Jobs cujo spec.label == repo (ex.: repo-sync)
+  const all = await apiFetch(`${API}/Job`).catch(() => []);
+  const jobs = (all || []).filter(j => (j.spec?.label || '') === name);
+
+  const head = `<div class="rk-files-bar">
+    <span style="font-size:11px;color:var(--muted)">${jobs.length} Job(s) vinculado(s) por label <code>label=${esc(name)}</code></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="rk-jobs-sync-${esc(name)}" title="Rodar o Job de sync agora">↻ Sync agora</button>
+  </div>`;
+
+  if (!jobs.length) {
+    el.innerHTML = `${head}
+      <div style="padding:24px 16px;color:var(--muted);font-size:13px">
+        Nenhum Job vinculado. Um Job de sync precisa de
+        <code>spec.coletar=repo-sync</code> e <code>spec.label=${esc(name)}</code>.
+        Peça ao <strong>atlas-builder</strong> para criar, ou crie em ＋ Novo.
+      </div>`;
+    _wireJobsSync(name, el);
+    return;
+  }
+
+  const rows = jobs.map(j => {
+    const sp = j.spec || {};
+    const active = sp.active ? '<span class="rk-job-on">● ativo</span>' : '<span class="rk-job-off">○ inativo</span>';
+    const coletar = sp.coletar ? `<code>${esc(sp.coletar)}</code>` : '—';
+    return `<div class="rk-job-row" onclick="openResource('Job','${escJs(j.name)}')" title="Abrir Job ${esc(j.name)}">
+      <div class="rk-job-main">
+        <span class="rk-job-name">🧩 ${esc(j.name)}</span>
+        ${active}
+      </div>
+      <div class="rk-job-meta">
+        ${sp.schedule ? `<span title="agenda">🕒 ${esc(sp.schedule)}</span>` : ''}
+        <span title="collect">⚙ ${coletar}</span>
+        ${sp.model && sp.model !== 'none' ? `<span title="modelo">🧠 ${esc(sp.model)}</span>` : ''}
+      </div>
+      <div class="rk-job-actions">
+        <button class="btn rk-job-run" data-job="${esc(j.name)}" title="Executar agora">▶</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `${head}<div class="rk-jobs-list">${rows}</div>`;
+  _wireJobsSync(name, el);
+
+  el.querySelectorAll('.rk-job-run').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const job = btn.dataset.job;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        const r = await apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({routine: job})});
+        toast(r.ok ? `▶ ${job}: ok` : `❌ ${r.error || 'falhou'}`, !r.ok);
+      } catch (err) { toast('❌ ' + err.message, true); }
+      btn.disabled = false; btn.textContent = '▶';
+    });
+  });
+}
+
+function _wireJobsSync(name, el) {
+  const btn = el.querySelector(`#rk-jobs-sync-${CSS.escape(name)}`);
+  btn?.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '↻ …';
+    try {
+      const r = await apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({repo: name})});
+      toast(r.ok ? `↻ sync de ${name}: ok` : `❌ ${r.error || 'falhou'}`, !r.ok);
+    } catch (e) { toast('❌ ' + e.message, true); }
+    btn.disabled = false; btn.textContent = '↻ Sync agora';
   });
 }
 
