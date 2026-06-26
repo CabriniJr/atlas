@@ -134,7 +134,7 @@ atualizado-em: 2026-06-23
 | E7-25 | **Render chat do Agente** (quad. branco): interface interativa via motor plugável — **CRÍTICO p/ IDE integrado** | **feito** | [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
 | E7-26 | **Adapter Ollama** em `atlas.ia`: integra endpoint local testado (192.168.86.22:11434, gemma4) — **CRÍTICO p/ dev na Rasp via Tailnet** | **feito** | [ia.py](../../src/atlas/ia.py) |
 | E7-27 | **ADR-0025** — Agente **modo `code`** (Claude Code agêntico 2b no workspace): campo `modo`, `POST /_agent_run` + SSE `GET /_agent_run/{id}/stream`, `ThreadingHTTPServer`, runs assíncronos p/ multitarefa. Atende "ser um Claude Code". | **feito** (núcleo); pendências de segurança no ADR | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md), [api.py](../../src/atlas/api.py), [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
-| E7-28 | **Endurecimento do modo `code`**: workspace restrito, gate de curadoria humana, persistência de runs, allow/deny de tools por Agente | proposto | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md) §Pendências, [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
+| E7-28 | **Endurecimento do modo `code`**: workspace restrito, gate de curadoria humana, persistência de runs, allow/deny de tools por Agente | **pronto (próxima rodada)** — dossiê de contexto: [hardening](../superpowers/plans/2026-06-26-hardening-dossie-contexto.md) | [ADR-0025](../arquitetura/adr/ADR-0025-agente-modo-code.md) §Pendências, [ADR-0003](../arquitetura/adr/ADR-0003-seguranca-meta-loop.md) |
 | E7-29 | **Agente segue o modelo de objetos da API**: injeta schema vivo (kinds+spec) + instruções no system-prompt do modo `code`, fazendo o agente criar/editar recursos via API REST (não SQLite/arquivos) | **feito** | [api.py](../../src/atlas/api.py) (`_agent_api_context`) |
 | E7-30 | **Multirepo (Kind `RepoGroup`)**: dashboard que agrupa uma série de Repos — resumo agregado + grid de cards clicáveis + "Sync todos" | **feito** | [kinds/repogroup.js](../../src/atlas/dashboard/kinds/repogroup.js), [api_schema.py](../../src/atlas/api_schema.py), [ADR-0023](../arquitetura/adr/ADR-0023-especializacao-kind-repo.md) |
 | E7-31 | **Serialização: snapshot sob demanda + aba Files**: serializa a árvore inteira atual do repo (`/repo snapshot`, `gitcmd.list_tree` + `serialize.snapshot_tree`) p/ acompanhar o conteúdo de dentro do repo; aba 📁 Files navega os arquivos por pasta | **feito** | [serialize.py](../../src/atlas/rotinas/repo_sync/serialize.py), [comandos_repo.py](../../src/atlas/comandos_repo.py), [kinds/repo.js](../../src/atlas/dashboard/kinds/repo.js) |
@@ -157,6 +157,18 @@ atualizado-em: 2026-06-23
 | E7-43 | **Auto-deploy (CD) na Rasp**: timer systemd verifica `main` a cada 5 min → `git pull` + reinstala deps se mudaram + `systemctl --user restart atlas`. Configurável p/ acompanhar tags (`ATLAS_DEPLOY_TRACK=tags`) | **feito** | [scripts/atlas-deploy.sh](../../scripts/atlas-deploy.sh), [scripts/atlas-deploy.timer](../../scripts/atlas-deploy.timer), [RASP.md](../../RASP.md) |
 | E7-42 | **Kinds criáveis no ＋Novo a partir do schema** (P11: qualquer Kind não-oculto é criável; +templates RepoGroup/LLMProvider) + **fluxo de produção** no RepoGroup: botão "🔔 Sync diário" cria, por repo do grupo, um Job `repo-sync` com `schedule=@daily`, `saida=telegram`, `active=true` (vínculo por label). 1º uso em prod: avaliar múltiplos repos, gerar insights, metas e notificar via Telegram | **feito** | [main.js](../../src/atlas/dashboard/main.js), [kinds/repogroup.js](../../src/atlas/dashboard/kinds/repogroup.js) |
 | E7-40 | **Unificação schema do Job × spec gravado.** Schema/form (`api_schema.py` e `main.js`) passam a usar `schedule`/`model`/`active` (convenção do store, lida por `sync.py`/renders/scheduler), eliminando o divergência com `agenda`/`modelo`/`ativa`. Jobs criados via ＋Novo agora gravam as chaves corretas | **feito** | [api_schema.py](../../src/atlas/api_schema.py), [main.js](../../src/atlas/dashboard/main.js), [test_api_schema.py](../../tests/test_api_schema.py) |
+
+## Épico E8 — UX / feedback visual (front dinâmico) — *pedido do PO*
+> O front deve dar **sinal de vida**: animação de "pensando", spinners em ações
+> demoradas e a tela atualizando sozinha (não estática). Ver
+> [próximos-passos §3](proximos-passos.md). Front é cliente da API (ADR-0019).
+
+| ID | História | Estado | ADR/doc |
+|---|---|---|---|
+| E8-01 | **Animação "pensando" no chat do Agente** enquanto a IA processa (modo `code`/chat) | proposto | [kinds/agente.js](../../src/atlas/dashboard/kinds/agente.js) |
+| E8-02 | **Spinners/indicadores de progresso** em ações demoradas (sync, insight IA, snapshot, agent run, login GitHub) — círculo de loading nos botões/cards | proposto | [main.js](../../src/atlas/dashboard/main.js), [style.css](../../src/atlas/dashboard/style.css) |
+| E8-03 | **Atualização dinâmica da tela** (listas/status/runs/árvore) via SSE/polling — estender o padrão do `/_agent_run/stream` (já SSE) ao dashboard | proposto | [api.py](../../src/atlas/api.py), [main.js](../../src/atlas/dashboard/main.js) |
+| E8-04 | **Toasts/estado de erro melhores** + desabilitar botões em ação (anti duplo-clique, mostrar "…") | proposto | [main.js](../../src/atlas/dashboard/main.js) |
 
 ## Épico E3 — Tracking e metas (M3)
 | ID | História | Estado | ADR/doc |
