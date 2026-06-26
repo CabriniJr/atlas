@@ -12,6 +12,55 @@ from typing import Any
 # Campos de spec/labels por kind. ``type``: text | area | number | bool |
 # select | time | cron. ``opts`` só em ``select``.
 _KIND_SCHEMA: dict[str, dict[str, Any]] = {
+    "User": {
+        "meta": {"icon": "👤", "desc": "Usuário do Atlas (identidade) — ADR-0027"},
+        "spec": [
+            {"k": "display_name", "type": "text", "label": "Nome", "hint": "Nome de exibição"},
+            {
+                "k": "role",
+                "type": "select",
+                "label": "Papel",
+                "opts": ["member", "admin"],
+                "hint": "admin enxerga tudo; member só os seus recursos",
+            },
+        ],
+        "labels": [],
+    },
+    "Credential": {
+        "meta": {
+            "icon": "🔑",
+            "desc": "Credencial de um usuário (metadados; segredo cifrado no cofre) — ADR-0027",
+        },
+        "spec": [
+            {
+                "k": "provider",
+                "type": "select",
+                "label": "Provider",
+                "opts": ["github", "anthropic", "outro"],
+                "hint": "A que serviço a credencial pertence",
+            },
+            {
+                "k": "account",
+                "type": "text",
+                "label": "Conta",
+                "hint": "Login/handle (ex.: usuário do GitHub) — sem segredo",
+            },
+            {
+                "k": "scopes",
+                "type": "text",
+                "label": "Escopos",
+                "hint": "Permissões concedidas (ex.: repo, read:user)",
+            },
+            {
+                "k": "status",
+                "type": "select",
+                "label": "Status",
+                "opts": ["conectado", "pendente", "expirado", "revogado"],
+                "hint": "Estado da conexão",
+            },
+        ],
+        "labels": [{"k": "owner", "label": "Dono", "hint": "Usuário dono da credencial"}],
+    },
     "Tracker": {
         "meta": {"icon": "📊", "desc": "Coleta valores via micro-sintaxe no chat"},
         "spec": [
