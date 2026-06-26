@@ -39,7 +39,7 @@ atualizado-em: 2026-06-23
 | E0-02 | **API HTTP** (stdlib) expondo os verbos: `GET/POST/PUT/PATCH/DELETE /apis/atlas/v1/<kind>[/<name>]` | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 | E0-03 | **Verbos uniformes no chat** (`/resources`, `/list`, `/get`, `/describe`, `/apply`, `/delete`) | **feito** — `verbos.py` + roteado em `handler.py` | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
 | E0-04 | **Migrar kinds** legados (Idea/Task/RoutineRequest, Tracker, Alarm, Routine) para o store — boot sync + CRUD espelhado | **feito** — `sync.py` + todos os módulos leem/escrevem no store | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md) |
-| E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP — **CRÍTICO p/ Claude Code SSH** | proposto | [seguranca](../arquitetura/seguranca.md) |
+| E0-05 | **AuthN/Z da API** (token) — pré-requisito para expor a HTTP — **CRÍTICO p/ Claude Code SSH** | **feito** — token/loopback (admin) + sessão por usuário + escopo por dono via [ADR-0027](../arquitetura/adr/ADR-0027-multiusuario-credenciais.md) | [seguranca](../arquitetura/seguranca.md) |
 | E0-06 | **CLI SSH** (vs Vercel) consumindo API auth — **CRÍTICO p/ dev noturno autônomo** | proposto | [ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md), [[autonomous-dev-loop]] |
 
 ## Épico E1 — Motor mínimo (M1)

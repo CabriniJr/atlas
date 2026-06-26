@@ -14,6 +14,7 @@ atualizado-em: 2026-06-26
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-26 | Tech Lead | Criação — handoff do trabalho recente (E7-24..44, ADR-0025/0026/0027) p/ outro agente | — |
+| 1.1    | 2026-06-26 | Tech Lead | Épico multiusuário (ADR-0027) concluído e mergeado em `main` (Fases 1–5 + UI); estado/branches/testes atualizados | — |
 
 ---
 
@@ -26,8 +27,8 @@ atualizado-em: 2026-06-26
 
 ## 1. Onde o desenvolvimento está
 
-Trabalho recente (épico E7 — IDE/agente integrado + produção). Tudo já em `main`,
-exceto o multiusuário (branch ativa):
+Trabalho recente (épico E7 — IDE/agente integrado + produção) e o épico
+**multiusuário** (ADR-0027). **Tudo em `main`** (o CD da Rasp acompanha `main`):
 
 | Entregue | O quê | ADR |
 |---|---|---|
@@ -43,10 +44,10 @@ exceto o multiusuário (branch ativa):
 | Tracking de gasto de IA | acumula `custo_total_usd`/`runs` no status do Agente quando evocado | — |
 | CD na Rasp | `scripts/atlas-deploy.{sh,service,timer}` — pull main + restart a cada 5 min | — |
 | Job schema unificado | `schedule`/`model`/`active` (era `agenda`/`modelo`/`ativa`) | — |
-| **Multiusuário (em andamento)** | ADR-0027 + Fase 1 (cofre cifrado) na branch `feat/multiuser-credentials` | ADR-0027 |
+| **Multiusuário (completo)** | ADR-0027 — cofre cifrado, User/Credential, GitHub device flow, auth/sessão, isolamento por dono + UI de login | ADR-0027 |
 
-**Branches ativas:** `feat/multiuser-credentials` (Fases 1–2, PR aberto) e
-`feat/github-device-flow` (Fase 3, empilhada sobre a anterior). Resto em `main`.
+**Sem branches de feature abertas** do multiusuário — Fases 1–5 + UI mergeadas em
+`main` (PR #4 das Fases 1–2 + rebase das Fases 3–5/UI). O ADR-0027 está **aceito**.
 
 ## 2. Como rodar, testar e fazer deploy
 
@@ -66,7 +67,7 @@ journalctl --user -u atlas -f
 **dois** (venv e sistema). Lint usa o venv: `.venv/bin/ruff check src/`.
 
 ```bash
-python -m pytest tests/ -q        # 417 testes, devem passar
+python -m pytest tests/ -q        # 490 testes, devem passar
 .venv/bin/ruff check src/ tests/  # deve passar limpo
 ```
 
@@ -101,25 +102,27 @@ via SSE. O system-prompt inclui `_agent_api_context(store)` (schema vivo + como 
 recursos via API + relações por label). **Risco de segurança:** escrita livre sob a
 raiz do projeto — endurecer é E7-28 (workspace restrito, gate de curadoria).
 
-## 5. Multiusuário — o épico em curso (ADR-0027)
+## 5. Multiusuário — épico concluído (ADR-0027, aceito)
 
 Decisões do PO: **isolamento total** por usuário; **Claude compartilhado** (host)
-com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
+com custo por usuário; **GitHub via device flow**; **credenciais cifradas**. Todas as
+fases + a UI estão em `main`.
 
 | Fase | O quê | Estado |
 |---|---|---|
-| 1 | Cofre cifrado `secrets_store` (Fernet) | **feito** (branch) |
-| 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | **feito** (branch) |
-| 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | **feito** (branch `feat/github-device-flow`) |
-| 4 | Auth/sessão (login por senha local + login via GitHub; cookie httpOnly; admin via token/loopback) | **feito** (branch `feat/auth-sessao`) |
-| 5 | Isolamento por `labels.owner` no store/API + migração | **feito** (branch `feat/isolamento-owner`) |
+| 1 | Cofre cifrado `secrets_store` (Fernet) | **feito** (em `main`) |
+| 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | **feito** (em `main`) |
+| 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | **feito** (em `main`) |
+| 4 | Auth/sessão (login por senha local + login via GitHub; cookie httpOnly; admin via token/loopback) | **feito** (em `main`) |
+| 5 | Isolamento por `labels.owner` no store/API + migração | **feito** (em `main`) |
+| 6 | UI multiusuário no front (login + Conectar GitHub + logout) | **feito** (em `main`) |
 
 **Fase 1 entregue:** [`src/atlas/secrets_store.py`](../../src/atlas/secrets_store.py) —
 `encrypt/decrypt`, `put/get/delete_secret`. Chave em `ATLAS_SECRET_KEY` ou
 `secrets/secret.key` (0600). Segredo **nunca** no spec nem no front. Dep nova:
 `cryptography` (no `pyproject.toml`). Testes: `tests/test_secrets_store.py`.
 
-**Fase 3 entregue** (branch `feat/github-device-flow`):
+**Fase 3 entregue** (em `main`):
 [`src/atlas/github_auth.py`](../../src/atlas/github_auth.py) — device flow
 (`start_device_flow`/`poll_access_token`/`complete_device_login`), fallback PAT
 (`connect_via_pat`), resolução de token (`token_for_owner`) e git helper escopado
@@ -129,7 +132,7 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 clone/fetch (`_auth_args_for_repo`). Config: `ATLAS_GITHUB_CLIENT_ID` (OAuth App);
 sem ele, só o fallback de PAT funciona. HTTP é stdlib (`urllib`), injetável em teste.
 
-**Fase 4 entregue** (branch `feat/auth-sessao`):
+**Fase 4 entregue** (em `main`):
 [`users.py`](../../src/atlas/users.py) (senha local: PBKDF2 cifrado no cofre,
 `create_user`/`verify_password`), [`sessions.py`](../../src/atlas/sessions.py)
 (sessão em memória, token opaco + TTL) e a auth da API: `_identity()` resolve
@@ -139,7 +142,7 @@ httpOnly); `_auth()` exige um dos dois. Endpoints **públicos** (pré-gate):
 device flow — cria o `User`, salva a credencial e abre sessão), `GET /_auth/me`, e
 `POST /_auth/users` (**admin** cria usuário + define senha — bootstrap do sistema).
 
-**Fase 5 entregue** (branch `feat/isolamento-owner`) — **épico multiusuário completo**:
+**Fase 5 entregue** (em `main`):
 [`scoping.py`](../../src/atlas/scoping.py) (políticas puras `can_see`/`can_write`/
 `stamp_owner`/`visible` + `migrate_unowned`). A API escopa **list/get/put/delete**
 pelo dono da sessão: o admin vê/altera tudo; o member só os seus recursos (recurso
@@ -173,6 +176,12 @@ admin sem tela de login.
 
 - **E7-28** — endurecer o modo `code` (workspace restrito, gate de curadoria humana,
   persistência de runs, allow/deny de tools por Agente).
-- **Multiusuário** — fases 2–5 (acima).
+- **Sessões em memória** — perdidas no restart (usuário refaz login). Persistir é
+  evolução (ADR-0027 §Pendências).
 - **Runs agênticos em memória** — perdidos no restart (sem persistência ainda).
-- **Auth atual** — token único/loopback; será estendida na Fase 4.
+- **Chave mestra do cofre** — sem rotação/backup formalizados (ADR-0027 §Pendências).
+- **UX de cadastro de usuários** — hoje admin cria via `POST /_auth/users`; convite/
+  auto-registro não definidos.
+
+> Os **próximos passos priorizáveis** estão consolidados em
+> [`docs/roadmap/proximos-passos.md`](../roadmap/proximos-passos.md).

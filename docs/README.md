@@ -33,6 +33,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 ### 🗺️ Roadmap — *o que vamos fazer e quando*
 - [`roadmap/amadurecimento.md`](roadmap/amadurecimento.md) — estágios de maturidade (M0→M3).
 - [`roadmap/backlog.md`](roadmap/backlog.md) — épicos e histórias priorizadas.
+- [`roadmap/proximos-passos.md`](roadmap/proximos-passos.md) — **pendências priorizáveis** (consolidado p/ o PO decidir a próxima rodada).
 - [`roadmap/planejamento.md`](roadmap/planejamento.md) — marcos e releases.
 
 ### 🤖 Agentes — *quem constrói*
