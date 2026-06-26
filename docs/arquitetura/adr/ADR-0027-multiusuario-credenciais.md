@@ -17,6 +17,7 @@ substituido-por: —
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-06-25 | Tech Lead | Proposta — identidade, isolamento por usuário, credenciais cifradas, GitHub device flow, Claude compartilhado | — |
 | 0.2    | 2026-06-26 | Tech Lead | Fase 3 implementada (`github_auth`: device flow + PAT + git helper escopado; endpoints `/_github/*`; repo-sync autentica por dono) | — |
+| 0.3    | 2026-06-26 | Tech Lead | Fase 4 implementada (`users`/`sessions`: senha local PBKDF2 + login via GitHub; cookie httpOnly; `_identity` na API; admin via token/loopback) | — |
 
 ---
 
@@ -115,8 +116,18 @@ fica registrado como evolução possível, fora do escopo agora.)
    clone/fetch via `gitcmd.git(..., auth_args=...)` (header por invocação, sem persistir).
    Config: `ATLAS_GITHUB_CLIENT_ID`. **Pendente:** UI "Conectar GitHub" no front (hoje
    via API/`curl`); o dono vem do corpo do request / `ATLAS_DEFAULT_OWNER` até a Fase 4.
-4. **Auth/sessão** (login) mantendo admin via token/loopback.
+4. **Auth/sessão** (login) mantendo admin via token/loopback. **(feito)** —
+   [`users.py`](../../../src/atlas/users.py) (senha local: verificador PBKDF2 cifrado
+   no cofre) e [`sessions.py`](../../../src/atlas/sessions.py) (token opaco em memória
+   + TTL). Na API, `_identity()` resolve `(user, role)` de admin (token/loopback) ou da
+   sessão (cookie `atlas_session` httpOnly); `_auth()` exige um dos dois. Endpoints
+   públicos: `POST /_auth/login`, `/_auth/logout`, `/_auth/github/start|poll`,
+   `GET /_auth/me`; `POST /_auth/users` (admin cria usuário + senha — bootstrap). O
+   login via GitHub reusa o device flow (Fase 3): resolve o username,
+   cria o `User`, salva a credencial e abre sessão. **Pendente:** UI de login no front
+   (hoje via API); persistência de sessões (hoje em memória, como os runs).
 5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
+   Gancho pronto: `self._owner()` no handler dá o dono corrente.
 
 ## Pendências
 - Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).

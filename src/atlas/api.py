@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from atlas import github_auth
+from atlas import credentials, github_auth, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 
@@ -37,8 +37,20 @@ _log = logging.getLogger("atlas.api")
 
 _API_PREFIX = "/apis/atlas/v1"
 _TOKEN = os.environ.get("ATLAS_API_TOKEN", "")
-# Dono default enquanto a sessão (Fase 4) não existe; o portador do token é admin.
+# Dono default p/ admin (token/loopback) e fallback de escopo (Fase 5).
 _DEFAULT_OWNER = os.environ.get("ATLAS_DEFAULT_OWNER", "admin")
+_SESSION_COOKIE = "atlas_session"
+
+
+def _set_cookie(token: str) -> str:
+    """Cookie de sessão httpOnly (SameSite=Lax). HTTP na Tailnet ⇒ sem Secure."""
+    return (
+        f"{_SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={sessions._DEFAULT_TTL}"
+    )
+
+
+def _clear_cookie() -> str:
+    return f"{_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
 _PORT = int(os.environ.get("ATLAS_API_PORT", "8080"))
 # Raiz do projeto Atlas — usada pelo agente modo=code para cwd + --add-dir
 _PROJECT_DIR = str(
@@ -83,19 +95,51 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: ANN401
         _log.debug(fmt, *args)
 
-    def _auth(self) -> bool:
+    def _is_admin_token(self) -> bool:
+        """Portador do ATLAS_API_TOKEN ou loopback ⇒ admin (retrocompat E0-05)."""
         if not _TOKEN:
             ip = self.client_address[0]
             return ip in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
-        auth = self.headers.get("Authorization", "")
-        return auth == f"Bearer {_TOKEN}"
+        return self.headers.get("Authorization", "") == f"Bearer {_TOKEN}"
 
-    def _json(self, code: int, body: Any) -> None:
+    def _session_token(self) -> str:
+        """Lê o token de sessão do cookie ``atlas_session``."""
+        from http.cookies import SimpleCookie
+
+        raw = self.headers.get("Cookie", "")
+        if not raw:
+            return ""
+        try:
+            morsel = SimpleCookie(raw).get(_SESSION_COOKIE)
+        except Exception:  # noqa: BLE001 — cookie malformado ⇒ sem sessão
+            return ""
+        return morsel.value if morsel else ""
+
+    def _identity(self) -> tuple[str | None, str | None]:
+        """``(user, role)`` do request: admin (token/loopback) ou sessão; senão ``(None, None)``."""
+        if self._is_admin_token():
+            return (_DEFAULT_OWNER, "admin")
+        sess = sessions.resolve_session(self._session_token())
+        if sess:
+            return (sess["user"], sess["role"])
+        return (None, None)
+
+    def _auth(self) -> bool:
+        """Autorizado se admin (token/loopback) ou sessão válida."""
+        return self._identity()[0] is not None
+
+    def _owner(self) -> str:
+        """Dono corrente para escopar recursos (Fase 5); admin/loopback ⇒ default."""
+        return self._identity()[0] or _DEFAULT_OWNER
+
+    def _json(self, code: int, body: Any, *, cookies: list[str] | None = None) -> None:
         data = json.dumps(body, default=str).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Access-Control-Allow-Origin", "*")
+        for c in cookies or []:
+            self.send_header("Set-Cookie", c)
         self.end_headers()
         self.wfile.write(data)
 
@@ -118,6 +162,45 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
         self.end_headers()
 
+    def _handle_auth_post(self, path: str, body: dict) -> None:
+        """Endpoints públicos de login/sessão (ADR-0027 F4)."""
+        if path == _API_PREFIX + "/_auth/login":
+            out, token = _auth_login(_store, body.get("user", ""), body.get("password", ""))
+            cookies = [_set_cookie(token)] if token else None
+            self._json(200 if out.get("ok") else 401, out, cookies=cookies)
+            return
+        if path == _API_PREFIX + "/_auth/logout":
+            sessions.destroy_session(self._session_token())
+            self._json(200, {"ok": True}, cookies=[_clear_cookie()])
+            return
+        # Provisionamento de usuários — só admin (token/loopback ou sessão admin).
+        if path == _API_PREFIX + "/_auth/users":
+            if self._identity()[1] != "admin":
+                self._json(403, {"error": "admin requerido"})
+                return
+            name = body.get("user", "").strip()
+            if not name:
+                self._json(400, {"error": "user obrigatório"})
+                return
+            u = users.create_user(
+                _store, name,
+                display_name=body.get("display_name", "").strip(),
+                role=body.get("role", "member").strip() or "member",
+                password=body.get("password") or None,
+            )
+            self._json(200, {"ok": True, "user": u.name})
+            return
+        # Login via GitHub (device flow) — reusa a Fase 3, mas cria sessão.
+        if path == _API_PREFIX + "/_auth/github/start":
+            self._json(200, _github_device_start(body.get("scope", "")))
+            return
+        if path == _API_PREFIX + "/_auth/github/poll":
+            out, token = _github_login_poll(_store, device_code=body.get("device_code", "").strip())
+            cookies = [_set_cookie(token)] if token else None
+            self._json(200, out, cookies=cookies)
+            return
+        self._json(404, {"error": "not found"})
+
     def do_GET(self) -> None:
         path = self.path.split("?")[0].rstrip("/")
 
@@ -126,6 +209,14 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if path == "/health":
             self._json(200, {"status": "ok"})
+            return
+        # Identidade corrente (público): quem sou eu? (ADR-0027 F4)
+        if path == _API_PREFIX + "/_auth/me":
+            user, role = self._identity()
+            if user is None:
+                self._json(200, {"authenticated": False})
+            else:
+                self._json(200, {"authenticated": True, "user": user, "role": role})
             return
         if path.startswith("/dashboard/"):
             result = _dashboard_static(path)
@@ -228,16 +319,24 @@ class _Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        path = self.path.split("?")[0].rstrip("/")
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length)) if length else {}
+
+        # Endpoints públicos de login (pré-auth): não se pode estar logado p/ logar.
+        if path.startswith(_API_PREFIX + "/_auth/"):
+            if _store is None:
+                self._json(503, {"error": "store not ready"})
+                return
+            self._handle_auth_post(path, body)
+            return
+
         if not self._auth():
             self._json(401, {"error": "unauthorized"})
             return
         if _store is None:
             self._json(503, {"error": "store not ready"})
             return
-
-        path = self.path.split("?")[0].rstrip("/")
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
 
         # Executa uma rotina/Job sob demanda (botão "Executar" no dashboard).
         # Aceita {routine: <nome>} OU {repo: <nome>} (resolve o Job de sync por label).
@@ -299,7 +398,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == _API_PREFIX + "/_github/device/poll":
             self._json(200, _github_device_poll(
                 _store,
-                owner=body.get("owner", "").strip(),
+                owner=body.get("owner", "").strip() or self._owner(),
                 device_code=body.get("device_code", "").strip(),
             ))
             return
@@ -307,7 +406,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == _API_PREFIX + "/_github/pat":
             self._json(200, _github_pat(
                 _store,
-                owner=body.get("owner", "").strip(),
+                owner=body.get("owner", "").strip() or self._owner(),
                 token=body.get("token", "").strip(),
                 account=body.get("account", "").strip(),
             ))
@@ -825,6 +924,48 @@ def _resolve_engine(agente_spec: dict, store: ResourceStore) -> dict:
         "timeout": timeout,
         "provider": prov_name or None,
     }
+
+
+# ── Login / sessão (ADR-0027 Fase 4) ──────────────────────────────────────────
+
+
+def _user_role(store: ResourceStore, user: str) -> str:
+    r = store.get("User", user)
+    return (r.spec.get("role") if r else None) or "member"
+
+
+def _auth_login(store: ResourceStore, user: str, password: str) -> tuple[dict, str | None]:
+    """Login por senha local → cria sessão. Devolve ``(body, token|None)``."""
+    user = (user or "").strip().lower()
+    if not user or not users.verify_password(user, password):
+        return ({"ok": False, "error": "credenciais inválidas"}, None)
+    role = _user_role(store, user)
+    token = sessions.create_session(user, role=role)
+    return ({"ok": True, "user": user, "role": role}, token)
+
+
+def _github_login_poll(store: ResourceStore, *, device_code: str) -> tuple[dict, str | None]:
+    """Login via GitHub: poll → resolve username → cria User/credencial + sessão."""
+    if not device_code:
+        return ({"status": "error", "error": "device_code obrigatório"}, None)
+    out = github_auth.poll_access_token(device_code)
+    if out.get("status") != "connected":
+        return (out, None)
+    token = out["access_token"]
+    try:
+        login = github_auth.fetch_github_login(token)
+    except github_auth.GitHubAuthError as exc:
+        return ({"status": "error", "error": str(exc)}, None)
+    user = users.normalize_name(login)
+    if store.get("User", user) is None:
+        users.create_user(store, user, display_name=login)
+    # guarda a credencial cifrada (o repo-sync passa a usar a conta do usuário)
+    credentials.save_credential(
+        store, owner=user, provider="github", secret=token,
+        account=login, scopes=out.get("scope", ""),
+    )
+    sess = sessions.create_session(user, role=_user_role(store, user))
+    return ({"status": "connected", "user": user}, sess)
 
 
 # ── GitHub device flow + PAT (ADR-0027 Fase 3) ────────────────────────────────

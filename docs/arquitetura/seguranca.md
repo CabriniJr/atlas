@@ -15,6 +15,7 @@ atualizado-em: 2026-06-26
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
 | 1.1    | 2026-06-26 | Tech Lead | Multiusuário/credenciais cifradas (ADR-0027, Fases 1–3): cofre Fernet, Credential sem segredo, GitHub device flow + git helper escopado | — |
+| 1.2    | 2026-06-26 | Tech Lead | Auth/sessão (ADR-0027, Fase 4): senha local PBKDF2 + login via GitHub; sessão em cookie httpOnly; identidade admin/usuário por request | — |
 
 ---
 
@@ -75,10 +76,18 @@ ser tool-less. Ver [ciclo-de-vida-rotina](ciclo-de-vida-rotina.md) e
   persistir o token em `.git/config`. O segredo só é descifrado na hora de chamar o
   git; nunca trafega para o front.
 
+- **Auth/sessão por usuário (Fase 4).** Login por **senha local** (verificador
+  **PBKDF2-SHA256** com salt, cifrado no cofre — a senha nunca é guardada) ou por
+  **GitHub** (device flow). O sucesso abre uma **sessão** (token opaco aleatório, em
+  memória, com TTL) entregue em **cookie `atlas_session` httpOnly** (`SameSite=Lax`).
+  Cada request é identificado por `_identity()` → `(user, role)`: **admin** quando
+  vem o `ATLAS_API_TOKEN`/loopback (retrocompat E0-05), senão o usuário da sessão;
+  sem nenhum dos dois ⇒ **401**. O segredo de login não trafega para o front.
+
 ## Pendências
 
 - Política de retenção do `texto_cru` em `activities` (dados sensíveis) — backlog.
 - Revisão de segurança automatizada de rotinas geradas antes do `/ativar` — a
   avaliar como rotina built-in futura.
-- Auth/sessão por usuário (Fase 4) e escopo do store por `labels.owner` (Fase 5);
-  rotação/backup da chave mestra do cofre.
+- Escopo do store por `labels.owner` (Fase 5); persistência de sessões (hoje em
+  memória); rotação/backup da chave mestra do cofre; UI de login no front.

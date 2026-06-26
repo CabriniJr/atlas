@@ -111,7 +111,7 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 | 1 | Cofre cifrado `secrets_store` (Fernet) | **feito** (branch) |
 | 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | **feito** (branch) |
 | 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | **feito** (branch `feat/github-device-flow`) |
-| 4 | Auth/sessão (login; admin via token/loopback) | a fazer |
+| 4 | Auth/sessão (login por senha local + login via GitHub; cookie httpOnly; admin via token/loopback) | **feito** (branch `feat/auth-sessao`) |
 | 5 | Isolamento por `labels.owner` no store/API + migração | a fazer |
 
 **Fase 1 entregue:** [`src/atlas/secrets_store.py`](../../src/atlas/secrets_store.py) —
@@ -129,11 +129,22 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 clone/fetch (`_auth_args_for_repo`). Config: `ATLAS_GITHUB_CLIENT_ID` (OAuth App);
 sem ele, só o fallback de PAT funciona. HTTP é stdlib (`urllib`), injetável em teste.
 
-**Como continuar (Fase 4 — auth/sessão):** login → sessão (token opaco, cookie
-httpOnly) identifica o usuário por request; `ATLAS_API_TOKEN`/loopback segue como
-admin. Hoje o dono das credenciais/recursos vem do corpo do request ou de
-`ATLAS_DEFAULT_OWNER` (default `admin`); a Fase 4 troca isso pela sessão e a Fase 5
-escopa o store por `labels.owner`. Ver ADR-0027 §Fases.
+**Fase 4 entregue** (branch `feat/auth-sessao`):
+[`users.py`](../../src/atlas/users.py) (senha local: PBKDF2 cifrado no cofre,
+`create_user`/`verify_password`), [`sessions.py`](../../src/atlas/sessions.py)
+(sessão em memória, token opaco + TTL) e a auth da API: `_identity()` resolve
+`(user, role)` de **admin** (token/loopback) **ou** sessão (cookie `atlas_session`
+httpOnly); `_auth()` exige um dos dois. Endpoints **públicos** (pré-gate):
+`POST /_auth/login` (senha), `/_auth/logout`, `/_auth/github/start|poll` (login via
+device flow — cria o `User`, salva a credencial e abre sessão), `GET /_auth/me`, e
+`POST /_auth/users` (**admin** cria usuário + define senha — bootstrap do sistema).
+
+**Como continuar (Fase 5 — isolamento):** todo recurso ganha `labels.owner=<user>`;
+o `ResourceStore`/API escopam `list/get/put/delete` pelo dono da sessão (admin vê
+tudo); migrar os recursos atuais para um dono primário; kinds de sistema podem ser
+globais (`labels.scope=system`). O gancho já existe: `self._owner()` no handler dá o
+dono corrente. **Pendente também:** UI de login no front (hoje via API) e tela de
+"Conectar GitHub". Ver ADR-0027 §Fases e §3 (isolamento total).
 
 ## 6. Convenções de trabalho (não-negociáveis)
 

@@ -184,3 +184,24 @@ def test_git_auth_args_monta_extraheader_basic():
 def test_git_auth_args_sem_token_eh_vazio():
     assert gh.git_auth_args("") == []
     assert gh.git_auth_args(None) == []
+
+
+# ── GitHub como login: resolver o username (Fase 4) ──────────────────────────
+
+
+def test_fetch_github_login_devolve_username():
+    chamadas = []
+
+    def fake_get(url, token):
+        chamadas.append((url, token))
+        return {"login": "CabriniJr", "id": 42}
+
+    assert gh.fetch_github_login("gho_TOK", get=fake_get) == "CabriniJr"
+    url, token = chamadas[0]
+    assert url.endswith("/user")
+    assert token == "gho_TOK"
+
+
+def test_fetch_github_login_sem_login_levanta():
+    with pytest.raises(gh.GitHubAuthError):
+        gh.fetch_github_login("gho_TOK", get=lambda u, t: {})

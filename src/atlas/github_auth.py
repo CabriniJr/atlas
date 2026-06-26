@@ -25,6 +25,7 @@ from atlas.core.store import ResourceStore
 
 DEVICE_CODE_URL = "https://github.com/login/device/code"
 ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
+API_USER_URL = "https://api.github.com/user"
 DEFAULT_SCOPE = "repo read:user"
 
 # erros do device flow que ainda podem virar sucesso (continuar polling)
@@ -48,6 +49,26 @@ def _post_form(url: str, data: dict) -> dict:
     )
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (URL fixa do GitHub)
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _get_json(url: str, token: str) -> dict:
+    """GET autenticado → JSON (para a API REST do GitHub)."""
+    req = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (URL fixa do GitHub)
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def fetch_github_login(token: str, *, get=_get_json) -> str:
+    """Resolve o ``login`` (username) do dono do token via API do GitHub."""
+    data = get(API_USER_URL, token)
+    login = (data or {}).get("login")
+    if not login:
+        raise GitHubAuthError("não foi possível resolver o usuário GitHub do token")
+    return login
 
 
 # ── device flow ──────────────────────────────────────────────────────────────
