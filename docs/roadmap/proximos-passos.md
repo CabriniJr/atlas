@@ -43,9 +43,9 @@ Não é desenvolvimento — é colocar o que já existe pra rodar de verdade na 
 ## 1. Endurecimento de segurança (dívida do que entrou)
 | # | Item (ref backlog) | Por quê | Tam. |
 |---|---|---|---|
-| 1.1 | **E7-28 — endurecer o modo `code`**: ✅ workspace restrito + allow/deny de tools + teto de concorrência + flag de gate (ADR-0028, em `feat/hardening-agente-code`); falta persistência de runs + UI de curadoria | Hoje o agente escreve livre sob a raiz do projeto — maior superfície de risco interna | G |
+| 1.1 | **E7-28 — endurecer o modo `code`**: ✅ workspace restrito + allow/deny de tools + teto de concorrência + flag de gate + persistência de runs (ADR-0028, em `feat/hardening-agente-code`); falta UI de curadoria | Hoje o agente escreve livre sob a raiz do projeto — maior superfície de risco interna | G |
 | 1.2 | **Persistência de sessões** (hoje em memória; perdem no restart) | UX: usuário não precisa relogar a cada deploy/restart | P |
-| 1.3 | **Persistência dos runs agênticos** (hoje em memória) | Não perder histórico/estado de runs no restart | M |
+| 1.3 | ✅ **Persistência dos runs agênticos** — feito (ADR-0028: Kind `AgentRun` escopado por dono) | Não perder histórico/estado de runs no restart | M |
 | 1.4 | **Rotação da chave mestra + UX de cadastro/convite de usuários** | Operação seborosa a longo prazo; hoje só admin cria por API | M |
 
 ## 2. Loop de desenvolvimento autônomo (a visão-mãe)

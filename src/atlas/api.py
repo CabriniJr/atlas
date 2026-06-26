@@ -1177,6 +1177,56 @@ def active_runs_count() -> int:
         return sum(1 for r in _runs.values() if not r.get("done"))
 
 
+def summarize_run(run: dict) -> dict:
+    """Resumo persistível de um run agêntico (ADR-0028 §5).
+
+    ``status``: ``done`` (sem erro), ``error`` (algum evento de erro) ou
+    ``running`` (ainda não terminou).
+    """
+    events = run.get("events", [])
+    if not run.get("done"):
+        status = "running"
+    elif any(e.get("type") == "error" for e in events):
+        status = "error"
+    else:
+        status = "done"
+    return {
+        "agente": run.get("agente"),
+        "task": run.get("task"),
+        "owner": run.get("owner"),
+        "status": status,
+        "cost_usd": run.get("cost", 0.0),
+        "events": len(events),
+        "started_at": run.get("started_at"),
+        "finished_at": run.get("finished_at"),
+    }
+
+
+def persist_agent_run(store: ResourceStore | None, run: dict) -> None:
+    """Persiste o run como Kind ``AgentRun`` (ADR-0028 §5), escopado por dono.
+
+    Uma vez no store, a API genérica (ADR-0027) já serve/escopa o histórico por
+    `labels.owner`. Degrade silencioso (ADR-0006): falha ao persistir não derruba
+    o run.
+    """
+    if store is None:
+        return
+    s = summarize_run(run)
+    try:
+        store.apply(
+            Resource(
+                kind="AgentRun",
+                name=run["id"],
+                labels={"owner": s["owner"] or _DEFAULT_OWNER, "origem": "agent-run"},
+                spec={"agente": s["agente"], "task": s["task"], "started_at": s["started_at"]},
+                status={k: s[k] for k in ("status", "cost_usd", "events", "finished_at")},
+            ),
+            datetime.now(),
+        )
+    except Exception:  # noqa: BLE001
+        _log.exception("falha ao persistir AgentRun %s", run.get("id"))
+
+
 def _new_run(agente_name: str, mensagem: str) -> dict:
     """Cria entrada de run no registro; descarta os mais velhos acima do limite."""
     run_id = uuid.uuid4().hex[:8]
@@ -1217,10 +1267,17 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     agente_name = run["agente"]
     mensagem = run["task"]
 
+    def _done(cost: float = 0.0) -> None:
+        """Carimba fim + custo, finaliza o run e persiste (ADR-0028 §5)."""
+        run["cost"] = cost
+        run["finished_at"] = datetime.now().isoformat()
+        _finish_run(run)
+        persist_agent_run(store, run)
+
     agente = store.get("Agente", agente_name) if store else None
     if agente is None:
         _emit(run, {"type": "error", "message": f"Agente '{agente_name}' não encontrado"})
-        _finish_run(run)
+        _done()
         return
 
     spec = agente.spec or {}
@@ -1237,14 +1294,14 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         cwd = resolve_workspace(_PROJECT_DIR, spec.get("workspace"))
     except ValueError as exc:
         _emit(run, {"type": "error", "message": f"workspace inválido: {exc}"})
-        _finish_run(run)
+        _done()
         return
 
     try:
         claude_bin = _resolver_claude()
     except Exception as exc:  # noqa: BLE001
         _emit(run, {"type": "error", "message": f"claude CLI não encontrado: {exc}"})
-        _finish_run(run)
+        _done()
         return
 
     # Conhecimento operacional do Atlas: schema de objetos + como usar a API.
@@ -1280,6 +1337,7 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     })
 
     proc = None
+    custo = 0.0  # acumula o gasto de IA deste run (evento result)
     try:
         proc = subprocess.Popen(
             args,
@@ -1290,7 +1348,6 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             cwd=cwd,
         )
 
-        custo = 0.0  # acumula o gasto de IA deste run (evento result)
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.strip()
             if not line:
@@ -1322,7 +1379,7 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
                 proc.kill()
             except Exception:  # noqa: BLE001
                 pass
-        _finish_run(run)
+        _done(custo)
 
 
 def _registrar_gasto_agente(

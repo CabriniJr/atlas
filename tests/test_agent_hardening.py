@@ -12,6 +12,13 @@ from pathlib import Path
 import pytest
 
 from atlas import api
+from atlas.core.store import ResourceStore
+
+
+@pytest.fixture
+def store(tmp_path):
+    return ResourceStore(str(tmp_path / "t.db"))
+
 
 # ── allow/deny de tools (ADR-0028 §2) ────────────────────────────────────────
 
@@ -104,4 +111,70 @@ def test_active_runs_count_conta_so_nao_terminados():
     assert api.active_runs_count() == 1
     api._finish_run(r2)
     assert api.active_runs_count() == 0
+    api._runs.clear()
+
+
+# ── persistência de runs (ADR-0028 §5) ───────────────────────────────────────
+
+
+def _make_run(**over):
+    run = api._new_run(over.get("agente", "atlas-builder"), over.get("task", "faça X"))
+    run.update(over)
+    return run
+
+
+def test_summarize_run_done():
+    run = _make_run()
+    run["events"] = [{"type": "init"}, {"type": "done"}]
+    run["done"] = True
+    s = api.summarize_run(run)
+    assert s["status"] == "done"
+    assert s["events"] == 2
+    assert s["agente"] == "atlas-builder"
+    api._runs.clear()
+
+
+def test_summarize_run_error():
+    run = _make_run()
+    run["events"] = [{"type": "init"}, {"type": "error", "message": "x"}]
+    run["done"] = True
+    assert api.summarize_run(run)["status"] == "error"
+    api._runs.clear()
+
+
+def test_summarize_run_running_quando_nao_terminou():
+    run = _make_run()
+    run["events"] = [{"type": "init"}]
+    assert api.summarize_run(run)["status"] == "running"
+    api._runs.clear()
+
+
+def test_persist_agent_run_grava_kind_escopado_por_dono(store):
+    run = _make_run(owner="luigi")
+    run["events"] = [{"type": "done"}]
+    run["done"] = True
+    run["cost"] = 0.42
+    api.persist_agent_run(store, run)
+
+    res = store.get("AgentRun", run["id"])
+    assert res is not None
+    assert res.labels["owner"] == "luigi"
+    assert res.status["status"] == "done"
+    assert res.status["cost_usd"] == 0.42
+    assert res.spec["agente"] == "atlas-builder"
+    api._runs.clear()
+
+
+def test_persist_agent_run_sem_owner_usa_default(store):
+    run = _make_run()
+    run["done"] = True
+    api.persist_agent_run(store, run)
+    res = store.get("AgentRun", run["id"])
+    assert res.labels["owner"] == api._DEFAULT_OWNER
+    api._runs.clear()
+
+
+def test_persist_agent_run_store_none_nao_quebra():
+    run = _make_run()
+    api.persist_agent_run(None, run)  # não deve levantar
     api._runs.clear()

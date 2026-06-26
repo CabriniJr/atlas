@@ -180,12 +180,13 @@ admin sem tela de login.
   (`resolve_workspace` confina cwd/`--add-dir`, recusa traversal/symlink),
   **allow/deny de tools** (`build_tool_args` → `--allowedTools`/`--disallowedTools`,
   campos `allowed_tools`/`denied_tools` no schema), **teto de concorrência**
-  (`active_runs_count` + `ATLAS_AGENT_MAX_CONCURRENT`, default 3 → 429) e **flag de
-  gate** (`spec.gate`, carimbada no `init`). **Falta:** persistência de runs e UI de
-  curadoria (revisar/promover/descartar diff).
+  (`active_runs_count` + `ATLAS_AGENT_MAX_CONCURRENT`, default 3 → 429), **flag de
+  gate** (`spec.gate`, carimbada no `init`) e **persistência de runs**
+  (`persist_agent_run` → Kind `AgentRun` escopado por `labels.owner`; a API genérica
+  do ADR-0027 já serve/escopa o histórico). **Falta:** UI de curadoria
+  (revisar/promover/descartar diff).
 - **Sessões em memória** — perdidas no restart (usuário refaz login). Persistir é
   evolução (ADR-0027 §Pendências).
-- **Runs agênticos em memória** — perdidos no restart (sem persistência ainda).
 - **Chave mestra do cofre** — sem rotação/backup formalizados (ADR-0027 §Pendências).
 - **UX de cadastro de usuários** — hoje admin cria via `POST /_auth/users`; convite/
   auto-registro não definidos.
