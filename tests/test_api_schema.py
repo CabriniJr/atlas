@@ -21,6 +21,17 @@ def test_tracker_tem_campos_e_meta():
     assert "number" in campos["type"]["opts"]
 
 
+def test_job_schema_usa_convencao_do_store():
+    """E7-40: o form do Job deve gravar as chaves que o store/renders leem."""
+    job = schema_payload()["kinds"]["Job"]
+    campos = {c["k"] for c in job["spec"]}
+    # convenção do store (gravada por sync.py, lida pelos renders e pelo scheduler)
+    assert {"schedule", "model", "active"} <= campos
+    # nomes antigos (routine.toml) não devem mais aparecer no form
+    assert "agenda" not in campos
+    assert "modelo" not in campos
+
+
 def test_acoes_por_kind():
     kinds = schema_payload()["kinds"]
     # Timer expõe start/stop; Routine expõe run; Goal expõe check
