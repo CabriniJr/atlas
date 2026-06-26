@@ -16,14 +16,17 @@ atualizado-em: 2026-06-26
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
 | 1.1    | 2026-06-26 | Tech Lead | Multiusuário/credenciais cifradas (ADR-0027, Fases 1–3): cofre Fernet, Credential sem segredo, GitHub device flow + git helper escopado | — |
 | 1.2    | 2026-06-26 | Tech Lead | Auth/sessão (ADR-0027, Fase 4): senha local PBKDF2 + login via GitHub; sessão em cookie httpOnly; identidade admin/usuário por request | — |
+| 1.3    | 2026-06-26 | Tech Lead | Isolamento por dono (ADR-0027, Fase 5): escopo de list/get/put/delete por `labels.owner`; system global read-only; migração no boot | — |
 
 ---
 
 ## Modelo de confiança
 
-Sistema **monousuário** rodando no notebook do dono. A maior superfície de risco
-não é externa — é o **meta-loop**, único ponto onde código gerado por um modelo
-entra no sistema e acaba executado.
+Originalmente **monousuário** (notebook do dono). A partir do [ADR-0027](adr/ADR-0027-multiusuario-credenciais.md)
+o sistema é **multiusuário com isolamento total** por `labels.owner` (cada usuário
+só enxerga/altera os seus recursos; admin vê tudo) — ver a seção própria abaixo. A
+maior superfície de risco interna segue sendo o **meta-loop**, único ponto onde
+código gerado por um modelo entra no sistema e acaba executado.
 
 ## Controles base
 
@@ -84,10 +87,18 @@ ser tool-less. Ver [ciclo-de-vida-rotina](ciclo-de-vida-rotina.md) e
   vem o `ATLAS_API_TOKEN`/loopback (retrocompat E0-05), senão o usuário da sessão;
   sem nenhum dos dois ⇒ **401**. O segredo de login não trafega para o front.
 
+- **Isolamento por dono (Fase 5).** Todo recurso tem `labels.owner`. A **API HTTP**
+  escopa `list/get/put/delete` pela identidade: o **admin** vê/altera tudo; o
+  **member** só os seus recursos (recurso alheio responde **404** — não revela a
+  existência); `labels.scope=system` é global (**read-only** a não-admin); no create
+  o dono é **carimbado** (member não escolhe o dono). Recursos antigos são migrados
+  no boot para o `ATLAS_DEFAULT_OWNER`. O escopo vale na borda HTTP — os usos
+  **internos** do store (sync, rotinas, scheduler) seguem sem escopo, por desenho.
+
 ## Pendências
 
 - Política de retenção do `texto_cru` em `activities` (dados sensíveis) — backlog.
 - Revisão de segurança automatizada de rotinas geradas antes do `/ativar` — a
   avaliar como rotina built-in futura.
-- Escopo do store por `labels.owner` (Fase 5); persistência de sessões (hoje em
-  memória); rotação/backup da chave mestra do cofre; UI de login no front.
+- Persistência de sessões (hoje em memória); rotação/backup da chave mestra do
+  cofre; UI de login + "Conectar GitHub" no front.

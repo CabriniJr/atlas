@@ -115,6 +115,22 @@ def run(config: Config | None = None) -> None:
 
     store = ResourceStore(config.db_path)
     sincronizar_store(db, store, carga.rotinas)
+
+    # Isolamento multiusuário (ADR-0027 F5): recursos antigos sem dono vão para o
+    # owner primário (admin). Idempotente e best-effort — não bloqueia o boot.
+    try:
+        import os
+
+        from atlas import scoping
+
+        owner_primario = os.environ.get("ATLAS_DEFAULT_OWNER", "admin")
+        migrados = scoping.migrate_unowned(store, owner_primario)
+        if migrados:
+            _log.info("Isolamento: %d recurso(s) sem dono migrado(s) p/ '%s'.",
+                      migrados, owner_primario)
+    except Exception:  # noqa: BLE001 — migração não pode derrubar o boot (ADR-0006)
+        _log.exception("Falha ao migrar recursos sem dono; seguindo.")
+
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
 
     # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon.

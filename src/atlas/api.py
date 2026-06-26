@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from atlas import credentials, github_auth, sessions, users
+from atlas import credentials, github_auth, scoping, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 
@@ -301,16 +301,18 @@ class _Handler(BaseHTTPRequestHandler):
         rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
 
+        owner, role = self._identity()
         if len(parts) == 1:
             kind = parts[0]
-            resources = _store.list(kind)
+            resources = scoping.visible(_store.list(kind), owner, role)
             self._json(200, [_resource_to_dict(r) for r in resources])
             return
 
         if len(parts) == 2:
             kind, name = parts
             r = _store.get(kind, name)
-            if r is None:
+            # invisível ⇒ 404 (não revela a existência de recurso alheio)
+            if r is None or not scoping.can_see(r, owner, role):
                 self._json(404, {"error": f"{kind}/{name} not found"})
                 return
             self._json(200, _resource_to_dict(r))
@@ -444,7 +446,12 @@ class _Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length)) if length else {}
 
         existing = _store.get(kind, name)
+        owner, role = self._identity()
+        if not scoping.can_write(existing, owner, role):
+            self._json(403, {"error": "sem permissão sobre este recurso"})
+            return
         labels = {**((existing.labels or {}) if existing else {}), **body.get("labels", {})}
+        labels = scoping.stamp_owner(labels, owner, role)  # member não escolhe o dono
         spec = {**((existing.spec or {}) if existing else {}), **body.get("spec", {})}
         status = {**((existing.status or {}) if existing else {}), **body.get("status", {})}
 
@@ -468,6 +475,15 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         kind, name = parts
+        existing = _store.get(kind, name)
+        owner, role = self._identity()
+        # invisível ⇒ 404; visível mas sem permissão (alheio/system) ⇒ 403
+        if existing is None or not scoping.can_see(existing, owner, role):
+            self._json(404, {"error": f"{kind}/{name} not found"})
+            return
+        if not scoping.can_write(existing, owner, role):
+            self._json(403, {"error": "sem permissão sobre este recurso"})
+            return
         ok = _store.delete(kind, name)
         if ok:
             self._json(200, {"deleted": f"{kind}/{name}"})

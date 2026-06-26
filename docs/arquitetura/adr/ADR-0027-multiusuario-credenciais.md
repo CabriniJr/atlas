@@ -1,11 +1,11 @@
 ---
 titulo: ADR-0027 — Multiusuário (isolamento total), auth e credenciais cifradas
 id: ADR-0027
-status: proposto
-versao: 0.1
+status: aceito
+versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-25
+atualizado-em: 2026-06-26
 substitui: —
 substituido-por: —
 ---
@@ -18,13 +18,15 @@ substituido-por: —
 | 0.1    | 2026-06-25 | Tech Lead | Proposta — identidade, isolamento por usuário, credenciais cifradas, GitHub device flow, Claude compartilhado | — |
 | 0.2    | 2026-06-26 | Tech Lead | Fase 3 implementada (`github_auth`: device flow + PAT + git helper escopado; endpoints `/_github/*`; repo-sync autentica por dono) | — |
 | 0.3    | 2026-06-26 | Tech Lead | Fase 4 implementada (`users`/`sessions`: senha local PBKDF2 + login via GitHub; cookie httpOnly; `_identity` na API; admin via token/loopback) | — |
+| 1.0    | 2026-06-26 | Tech Lead | Fase 5 implementada (`scoping`: isolamento por `labels.owner` em list/get/put/delete + migração no boot). Épico completo (Fases 1–5) → **aceito** | PO/PM |
 
 ---
 
 ## Status
-`proposto` — implementação **faseada** (ver §Fases). Decisões tomadas com o PO:
-isolamento **total** por usuário; Claude via **assinatura compartilhada do host**;
-GitHub via **device flow**; credenciais **cifradas em repouso**.
+`aceito` — implementação **faseada concluída** (Fases 1–5, ver §Fases). Decisões
+tomadas com o PO: isolamento **total** por usuário; Claude via **assinatura
+compartilhada do host**; GitHub via **device flow**; credenciais **cifradas em
+repouso**.
 
 ## Contexto
 
@@ -127,7 +129,13 @@ fica registrado como evolução possível, fora do escopo agora.)
    cria o `User`, salva a credencial e abre sessão. **Pendente:** UI de login no front
    (hoje via API); persistência de sessões (hoje em memória, como os runs).
 5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
-   Gancho pronto: `self._owner()` no handler dá o dono corrente.
+   **(feito)** — [`scoping.py`](../../../src/atlas/scoping.py): `can_see`/`can_write`/
+   `stamp_owner`/`visible`. A API escopa **list/get/put/delete** pelo dono da sessão
+   (admin vê tudo; recurso alheio ⇒ 404; `scope=system` global read-only; create
+   carimba o dono). Migração no boot ([`app.py`](../../../src/atlas/app.py),
+   `migrate_unowned`) leva os recursos antigos para `ATLAS_DEFAULT_OWNER`. O escopo
+   roda na camada **HTTP**; usos internos do store (sync/rotinas/scheduler) não são
+   escopados.
 
 ## Pendências
 - Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).

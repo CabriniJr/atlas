@@ -112,7 +112,7 @@ com custo por usuário; **GitHub via device flow**; **credenciais cifradas**.
 | 2 | Kinds `User` + `Credential` (metadados; segredo no cofre) | **feito** (branch) |
 | 3 | GitHub device flow (start/poll → Credential cifrada + git helper escopado; fallback PAT) | **feito** (branch `feat/github-device-flow`) |
 | 4 | Auth/sessão (login por senha local + login via GitHub; cookie httpOnly; admin via token/loopback) | **feito** (branch `feat/auth-sessao`) |
-| 5 | Isolamento por `labels.owner` no store/API + migração | a fazer |
+| 5 | Isolamento por `labels.owner` no store/API + migração | **feito** (branch `feat/isolamento-owner`) |
 
 **Fase 1 entregue:** [`src/atlas/secrets_store.py`](../../src/atlas/secrets_store.py) —
 `encrypt/decrypt`, `put/get/delete_secret`. Chave em `ATLAS_SECRET_KEY` ou
@@ -139,12 +139,19 @@ httpOnly); `_auth()` exige um dos dois. Endpoints **públicos** (pré-gate):
 device flow — cria o `User`, salva a credencial e abre sessão), `GET /_auth/me`, e
 `POST /_auth/users` (**admin** cria usuário + define senha — bootstrap do sistema).
 
-**Como continuar (Fase 5 — isolamento):** todo recurso ganha `labels.owner=<user>`;
-o `ResourceStore`/API escopam `list/get/put/delete` pelo dono da sessão (admin vê
-tudo); migrar os recursos atuais para um dono primário; kinds de sistema podem ser
-globais (`labels.scope=system`). O gancho já existe: `self._owner()` no handler dá o
-dono corrente. **Pendente também:** UI de login no front (hoje via API) e tela de
-"Conectar GitHub". Ver ADR-0027 §Fases e §3 (isolamento total).
+**Fase 5 entregue** (branch `feat/isolamento-owner`) — **épico multiusuário completo**:
+[`scoping.py`](../../src/atlas/scoping.py) (políticas puras `can_see`/`can_write`/
+`stamp_owner`/`visible` + `migrate_unowned`). A API escopa **list/get/put/delete**
+pelo dono da sessão: o admin vê/altera tudo; o member só os seus recursos (recurso
+alheio ⇒ **404**, não revela existência); `labels.scope=system` é global (read-only a
+não-admin); no create, o dono é **carimbado** (member não escolhe). Migração no boot
+([`app.py`](../../src/atlas/app.py)): recursos antigos sem dono vão para `ATLAS_DEFAULT_OWNER`
+(default `admin`), idempotente. **Importante:** o isolamento roda na camada **HTTP**;
+usos internos do store (sync, rotinas, scheduler) **não** são escopados.
+
+**Pendências do épico (não-bloqueantes, viram backlog):** UI de login + "Conectar
+GitHub" no front (hoje só via API); persistência de sessões (hoje em memória);
+rotação/backup da chave mestra do cofre. Ver ADR-0027 §Pendências.
 
 ## 6. Convenções de trabalho (não-negociáveis)
 
