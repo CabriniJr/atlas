@@ -49,6 +49,7 @@ function _repoShell(r) {
       <button class="rk-tab" data-tab="commits">📝 Commits</button>
       <button class="rk-tab" data-tab="graph">⬡ Graph</button>
       <button class="rk-tab" data-tab="files">📁 Files</button>
+      <button class="rk-tab" data-tab="jobs">🧩 Jobs</button>
       <button class="rk-tab" data-tab="log" id="rk-log-tab-${esc(r.name)}">📋 Log</button>
       <button class="rk-tab" data-tab="config">⚙️ Config</button>
     </div>
@@ -85,6 +86,7 @@ async function _loadRepoTab(name, tab, container) {
       case 'commits':   await _tabCommits(name, body); break;
       case 'graph':     await _tabGraph(name, body); break;
       case 'files':     await _tabFiles(name, body); break;
+      case 'jobs':      await _tabJobs(name, body); break;
       case 'log':       _tabLog(name, body); break;
       case 'config':    await _tabConfig(name, body); break;
     }
@@ -93,17 +95,23 @@ async function _loadRepoTab(name, tab, container) {
   }
 }
 
-// ── Tab: Overview (contexto + diffs recentes) ─────────────────────────────────
+// ── Tab: Overview (análise IA + contexto + diffs recentes) ────────────────────
 async function _tabOverview(name, el) {
   el.innerHTML = `
+    <div class="rk-section" id="rk-insight-sec-${esc(name)}">
+      <div class="rk-sec-title">🧠 Análise por IA</div>
+      <div id="rk-insight-${esc(name)}" style="color:var(--muted)">carregando…</div>
+    </div>
     <div class="rk-section">
-      <div class="rk-sec-title">🧠 Contexto do projeto</div>
+      <div class="rk-sec-title">📚 Contexto do projeto</div>
       <div id="rk-ctx-${esc(name)}" style="color:var(--muted)">carregando…</div>
     </div>
     <div class="rk-section">
       <div class="rk-sec-title">🔄 Diffs recentes</div>
       <div id="rk-diffs-${esc(name)}" style="color:var(--muted)">carregando…</div>
     </div>`;
+
+  _renderInsightSection(name, el);
 
   const [ctxEl, diffsEl] = [
     el.querySelector(`#rk-ctx-${CSS.escape(name)}`),
@@ -144,6 +152,61 @@ async function _tabOverview(name, el) {
         : '<span style="color:var(--muted)">sem diffs ainda</span>';
     })
     .catch(() => { if (diffsEl) diffsEl.textContent = 'diffs indisponíveis'; });
+}
+
+// Seção de análise por IA: deixa claro manual × automático + Agente configurado.
+async function _renderInsightSection(name, el) {
+  const box = el.querySelector(`#rk-insight-${CSS.escape(name)}`);
+  if (!box) return;
+
+  // qual Agente analisa este repo + último insight (Doc tipo=insight)
+  const [repo, docs] = await Promise.all([
+    apiFetch(`${API}/Repo/${encodeURIComponent(name)}`).catch(() => ({})),
+    apiFetch(`${API}/Doc`).catch(() => []),
+  ]);
+  const agente = (repo.spec?.analyze_agente || 'repo-analyzer');
+  const insights = (docs || [])
+    .filter(d => d.labels?.repo === name && d.labels?.tipo === 'insight')
+    .sort((a, b) => String(b.status?.gerado_em || b.criado_em || '')
+      .localeCompare(String(a.status?.gerado_em || a.criado_em || '')));
+  const last = insights[0];
+  const lastHtml = last
+    ? `<details class="rk-insight-last">
+         <summary>último insight · ${esc(fmtDt(last.status?.gerado_em || last.criado_em))} <span style="color:var(--muted)">(${insights.length})</span></summary>
+         <div class="md">${markdownToHtml(String(last.spec?.body || ''))}</div>
+       </details>`
+    : '<div style="color:var(--muted);font-size:11px">Nenhum insight gerado ainda.</div>';
+
+  box.innerHTML = `
+    <div class="rk-insight-bar">
+      <div class="rk-insight-meta">
+        <span>Agente: <strong onclick="openWhiteboard('Agente','${escJs(agente)}')" style="color:var(--purple);cursor:pointer">🤖 ${esc(agente)}</strong></span>
+        <span class="rk-insight-modes">
+          <span title="Gerado quando você pede">manual</span> ·
+          <span title="Roda a cada sync nos commits que passam na política">automático no sync</span>
+        </span>
+      </div>
+      <button class="btn" id="rk-insight-btn-${esc(name)}" style="border-color:var(--purple);color:var(--purple)">🧠 Gerar insight agora</button>
+    </div>
+    <div id="rk-insight-out-${esc(name)}">${lastHtml}</div>`;
+
+  const btn = box.querySelector(`#rk-insight-btn-${CSS.escape(name)}`);
+  btn?.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '🧠 analisando…';
+    const out = box.querySelector(`#rk-insight-out-${CSS.escape(name)}`);
+    if (out) out.innerHTML = '<div style="color:var(--muted);padding:8px 0"><span class="ag-spin"></span>gerando insight…</div>';
+    try {
+      const r = await apiFetch(`${API}/_insight`, {
+        method: 'POST', body: JSON.stringify({scope: 'repo', name}),
+      });
+      if (r.error) throw new Error(r.error);
+      if (out) out.innerHTML = `<div style="font-size:10px;color:var(--muted);margin-bottom:4px">via ${esc(r.agente || 'IA')} · ${esc(r.model || '')}</div>
+        <div class="md">${markdownToHtml(String(r.insight || ''))}</div>`;
+    } catch (e) {
+      if (out) out.innerHTML = `<div style="color:var(--red)">erro: ${esc(e.message)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '🧠 Gerar insight agora';
+  });
 }
 
 // ── Tab: Branches ─────────────────────────────────────────────────────────────
@@ -424,6 +487,78 @@ async function _tabGraph(name, el) {
       const arrow = row.querySelector('.rk-gv-arrow');
       if (arrow) arrow.textContent = row.classList.contains('open') ? '▼' : '▶';
     });
+  });
+}
+
+// ── Tab: Jobs (Jobs relacionados ao repo POR LABEL) ───────────────────────────
+async function _tabJobs(name, el) {
+  // Vínculo por label (P11): Jobs cujo spec.label == repo (ex.: repo-sync)
+  const all = await apiFetch(`${API}/Job`).catch(() => []);
+  const jobs = (all || []).filter(j => (j.spec?.label || '') === name);
+
+  const head = `<div class="rk-files-bar">
+    <span style="font-size:11px;color:var(--muted)">${jobs.length} Job(s) vinculado(s) por label <code>label=${esc(name)}</code></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="rk-jobs-sync-${esc(name)}" title="Rodar o Job de sync agora">↻ Sync agora</button>
+  </div>`;
+
+  if (!jobs.length) {
+    el.innerHTML = `${head}
+      <div style="padding:24px 16px;color:var(--muted);font-size:13px">
+        Nenhum Job vinculado. Um Job de sync precisa de
+        <code>spec.coletar=repo-sync</code> e <code>spec.label=${esc(name)}</code>.
+        Peça ao <strong>atlas-builder</strong> para criar, ou crie em ＋ Novo.
+      </div>`;
+    _wireJobsSync(name, el);
+    return;
+  }
+
+  const rows = jobs.map(j => {
+    const sp = j.spec || {};
+    const active = sp.active ? '<span class="rk-job-on">● ativo</span>' : '<span class="rk-job-off">○ inativo</span>';
+    const coletar = sp.coletar ? `<code>${esc(sp.coletar)}</code>` : '—';
+    return `<div class="rk-job-row" onclick="openResource('Job','${escJs(j.name)}')" title="Abrir Job ${esc(j.name)}">
+      <div class="rk-job-main">
+        <span class="rk-job-name">🧩 ${esc(j.name)}</span>
+        ${active}
+      </div>
+      <div class="rk-job-meta">
+        ${sp.schedule ? `<span title="agenda">🕒 ${esc(sp.schedule)}</span>` : ''}
+        <span title="collect">⚙ ${coletar}</span>
+        ${sp.model && sp.model !== 'none' ? `<span title="modelo">🧠 ${esc(sp.model)}</span>` : ''}
+      </div>
+      <div class="rk-job-actions">
+        <button class="btn rk-job-run" data-job="${esc(j.name)}" title="Executar agora">▶</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `${head}<div class="rk-jobs-list">${rows}</div>`;
+  _wireJobsSync(name, el);
+
+  el.querySelectorAll('.rk-job-run').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const job = btn.dataset.job;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        const r = await apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({routine: job})});
+        toast(r.ok ? `▶ ${job}: ok` : `❌ ${r.error || 'falhou'}`, !r.ok);
+      } catch (err) { toast('❌ ' + err.message, true); }
+      btn.disabled = false; btn.textContent = '▶';
+    });
+  });
+}
+
+function _wireJobsSync(name, el) {
+  const btn = el.querySelector(`#rk-jobs-sync-${CSS.escape(name)}`);
+  btn?.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = '↻ …';
+    try {
+      const r = await apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({repo: name})});
+      toast(r.ok ? `↻ sync de ${name}: ok` : `❌ ${r.error || 'falhou'}`, !r.ok);
+    } catch (e) { toast('❌ ' + e.message, true); }
+    btn.disabled = false; btn.textContent = '↻ Sync agora';
   });
 }
 
@@ -718,13 +853,13 @@ async function _runBackfill(name, container) {
 }
 
 async function _runSync(name, container) {
-  const jobName = name + '-sync';
-  _repoLogs[name] = {lines: [`↻ iniciando ${jobName}…`], running: true};
+  // Resolve o Job de sync POR LABEL no backend (spec.coletar=repo-sync, spec.label=<repo>)
+  _repoLogs[name] = {lines: [`↻ iniciando sync de ${name}…`], running: true};
   _activateLogTab(name, container);
   try {
     const r = await apiFetch(`${API}/_run`, {
       method: 'POST',
-      body: JSON.stringify({routine: jobName}),
+      body: JSON.stringify({repo: name}),
     });
     if (r.ok) {
       _appendLog(name, '✅ sync concluído');

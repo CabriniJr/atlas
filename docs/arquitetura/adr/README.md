@@ -24,6 +24,7 @@ atualizado-em: 2026-06-23
 | 1.8    | 2026-06-23 | Tech Lead | ADRs irmãos 0020/0021/0022/0024 escritos (proposto) | — |
 | 1.9    | 2026-06-23 | Tech Lead | ADR-0023 **aceito** pelo PO/PM; spec SPEC-REPO-DADOS criada | PO/PM |
 | 1.10   | 2026-06-23 | Tech Lead | ADR-0025 (Agente modo `code` — Claude Code 2b no workspace) — proposto | — |
+| 1.11   | 2026-06-23 | Tech Lead | ADR-0026 (Kind `LLMProvider` — config de IA reutilizável; análise de repo por Agente) — proposto | — |
 
 ---
 
@@ -70,6 +71,7 @@ atualizado-em: 2026-06-23
 | [0023](ADR-0023-especializacao-kind-repo.md) | **Especialização do Kind Repo** (multi-branch, git-graph, serialização/análise) | **aceito** | Brainstorm Repo (carro-chefe) |
 | [0024](ADR-0024-kind-agente.md) | Kind `Agente` (analisador configurável) | proposto | Brainstorm Repo (carro-chefe) |
 | [0025](ADR-0025-agente-modo-code.md) | **Agente modo `code`** (Claude Code agêntico 2b no workspace) | proposto | Pedido do PO ("ser um Claude Code") |
+| [0026](ADR-0026-llm-provider.md) | **Kind `LLMProvider`** (config de IA reutilizável; análise de repo por Agente) | proposto | Pedido do PO ("ia provider/llm") |
 
 ## Lastro
 

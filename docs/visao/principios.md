@@ -14,6 +14,7 @@ atualizado-em: 2026-06-16
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-06-16 | Tech Lead | Criação | PO/PM        |
+| 1.1    | 2026-06-23 | Tech Lead | P11 — tudo é objeto; relacionar por labels/selectors; criar Kind novo quando precisar | PO/PM |
 
 ---
 
@@ -68,3 +69,18 @@ O desenvolvimento é feito por agentes em paralelo (best-of-two) e curado pelo T
 Lead contra esta documentação. Nenhuma solução entra sem passar pela curadoria e
 pelo aceite de alto nível do PO/PM.
 → Ver [`../processos/fluxo-de-desenvolvimento.md`](../processos/fluxo-de-desenvolvimento.md).
+
+## P11 — Tudo é objeto; objetos se relacionam por labels/selectors
+Esta é a razão de a arquitetura ser uma **API de objetos estilo Kubernetes**
+([ADR-0015](../arquitetura/adr/ADR-0015-core-api-de-objetos.md)). A mentalidade é:
+
+- **Recursos se relacionam com outros recursos** — preferencialmente por
+  **labels + selectors** (ex.: `Branch`/`Commit`/`Diff` com `labels.repo=<nome>`;
+  `RepoGroup` agrega `Repo` por nome; `Agente` referencia um `LLMProvider`). Evitar
+  acoplar lógica de domínio no core; modelar a relação como dado.
+- **Quando precisar de um novo tipo de coisa, crie um novo Kind.** Não force um
+  conceito novo dentro de um Kind existente nem o represente como arquivo solto ou
+  coluna ad-hoc. Um Kind novo é barato (schema-driven, [ADR-0017](../arquitetura/adr/ADR-0017-gui-por-kind-abstrai-api.md));
+  é exatamente para isso que a API de objetos foi escolhida.
+- A IA (Agente modo `code`) também **cria/edita recursos pela API**, seguindo o
+  schema — nunca mexendo no SQLite ou em arquivos avulsos.

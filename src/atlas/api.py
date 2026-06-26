@@ -23,9 +23,9 @@ import logging
 import os
 import subprocess
 import threading
-from datetime import datetime
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -236,11 +236,23 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else {}
 
-        # Executa uma rotina sob demanda (botão "Executar" no dashboard).
+        # Executa uma rotina/Job sob demanda (botão "Executar" no dashboard).
+        # Aceita {routine: <nome>} OU {repo: <nome>} (resolve o Job de sync por label).
         if path == _API_PREFIX + "/_run":
             name = body.get("routine", "").strip()
+            repo = body.get("repo", "").strip()
+            if repo and not name:
+                name = _resolve_repo_sync_job(repo) or ""
+                if not name:
+                    self._json(404, {
+                        "ok": False,
+                        "error": f"nenhum Job de sync para o repo '{repo}' "
+                                 "(esperado um Job com spec.coletar=repo-sync e spec.label="
+                                 f"'{repo}')",
+                    })
+                    return
             if not name:
-                self._json(400, {"error": "routine required"})
+                self._json(400, {"error": "routine ou repo obrigatório"})
                 return
             self._json(200, _run_routine(name))
             return
@@ -573,8 +585,44 @@ def _status_payload() -> dict:
     return out
 
 
+def _resolve_repo_sync_job(repo: str) -> str | None:
+    """Acha o Job de sync de um Repo **por label** (P11), não por nome.
+
+    Convenção: o Job de sync tem ``spec.coletar == 'repo-sync'`` e
+    ``spec.label == <nome do repo>``. O nome do Job é livre.
+    """
+    if _store is None or not repo:
+        return None
+    for j in _store.list("Job"):
+        sp = j.spec or {}
+        if sp.get("coletar") == "repo-sync" and sp.get("label") == repo:
+            return j.name
+    return None
+
+
+def _rotina_from_job(job):  # noqa: ANN001, ANN201
+    """Constrói uma ``Rotina`` a partir de um Job do store (criado pela API/IA)."""
+    from atlas.routines import Rotina
+
+    sp = job.spec or {}
+    return Rotina(
+        nome=job.name,
+        descricao=sp.get("description", ""),
+        agenda=sp.get("schedule"),
+        modelo=sp.get("model", "none"),
+        saida=sp.get("saida") or sp.get("output"),
+        ativa=bool(sp.get("active", True)),
+        label=sp.get("label"),
+        coletar=sp.get("coletar"),
+    )
+
+
 def _run_routine(name: str) -> dict:
-    """Executa o collect de uma rotina sob demanda (sem esperar a agenda)."""
+    """Executa o collect de uma rotina/Job sob demanda (sem esperar a agenda).
+
+    Resolve a rotina do disco (``routines/``) **ou**, se não existir lá, de um
+    ``Job`` do store (recursos criados pela API/IA também rodam).
+    """
     from pathlib import Path
 
     from atlas.db import Database as _DB
@@ -585,8 +633,13 @@ def _run_routine(name: str) -> dict:
     rdir = os.environ.get("ATLAS_ROUTINES_DIR", "routines")
     carga = carregar_rotinas(Path(rdir))
     rot = next((r for r in carga.rotinas if r.nome == name), None)
+    if rot is None and _store is not None:
+        # Fallback: Job existente no store (ex.: criado pela IA via API)
+        job = _store.get("Job", name)
+        if job is not None:
+            rot = _rotina_from_job(job)
     if rot is None:
-        return {"ok": False, "error": f"rotina '{name}' não encontrada"}
+        return {"ok": False, "error": f"rotina/Job '{name}' não encontrada"}
 
     db = None
     try:
@@ -626,7 +679,12 @@ def _run_routine(name: str) -> dict:
 
 
 def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251001") -> dict:
-    """Gera um insight por IA sobre o sistema ou um repositório (sob demanda)."""
+    """Gera um insight por IA sobre o sistema ou um repositório (sob demanda).
+
+    Para repo, a análise é feita pelo **Agente configurado** em
+    ``Repo.spec.analyze_agente`` (default ``repo-analyzer``) — o Agente dita
+    motor/modelo (via LLMProvider, ADR-0022/0026) e a persona/prompt (ADR-0024).
+    """
     from atlas.ia import InvocarErro, invocar
 
     if _store is None:
@@ -650,6 +708,22 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
             d = sorted(diffs, key=lambda x: (x.status or {}).get("synced_at", ""))[-1]
             ctx_txt += f"Arquivos: {', '.join(d.spec.get('files_list', [])[:15])}\n"
             ctx_txt += f"\nDiff (parcial):\n{d.spec.get('diff_raw', '')[:3500]}\n"
+
+        # Despacha ao Agente de análise configurado (ADR-0024).
+        agente_name = (rp.spec.get("analyze_agente") or "repo-analyzer").strip()
+        agente = _store.get("Agente", agente_name)
+        if agente is not None:
+            res = _agente_chat(agente_name, ctx_txt, _store)
+            if res.get("error"):
+                return {"ok": False, "error": res["error"]}
+            resposta = res.get("response", "")
+            used_model = res.get("modelo", model)
+            doc_name = _salvar_insight_doc(scope, name, resposta, used_model)
+            return {
+                "ok": True, "scope": scope, "name": name, "model": used_model,
+                "agente": agente_name, "insight": resposta, "doc": doc_name,
+            }
+        # Fallback: Agente ausente → prompt embutido (retrocompat)
         prompt = (
             "Você é um revisor técnico. Analise a última atualização deste repositório com "
             "os metadados fornecidos (NÃO peça acesso ao repo; trabalhe com o que há). "
@@ -688,13 +762,54 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
     }
 
 
+def _resolve_engine(agente_spec: dict, store: ResourceStore) -> dict:
+    """Resolve motor/modelo/endpoint/timeout de um Agente (ADR-0022/0026).
+
+    Ordem: se ``spec.provider`` aponta para um ``LLMProvider`` existente, ele dita
+    motor/endpoint/timeout e o modelo padrão; ``spec.modelo`` (se houver) sobrepõe
+    o modelo do provider. Sem provider, usa os campos próprios do Agente (fallback
+    retrocompatível).
+    """
+    spec = agente_spec or {}
+    prov_name = (spec.get("provider") or "").strip()
+    prov_spec: dict = {}
+    if prov_name and store is not None:
+        prov = store.get("LLMProvider", prov_name)
+        if prov is not None:
+            prov_spec = prov.spec or {}
+
+    motor = (prov_spec.get("motor") or spec.get("motor") or "claude").strip()
+    # modelo: override do Agente > modelo do provider > default por motor
+    modelo = (
+        (spec.get("modelo") or "").strip()
+        or (prov_spec.get("modelo") or "").strip()
+        or ("claude-haiku-4-5-20251001" if motor == "claude" else "gemma4")
+    )
+    endpoint = (
+        (prov_spec.get("endpoint") or "").strip()
+        or (spec.get("endpoint") or "").strip()
+        or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    )
+    try:
+        timeout = int(spec.get("timeout") or prov_spec.get("timeout") or 60)
+    except (TypeError, ValueError):
+        timeout = 60
+    return {
+        "motor": motor,
+        "modelo": modelo,
+        "endpoint": endpoint,
+        "timeout": timeout,
+        "provider": prov_name or None,
+    }
+
+
 def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
     """Executa o Kind Agente em modo chat (E7-25, ADR-0024).
 
     Busca o recurso Agente, constrói o prompt com o template e chama o motor
-    selecionado. Suporta nivel_contexto (resumo|completo) para injetar schema
-    e contexto do projeto (E7-24 — builder). Devolve {response, motor, modelo,
-    commands?} ou {error}.
+    resolvido (via LLMProvider ou campos próprios — ADR-0026). Suporta
+    nivel_contexto (resumo|completo) para injetar schema e contexto do projeto
+    (E7-24 — builder). Devolve {response, motor, modelo, commands?} ou {error}.
     """
     from atlas.ia import InvocarErro, invocar
 
@@ -705,12 +820,11 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
         return {"error": f"Agente '{agente_name}' não encontrado"}
 
     spec = agente.spec or {}
-    motor = spec.get("motor", "claude")
-    modelo = spec.get("modelo") or (
-        "claude-haiku-4-5-20251001" if motor == "claude" else "gemma4"
-    )
-    timeout = int(spec.get("timeout") or 60)
-    endpoint = spec.get("endpoint") or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    eng = _resolve_engine(spec, store)
+    motor = eng["motor"]
+    modelo = eng["modelo"]
+    timeout = eng["timeout"]
+    endpoint = eng["endpoint"]
     template = spec.get("prompt") or "{mensagem}"
     nivel = spec.get("nivel_contexto", "none")
     agora_str = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -836,9 +950,13 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         return
 
     spec = agente.spec or {}
-    modelo = spec.get("modelo") or "claude-sonnet-4-6"
+    eng = _resolve_engine(spec, store)
+    # modo code roda sempre via claude CLI → exige um modelo claude (default sonnet).
+    modelo = eng["modelo"]
+    if not modelo or not modelo.startswith("claude"):
+        modelo = "claude-sonnet-4-6"
     system_prompt = spec.get("prompt", "")
-    timeout = int(spec.get("timeout") or 300)
+    timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
     cwd = _PROJECT_DIR
 
     try:
@@ -1002,6 +1120,30 @@ def _agent_api_context(store: ResourceStore) -> str:
         linhas.append(linha)
 
     linhas += [
+        "",
+        "=== Relações entre recursos (P11 — relacione por LABELS, não por nome) ===",
+        "Recursos se relacionam por labels/selectors, nunca por convenção de nome.",
+        "NÃO invente nomes mágicos do tipo '<repo>-sync' para criar vínculo; o vínculo",
+        "é o label. Relações que já existem:",
+        "- Branch/Commit/Diff pertencem a um Repo via labels.repo=<repo>.",
+        "- RepoGroup.spec.repos lista nomes de Repo (membros do grupo).",
+        "- Agente.spec.provider → nome de um LLMProvider (dita motor/modelo).",
+        "- Repo.spec.analyze_agente → nome de um Agente que faz a análise/insight.",
+        "- Doc serializado de um repo: labels.repo=<repo>, labels.tipo=serial.",
+        "",
+        "IMPORTANTE — tornar um Repo sincronizável (criar Repo + seu Job de sync):",
+        "  1) Crie o Repo:",
+        f"     PUT {base}/Repo/<repo> -d '{{\"spec\": {{\"url\": \"https://github.com/u/r\"}}}}'",
+        "  2) Crie o Job de sync — o vínculo é spec.label (= nome do Repo), e",
+        "     spec.coletar DEVE ser exatamente 'repo-sync'. O NOME do Job é livre",
+        "     (convenção sugerida: '<repo>-sync', mas o que liga é o label):",
+        f"     PUT {base}/Job/<repo>-sync -d '{{\"spec\": {{",
+        '       "coletar": "repo-sync", "label": "<repo>", "schedule": "@daily 09:00",',
+        '       "model": "none", "active": true, "description": "Sincroniza <repo>"',
+        "     }}}}'",
+        "  Rodar sob demanda: POST /_run -d '{\"repo\": \"<repo>\"}' (resolve o Job por label).",
+        "",
+        "Ao criar um novo TIPO de coisa, crie um novo Kind (não force em Kind existente).",
         "",
         "Padrões do projeto (CLAUDE.md): a doc em docs/ é a fonte de verdade; decisão",
         "de arquitetura vira ADR antes de virar código; TDD ao implementar; commits",

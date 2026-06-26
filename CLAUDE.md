@@ -48,6 +48,12 @@ e nas fichas de [`docs/agentes/`](docs/agentes/README.md).
 3. **Agnóstico e plugável** — o motor não conhece domínios; tudo é rotina.
 4. **O repositório é o estado do sistema.**
 5. **Simplicidade sobre completude.**
+6. **Tudo é objeto; objetos se relacionam por labels/selectors** (P11). A
+   arquitetura é uma API de objetos (estilo K8s) **de propósito**: recursos devem
+   se relacionar com outros recursos — de preferência por **labels + selectors** —
+   e, **quando precisar de um novo tipo de coisa, crie um novo Kind** (não force em
+   um Kind existente, nem em arquivo/coluna ad-hoc). É barato e é para isso que a
+   API foi escolhida. A IA cria/edita recursos **pela API**, seguindo o schema.
 
 ## 5. Como trabalhar (todo agente)
 

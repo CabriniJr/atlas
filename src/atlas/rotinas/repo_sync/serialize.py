@@ -210,7 +210,10 @@ def snapshot_tree(
     que casam o preset. 0 IA. Devolve {serializados, total, pulados, truncado}.
     """
     if preset == "off":
-        return {"serializados": 0, "total": 0, "pulados": 0, "truncado": False, "erro": "serialize=off"}
+        return {
+            "serializados": 0, "total": 0, "pulados": 0,
+            "truncado": False, "erro": "serialize=off",
+        }
     sha = gitcmd.branch_head(repo_dir, ref) if ref != "HEAD" else gitcmd.git(
         ["rev-parse", "HEAD"], cwd=repo_dir, check=False
     ).strip()

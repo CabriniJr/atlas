@@ -66,20 +66,57 @@ def deve_analisar(meta: dict, branch: str, default: str, repo_res) -> bool:
     return True
 
 
-def _analisar(diff: str, label: str, modelo: str, contexto: str = "") -> str | None:
-    """IA explica o que mudou e sugere — usando o contexto do projeto + o diff."""
+def _resolver_agente_analise(repo_res, store) -> tuple[str | None, str | None]:
+    """Resolve (modelo, template) do Agente de análise do repo (ADR-0024/0026).
+
+    Lê ``Repo.spec.analyze_agente`` (default ``repo-analyzer``); do Agente tira o
+    prompt e, via ``provider`` (LLMProvider) ou campos próprios, o modelo. Devolve
+    (None, None) se não houver Agente — o chamador cai no prompt embutido.
+    """
+    if store is None:
+        return None, None
+    nome = _spec_str(repo_res, "analyze_agente", "repo-analyzer").strip()
+    agente = store.get("Agente", nome) if nome else None
+    if agente is None:
+        return None, None
+    aspec = agente.spec or {}
+    template = aspec.get("prompt") or None
+    # modelo: override do Agente > modelo do provider
+    modelo = (aspec.get("modelo") or "").strip()
+    prov = (aspec.get("provider") or "").strip()
+    if not modelo and prov:
+        p = store.get("LLMProvider", prov)
+        if p is not None:
+            modelo = (p.spec or {}).get("modelo", "").strip()
+    return (modelo or None), template
+
+
+def _analisar(
+    diff: str, label: str, modelo: str, contexto: str = "",
+    template: str | None = None,
+) -> str | None:
+    """IA explica o que mudou e sugere — usando o contexto do projeto + o diff.
+
+    Se ``template`` (do Agente de análise) vier, ele define a persona/instrução e
+    ``{mensagem}`` é substituído pelo contexto+diff. Senão, usa o prompt embutido.
+    """
     bloco_ctx = f"## Contexto do projeto (resumo represado)\n{contexto}\n\n" if contexto else ""
-    prompt = (
-        f"Você é um revisor técnico do repositório '{label}'. "
-        + bloco_ctx
-        + "Analise o diff e responda em PT-BR, em duas seções com bullets:\n\n"
-        "## O que mudou\n"
-        "- o que mudou e por quê (use o contexto do projeto para inferir)\n"
-        "- pontos de atenção ou risco\n\n"
-        "## Sugestões\n"
-        "- melhorias, testes, refactors, próximos passos acionáveis\n\n"
-        f"```diff\n{diff}\n```"
-    )
+    if template:
+        mensagem = f"Repositório: {label}\n\n{bloco_ctx}```diff\n{diff}\n```"
+        prompt = template.replace("{mensagem}", mensagem) if "{mensagem}" in template \
+            else f"{template}\n\n{mensagem}"
+    else:
+        prompt = (
+            f"Você é um revisor técnico do repositório '{label}'. "
+            + bloco_ctx
+            + "Analise o diff e responda em PT-BR, em duas seções com bullets:\n\n"
+            "## O que mudou\n"
+            "- o que mudou e por quê (use o contexto do projeto para inferir)\n"
+            "- pontos de atenção ou risco\n\n"
+            "## Sugestões\n"
+            "- melhorias, testes, refactors, próximos passos acionáveis\n\n"
+            f"```diff\n{diff}\n```"
+        )
     try:
         return invocar(prompt, modelo=modelo, timeout=90)
     except Exception as exc:  # noqa: BLE001 — degrada (ADR-0006)
@@ -103,9 +140,11 @@ def analisar_commit(
     diff = gitcmd.show_diff(repo_dir, sha)
     diff_store_max = _spec_int(repo_res, "diff_store_max", _DEF_DIFF_STORE_MAX)
     diff_prompt_max = _spec_int(repo_res, "diff_prompt_max", _DEF_DIFF_PROMPT_MAX)
-    modelo = _spec_str(repo_res, "model", _DEF_DIFF_MODEL)
+    # Agente de análise (ADR-0024) dita modelo + persona; fallback p/ spec.model embutido
+    ag_modelo, ag_template = _resolver_agente_analise(repo_res, store)
+    modelo = ag_modelo or _spec_str(repo_res, "model", _DEF_DIFF_MODEL)
     diff_store = diff[:diff_store_max]
-    explicacao = _analisar(diff[:diff_prompt_max], label, modelo, contexto)
+    explicacao = _analisar(diff[:diff_prompt_max], label, modelo, contexto, ag_template)
     _salvar_diff(label, sha7, branch, diff_store, explicacao, meta, store, ctx)
     _salvar_doc(label, sha7, meta, diff_store, explicacao, store, ctx)
     return explicacao
