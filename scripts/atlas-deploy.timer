@@ -1,0 +1,11 @@
+# Atlas CD — verifica atualizações periodicamente (a cada 5 min).
+[Unit]
+Description=Atlas CD — verifica atualizações de produção periodicamente
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

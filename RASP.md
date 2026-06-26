@@ -55,10 +55,39 @@ EOF'
 1. Aprova a PR no GitHub
 2. Faz merge em `main`
 
-**Na Rasp:**
-1. `git pull origin main` 
-2. Reinicia Atlas (kill + start)
-3. Valida em `http://guaxinimserver.tail25c9d8.ts.net:8080`
+**Na Rasp (auto-deploy / CD):**
+Com o CD ligado (abaixo), o merge em `main` é puxado e aplicado sozinho em até
+5 min. Não precisa de pull/restart manual.
+
+## Auto-deploy (CD) na Rasp
+
+Um timer systemd verifica `main` a cada 5 min e, se houver commits novos, faz
+`git pull` + (re)instala deps se mudaram + `systemctl --user restart atlas`.
+
+**Instalação (uma vez, na Rasp):**
+```bash
+cd ~/atlas
+chmod +x scripts/atlas-deploy.sh
+cp scripts/atlas-deploy.service scripts/atlas-deploy.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now atlas-deploy.timer
+```
+
+**Operação:**
+```bash
+systemctl --user list-timers atlas-deploy.timer   # próxima verificação
+journalctl --user -u atlas-deploy -f               # logs do deploy
+systemctl --user start atlas-deploy.service        # forçar deploy agora
+~/atlas/scripts/atlas-deploy.sh                     # rodar à mão (debug)
+```
+
+**Configuração (opcional, no `atlas-deploy.service`):**
+- `ATLAS_DEPLOY_REF=main` — branch acompanhada (default `main`).
+- `ATLAS_DEPLOY_TRACK=tags` — acompanha a última **tag** em vez de `main`
+  (segue à risca a política "prod só roda tags" do CLAUDE.md).
+
+> `main` é protegida por revisão de PR antes do merge, então o auto-deploy de
+> `main` aplica só o que já foi revisado/mergeado.
 
 ## Troubleshooting
 
