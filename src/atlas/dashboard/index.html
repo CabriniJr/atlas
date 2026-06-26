@@ -8,13 +8,26 @@
 </head>
 <body>
 
-<!-- Token overlay -->
+<!-- Login overlay (ADR-0027 F4/F5: senha local + GitHub; token = avançado) -->
 <div id="token-overlay" style="display:none">
   <div id="token-box">
     <h2>⚡ Atlas</h2>
-    <p>Configure <code>ATLAS_API_TOKEN</code> no .env e cole aqui:</p>
-    <input id="token-input" type="password" placeholder="token…" autocomplete="off">
-    <button id="token-submit">Entrar</button>
+    <p>Entre para acessar seus recursos.</p>
+    <div id="auth-msg" class="auth-msg" style="display:none"></div>
+
+    <input id="login-user" type="text" placeholder="usuário" autocomplete="username">
+    <input id="login-pass" type="password" placeholder="senha" autocomplete="current-password">
+    <button id="login-submit">Entrar</button>
+
+    <div class="auth-or"><span>ou</span></div>
+    <button id="gh-login" class="auth-gh">Conectar com GitHub</button>
+    <div id="gh-flow" class="gh-flow" style="display:none"></div>
+
+    <a id="adv-token-toggle" class="auth-adv" href="#">usar token de API (admin/script)</a>
+    <div id="adv-token" style="display:none">
+      <input id="token-input" type="password" placeholder="ATLAS_API_TOKEN…" autocomplete="off">
+      <button id="token-submit">Entrar com token</button>
+    </div>
   </div>
 </div>
 
@@ -36,6 +49,21 @@
     </div>
   </div>
   <span style="font-size:11px;color:var(--muted);margin-left:6px" id="status-bar">—</span>
+  <span id="user-chip" style="display:none" title="Usuário logado">
+    <span id="user-name">—</span>
+    <button id="gh-connect-btn" onclick="connectGithub()" title="Conectar GitHub (repo-sync)">🔗 GitHub</button>
+    <button id="logout-btn" onclick="doLogout()" title="Sair">⎋</button>
+  </span>
+</div>
+
+<!-- Conectar GitHub overlay (usuário logado; ADR-0027 F3) -->
+<div id="connect-overlay" style="display:none">
+  <div id="token-box">
+    <h2>🔗 Conectar GitHub</h2>
+    <p>Autorize para o repo-sync usar a sua conta GitHub.</p>
+    <div id="connect-flow" class="gh-flow"></div>
+    <button class="auth-gh" style="margin-top:14px" onclick="closeConnect()">Fechar</button>
+  </div>
 </div>
 
 <!-- Main workspace: sidebar + editor -->

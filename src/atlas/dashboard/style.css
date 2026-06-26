@@ -149,6 +149,24 @@ pre.json{background:var(--bg2);border:1px solid var(--border);border-radius:6px;
 #token-input:focus{outline:none;border-color:var(--blue)}
 #token-submit{width:100%;padding:8px;border-radius:6px;border:1px solid var(--blue);background:#1c2d3e;color:var(--blue);cursor:pointer;font-family:inherit;font-size:13px}
 #token-submit:hover{background:var(--blue);color:var(--bg)}
+/* Login overlay (ADR-0027) */
+#login-user,#login-pass{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-family:inherit;font-size:13px;margin-bottom:10px}
+#login-user:focus,#login-pass:focus{outline:none;border-color:var(--blue)}
+#login-submit{width:100%;padding:8px;border-radius:6px;border:1px solid var(--blue);background:#1c2d3e;color:var(--blue);cursor:pointer;font-family:inherit;font-size:13px}
+#login-submit:hover{background:var(--blue);color:var(--bg)}
+.auth-msg{font-size:12px;margin-bottom:10px;text-align:left}
+.auth-or{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;margin:14px 0}
+.auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:var(--border)}
+.auth-gh{width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:inherit;font-size:13px}
+.auth-gh:hover{border-color:var(--text)}
+.gh-flow{margin-top:12px;font-size:12px;color:var(--muted);text-align:left}
+.gh-code{font-size:22px;letter-spacing:3px;font-weight:700;color:var(--blue);text-align:center;background:var(--bg3);border:1px dashed var(--border);border-radius:6px;padding:10px;margin:6px 0}
+.auth-adv{display:inline-block;margin-top:16px;color:var(--muted);font-size:11px;text-decoration:none;border-bottom:1px dotted var(--muted)}
+.auth-adv:hover{color:var(--text)}
+#user-chip{display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:11px;color:var(--muted)}
+#logout-btn,#gh-connect-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-size:11px;padding:1px 6px}
+#logout-btn:hover,#gh-connect-btn:hover{border-color:var(--text);color:var(--text)}
+#connect-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:100}
 #toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none}
 #toast.show{opacity:1}
 #toast.err{border-color:var(--red);color:var(--red)}

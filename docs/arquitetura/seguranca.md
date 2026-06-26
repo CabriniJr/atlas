@@ -100,5 +100,4 @@ ser tool-less. Ver [ciclo-de-vida-rotina](ciclo-de-vida-rotina.md) e
 - Política de retenção do `texto_cru` em `activities` (dados sensíveis) — backlog.
 - Revisão de segurança automatizada de rotinas geradas antes do `/ativar` — a
   avaliar como rotina built-in futura.
-- Persistência de sessões (hoje em memória); rotação/backup da chave mestra do
-  cofre; UI de login + "Conectar GitHub" no front.
+- Persistência de sessões (hoje em memória); rotação/backup da chave mestra do cofre.

@@ -116,8 +116,8 @@ fica registrado como evolução possível, fora do escopo agora.)
    `token_for_owner` + `git_auth_args`. Endpoints `POST /_github/device/start|poll`,
    `/_github/pat`. O repo-sync resolve o token do dono (`labels.owner`) e autentica
    clone/fetch via `gitcmd.git(..., auth_args=...)` (header por invocação, sem persistir).
-   Config: `ATLAS_GITHUB_CLIENT_ID`. **Pendente:** UI "Conectar GitHub" no front (hoje
-   via API/`curl`); o dono vem do corpo do request / `ATLAS_DEFAULT_OWNER` até a Fase 4.
+   Config: `ATLAS_GITHUB_CLIENT_ID`. UI "🔗 Conectar GitHub" no front liga isto à conta
+   do usuário logado (Fase 6); o dono vem da sessão (Fase 4) ou `ATLAS_DEFAULT_OWNER`.
 4. **Auth/sessão** (login) mantendo admin via token/loopback. **(feito)** —
    [`users.py`](../../../src/atlas/users.py) (senha local: verificador PBKDF2 cifrado
    no cofre) e [`sessions.py`](../../../src/atlas/sessions.py) (token opaco em memória
@@ -126,8 +126,8 @@ fica registrado como evolução possível, fora do escopo agora.)
    públicos: `POST /_auth/login`, `/_auth/logout`, `/_auth/github/start|poll`,
    `GET /_auth/me`; `POST /_auth/users` (admin cria usuário + senha — bootstrap). O
    login via GitHub reusa o device flow (Fase 3): resolve o username,
-   cria o `User`, salva a credencial e abre sessão. **Pendente:** UI de login no front
-   (hoje via API); persistência de sessões (hoje em memória, como os runs).
+   cria o `User`, salva a credencial e abre sessão. A **UI de login** no front (Fase 6)
+   consome estes endpoints. **Pendente:** persistência de sessões (hoje em memória).
 5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
    **(feito)** — [`scoping.py`](../../../src/atlas/scoping.py): `can_see`/`can_write`/
    `stamp_owner`/`visible`. A API escopa **list/get/put/delete** pelo dono da sessão
@@ -136,6 +136,11 @@ fica registrado como evolução possível, fora do escopo agora.)
    `migrate_unowned`) leva os recursos antigos para `ATLAS_DEFAULT_OWNER`. O escopo
    roda na camada **HTTP**; usos internos do store (sync/rotinas/scheduler) não são
    escopados.
+6. **UI multiusuário no front.** **(feito)** — tela de login (senha + Conectar com
+   GitHub + token avançado), chip de usuário + logout, botão "🔗 Conectar GitHub"
+   (credencial p/ repo-sync). `init()` checa `GET /_auth/me` e abre o login no 401.
+   Local (loopback) segue admin sem tela. ([`index.html`](../../../src/atlas/dashboard/index.html),
+   [`main.js`](../../../src/atlas/dashboard/main.js), [`style.css`](../../../src/atlas/dashboard/style.css)).
 
 ## Pendências
 - Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).

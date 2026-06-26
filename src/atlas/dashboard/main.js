@@ -12,17 +12,149 @@ let treeData = {}; // kind → [resource]
 const RENDER_REGISTRY = {};
 function registerRender(kind, fn) { RENDER_REGISTRY[kind] = fn; }
 
-// ── Token ──
-function showTokenOverlay() {
+// ── Auth (ADR-0027): sessão por cookie (senha/GitHub) + token de API (admin) ──
+let ME = null;            // {authenticated, user, role}
+let _ghTimer = null;      // poll do device flow
+
+function showLoginOverlay() {
+  if (_ghTimer) { clearInterval(_ghTimer); _ghTimer = null; }
   document.getElementById('token-overlay').style.display = 'flex';
-  document.getElementById('token-input').focus();
+  const u = document.getElementById('login-user');
+  if (u) u.focus();
 }
+function showTokenOverlay() { showLoginOverlay(); } // compat
+function hideLoginOverlay() {
+  if (_ghTimer) { clearInterval(_ghTimer); _ghTimer = null; }
+  document.getElementById('token-overlay').style.display = 'none';
+}
+function authMsg(text, isErr=true) {
+  const el = document.getElementById('auth-msg');
+  el.style.display = text ? 'block' : 'none';
+  el.textContent = text || '';
+  el.style.color = isErr ? 'var(--red,#e06c75)' : 'var(--muted)';
+}
+
+// Login por senha
+async function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!user || !password) { authMsg('informe usuário e senha'); return; }
+  try {
+    const r = await fetch(API + '/_auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      credentials:'same-origin', body:JSON.stringify({user, password}),
+    });
+    const out = await r.json();
+    if (r.ok && out.ok) { authMsg(''); hideLoginOverlay(); init(); }
+    else authMsg(out.error || 'credenciais inválidas');
+  } catch(e) { authMsg('erro: ' + e.message); }
+}
+
+// Device flow genérico do GitHub (login OU conectar credencial). startPath/pollPath
+// variam; onConnected é chamado no sucesso; onError(msg) no erro.
+async function _ghDeviceFlow(startPath, pollPath, flow, onConnected, onError) {
+  flow.style.display = 'block';
+  flow.innerHTML = '<div class="sv-empty">conectando ao GitHub…</div>';
+  const post = (p, b) => fetch(API + p, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    credentials:'same-origin', body:JSON.stringify(b || {}),
+  }).then(r => r.json());
+  let start;
+  try { start = await post(startPath, {}); }
+  catch(e) { flow.style.display = 'none'; onError('erro: ' + e.message); return; }
+  if (start.error || !start.device_code) {
+    flow.style.display = 'none';
+    onError(start.error || 'GitHub não configurado (ATLAS_GITHUB_CLIENT_ID). Use senha ou token.');
+    return;
+  }
+  const uri = start.verification_uri || 'https://github.com/login/device';
+  flow.innerHTML = `
+    <p style="margin:8px 0 4px">Abra <a href="${esc(uri)}" target="_blank" rel="noreferrer">${esc(uri)}</a> e digite:</p>
+    <div class="gh-code">${esc(start.user_code || '')}</div>
+    <div class="sv-empty">aguardando autorização…</div>`;
+  const dc = start.device_code;
+  const interval = ((start.interval || 5) + 1) * 1000;
+  if (_ghTimer) clearInterval(_ghTimer);
+  _ghTimer = setInterval(async () => {
+    let out;
+    try { out = await post(pollPath, {device_code: dc}); } catch(_) { return; }
+    if (out.status === 'connected') {
+      clearInterval(_ghTimer); _ghTimer = null; onConnected(out);
+    } else if (out.status === 'error') {
+      clearInterval(_ghTimer); _ghTimer = null;
+      flow.style.display = 'none';
+      onError('GitHub: ' + (out.error || 'falha na autorização'));
+    }
+  }, interval);
+}
+
+// Login via GitHub (cria sessão)
+function ghLogin() {
+  authMsg('');
+  _ghDeviceFlow(
+    '/_auth/github/start', '/_auth/github/poll',
+    document.getElementById('gh-flow'),
+    () => { hideLoginOverlay(); init(); },
+    (msg) => authMsg(msg),
+  );
+}
+
+// Conectar GitHub a um usuário JÁ logado (credencial p/ repo-sync — Fase 3)
+function connectGithub() {
+  const ov = document.getElementById('connect-overlay');
+  ov.style.display = 'flex';
+  _ghDeviceFlow(
+    '/_github/device/start', '/_github/device/poll',
+    document.getElementById('connect-flow'),
+    () => { ov.style.display = 'none'; toast('GitHub conectado ✓'); },
+    (msg) => { document.getElementById('connect-flow').innerHTML =
+      `<div class="auth-msg" style="color:var(--red,#e06c75)">${esc(msg)}</div>`; },
+  );
+}
+function closeConnect() {
+  if (_ghTimer) { clearInterval(_ghTimer); _ghTimer = null; }
+  document.getElementById('connect-overlay').style.display = 'none';
+}
+
+async function doLogout() {
+  try {
+    await fetch(API + '/_auth/logout', {method:'POST', credentials:'same-origin'});
+  } catch(_) {}
+  TOKEN = ''; localStorage.removeItem('atlas_token');
+  ME = null; renderUserChip();
+  showLoginOverlay();
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('user-chip');
+  if (!chip) return;
+  if (ME && ME.authenticated) {
+    chip.style.display = 'inline-flex';
+    document.getElementById('user-name').textContent =
+      '👤 ' + ME.user + (ME.role === 'admin' ? ' ★' : '');
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+// Wire dos controles do overlay
+document.getElementById('login-submit').onclick = doLogin;
+document.getElementById('gh-login').onclick = ghLogin;
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('adv-token-toggle').onclick = (e) => {
+  e.preventDefault();
+  const box = document.getElementById('adv-token');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if (box.style.display === 'block') document.getElementById('token-input').focus();
+};
 document.getElementById('token-submit').onclick = () => {
   const val = document.getElementById('token-input').value.trim();
   if (!val) return;
   TOKEN = val;
   localStorage.setItem('atlas_token', val);
-  document.getElementById('token-overlay').style.display = 'none';
+  hideLoginOverlay();
   init();
 };
 document.getElementById('token-input').addEventListener('keydown', e => {
@@ -33,13 +165,23 @@ document.getElementById('token-input').addEventListener('keydown', e => {
 async function apiFetch(path, opts={}) {
   const h = {'Content-Type':'application/json'};
   if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-  const r = await fetch(path, {...opts, headers:{...h,...(opts.headers||{})}});
+  const r = await fetch(path, {...opts, credentials:'same-origin', headers:{...h,...(opts.headers||{})}});
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
 // ── Init ──
+async function checkAuth() {
+  const h = {}; if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+  try {
+    return await fetch(API + '/_auth/me', {credentials:'same-origin', headers:h}).then(r => r.json());
+  } catch(_) { return null; }
+}
+
 async function init() {
+  ME = await checkAuth();
+  if (!ME || !ME.authenticated) { renderUserChip(); showLoginOverlay(); return; }
+  renderUserChip();
   try {
     [allKinds, allSchema] = await Promise.all([
       apiFetch(API + '/'),
@@ -49,7 +191,7 @@ async function init() {
     renderTree();
   } catch(e) {
     if (e.message.includes('401') || e.message.toLowerCase().includes('unauth')) {
-      showTokenOverlay();
+      showLoginOverlay();
     } else {
       toast('erro: ' + e.message, true);
     }

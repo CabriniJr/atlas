@@ -149,9 +149,15 @@ não-admin); no create, o dono é **carimbado** (member não escolhe). Migraçã
 (default `admin`), idempotente. **Importante:** o isolamento roda na camada **HTTP**;
 usos internos do store (sync, rotinas, scheduler) **não** são escopados.
 
-**Pendências do épico (não-bloqueantes, viram backlog):** UI de login + "Conectar
-GitHub" no front (hoje só via API); persistência de sessões (hoje em memória);
-rotação/backup da chave mestra do cofre. Ver ADR-0027 §Pendências.
+**UI multiusuário no front (feito).** Tela de login ([index.html](../../src/atlas/dashboard/index.html)
++ [main.js](../../src/atlas/dashboard/main.js)): senha local, **Conectar com GitHub**
+(device flow), e token de API como opção avançada (admin/script); chip de usuário +
+logout no titlebar; botão **🔗 Conectar GitHub** (credencial p/ repo-sync do usuário
+logado). `init()` checa `GET /_auth/me` e abre o login no 401. Local (loopback) segue
+admin sem tela de login.
+
+**Pendências do épico (não-bloqueantes, viram backlog):** persistência de sessões
+(hoje em memória); rotação/backup da chave mestra do cofre. Ver ADR-0027 §Pendências.
 
 ## 6. Convenções de trabalho (não-negociáveis)
 
