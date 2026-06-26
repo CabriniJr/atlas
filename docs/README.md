@@ -49,6 +49,7 @@ derivam daqui. Todo documento segue o [padrão de documento](#padrão-de-documen
 - [`processos/definicao-de-pronto.md`](processos/definicao-de-pronto.md) — DoR / DoD.
 - [`processos/revisao-e-curadoria.md`](processos/revisao-e-curadoria.md) — best-of-two na prática.
 - [`processos/dossie-de-contexto.md`](processos/dossie-de-contexto.md) — **diretriz:** todo épico tem um dossiê que agrega o contexto certo para despachar devs.
+- [`processos/dossie-handoff.md`](processos/dossie-handoff.md) — **HANDOFF:** estado atual do desenvolvimento e como continuar (ponto de entrada p/ um agente que assume o projeto).
 
 ### 📝 Specs — *como cada feature funciona em detalhe*
 Specs detalhadas que guiam a implementação (requisitos, fluxo, dados, erros, testes).

@@ -19,6 +19,8 @@ código está errado — ou a doc precisa de um ADR que justifique a mudança. N
 
 ## 2. Antes de qualquer tarefa, leia
 
+0. [`docs/processos/dossie-handoff.md`](docs/processos/dossie-handoff.md) — **se você
+   está assumindo o projeto:** estado atual do desenvolvimento e como continuar.
 1. [`docs/README.md`](docs/README.md) — o mapa da documentação.
 2. [`docs/visao/visao-produto.md`](docs/visao/visao-produto.md) — para que serve o
    produto e quais dores ele resolve.

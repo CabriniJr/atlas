@@ -1,0 +1,117 @@
+---
+titulo: ADR-0027 — Multiusuário (isolamento total), auth e credenciais cifradas
+id: ADR-0027
+status: proposto
+versao: 0.1
+dono: PO/PM
+revisado-por: Tech Lead
+atualizado-em: 2026-06-25
+substitui: —
+substituido-por: —
+---
+
+# ADR-0027 — Multiusuário (isolamento total), auth e credenciais cifradas
+
+## Histórico de revisão
+| Versão | Data       | Autor     | Mudança | Aprovado por |
+|--------|------------|-----------|---------|--------------|
+| 0.1    | 2026-06-25 | Tech Lead | Proposta — identidade, isolamento por usuário, credenciais cifradas, GitHub device flow, Claude compartilhado | — |
+
+---
+
+## Status
+`proposto` — implementação **faseada** (ver §Fases). Decisões tomadas com o PO:
+isolamento **total** por usuário; Claude via **assinatura compartilhada do host**;
+GitHub via **device flow**; credenciais **cifradas em repouso**.
+
+## Contexto
+
+Hoje o Atlas é single-user: auth da API é um token único (`ATLAS_API_TOKEN`) ou
+loopback, e todos os recursos são globais. O PO pediu **multiusuário**: cada pessoa
+loga e usa suas próprias credenciais (ex.: conectar o GitHub pelo web e o repo-sync
+passar a funcionar com a conta dela), com **isolamento total** entre usuários, e
+**criptografia/segurança** nos dados sensíveis.
+
+Restrição técnica chave: o **`claude` CLI** (motor de IA, [ADR-0001](ADR-0001-ia-em-dois-modos.md)/
+[ADR-0022](ADR-0022-motor-de-ia-plugavel.md)) autentica por **assinatura, por máquina**
+— não há token de assinatura por-usuário injetável por chamada. Por isso o Claude
+fica **compartilhado** (login do host), com **atribuição de custo por usuário/agente**
+([E7-44](../../roadmap/backlog.md)).
+
+## Decisão
+
+### 1. Identidade — Kind `User`
+Usuário é um objeto ([P11](../../visao/principios.md)). `spec`: `display_name`,
+`role` (`admin`|`member`). Segredo de login (hash de senha **ou** GitHub OAuth) **não**
+fica no spec — vai cifrado no cofre (§4). Há um `admin` inicial (compatível com o
+token/loopback atual: o portador do `ATLAS_API_TOKEN` age como admin).
+
+### 2. Auth/sessão
+Login → **sessão** (token opaco aleatório, cookie httpOnly) → identifica o usuário em
+cada request. O `ATLAS_API_TOKEN`/loopback continua válido como **admin** (retrocompat
+e operação por script). Sem sessão nem token ⇒ 401.
+
+### 3. Isolamento total por usuário
+Todo recurso ganha dono: `labels.owner=<user>`. O `ResourceStore`/API **escopam por
+dono** — `list/get/put/delete` só enxergam/alteram recursos do usuário da sessão; o
+`admin` enxerga tudo. Recursos atuais (sem owner) são migrados para o admin/usuário
+primário. Kinds de sistema (Doc de ADR, kindref) podem ser **globais** (read-only a
+todos) por um marcador (`labels.scope=system`).
+
+### 4. Credenciais cifradas em repouso (segurança)
+- **Kind `Credential`** guarda só **metadados** (`provider`: github|…, `owner`,
+  `status`, `scopes`, `criado_em`) — **nunca o segredo** no spec.
+- O **valor secreto** (token GitHub etc.) é cifrado por um **cofre** (`secrets_store`)
+  com **Fernet** (AES-128-CBC + HMAC, lib `cryptography`). Chave mestra em
+  `ATLAS_SECRET_KEY` (env) ou arquivo `secrets/secret.key` (perms `0600`, fora do git).
+- Blobs cifrados em `secrets/credentials/<id>.enc` (`0600`) — nunca commitados.
+- Em uso: o backend descifra só na hora de chamar o provider; segredos **não** trafegam
+  para o front (a UI vê status "conectado", não o token).
+
+### 5. GitHub — device flow (por usuário)
+"Conectar GitHub" inicia o **device flow** (sem callback público — funciona na Tailnet):
+backend pede `device_code`/`user_code`, o usuário abre `github.com/login/device` e cola
+o código; o backend faz polling e, ao obter o `access_token`, **cifra e guarda** como
+`Credential` daquele usuário. O repo-sync passa a usar o token do dono do Repo via o
+git credential helper escopado. Requer um **GitHub OAuth App** (client_id público em
+`ATLAS_GITHUB_CLIENT_ID`); **fallback**: colar um PAT quando o app não estiver
+configurado.
+
+### 6. Claude — assinatura compartilhada do host
+Todos usam o login Claude da máquina (atual). Custo é **atribuído por usuário/agente**
+no `status` (E7-44). (Login Claude por-usuário via `CLAUDE_CONFIG_DIR` + device flow
+fica registrado como evolução possível, fora do escopo agora.)
+
+## Alternativas consideradas
+| Tema | Alternativa | Veredito |
+|---|---|---|
+| Claude | API key por usuário | rejeitada — billing por token fere P1; modo code não usa |
+| Claude | login por usuário (CLAUDE_CONFIG_DIR) | adiada — complexa; host compartilhado atende |
+| GitHub | OAuth App (callback) | adiada — exige ingress público (Funnel); device flow evita |
+| GitHub | só PAT colado | é o **fallback**; device flow é a UX preferida |
+| Isolamento | escopo por `labels.owner` na API | **escolhida** — incremental sobre o store atual |
+| Isolamento | namespace/DB por usuário | rejeitada — migração e custo altos |
+| Cripto | rolar à mão / só perms de arquivo | rejeitada — usar `cryptography`/Fernet (padrão) |
+
+## Consequências
+- **Positivas:** cada usuário opera com suas credenciais; dados sensíveis cifrados em
+  repouso; isolamento real; base p/ o uso multiusuário em produção.
+- **Negativas / custos:** +deps (`cryptography`); auth/sessão e escopo por dono tocam
+  toda a API (risco — faseado e testado); gestão da chave mestra (perda ⇒ perda dos
+  segredos cifrados); migração dos recursos atuais para um dono.
+- **Impacto:** estende o modelo de auth (E0-05) e o `ResourceStore` ([ADR-0015](ADR-0015-core-api-de-objetos.md));
+  aplica P11 (User/Credential como objetos). Atualiza [seguranca](../seguranca.md).
+
+## Fases (implementação incremental, mergeável)
+1. **Cofre cifrado** (`secrets_store`, Fernet) + dep `cryptography` — fundação segura,
+   não-destrutiva, com testes. **(esta entrega)**
+2. **Kind `User`** + **Kind `Credential`** (metadados) — objetos, não-destrutivo.
+3. **GitHub device flow** (start/poll) → grava `Credential` cifrada + git helper escopado.
+4. **Auth/sessão** (login) mantendo admin via token/loopback.
+5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
+
+## Pendências
+- Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).
+- Rotação da chave mestra e backup seguro.
+- Escopo fino de kinds globais (system) vs por-usuário.
+- Login Claude por-usuário (evolução, se necessário).
