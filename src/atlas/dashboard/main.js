@@ -389,8 +389,10 @@ const _MANIFEST_TPL = {
   Task:           {kind:'Task',          name:'',labels:{},spec:{body:'',done:false},status:{}},
   Doc:            {kind:'Doc',           name:'',labels:{topic:'user'},spec:{title:'',body:'# Título\n\nConteúdo…'},status:{}},
   RoutineRequest: {kind:'RoutineRequest',name:'',labels:{},spec:{body:''},status:{}},
-  Agente:         {kind:'Agente',        name:'',labels:{},spec:{motor:'claude',modelo:'claude-haiku-4-5-20251001',nivel_contexto:'resumo',prompt:'Responda em PT-BR:\n{mensagem}',timeout:60},status:{}},
+  Agente:         {kind:'Agente',        name:'',labels:{},spec:{modo:'chat',provider:'claude-default',nivel_contexto:'resumo',prompt:'Responda em PT-BR:\n{mensagem}'},status:{}},
   Prompt:         {kind:'Prompt',        name:'',labels:{},spec:{template:'Analise e dê insights em PT-BR:\n{dados}',model:'claude-haiku-4-5-20251001',fonte:'grupo:saude',timeout:90},status:{}},
+  RepoGroup:      {kind:'RepoGroup',     name:'',labels:{},spec:{repos:'',description:''},status:{}},
+  LLMProvider:    {kind:'LLMProvider',   name:'',labels:{},spec:{motor:'claude',modelo:'claude-sonnet-4-6',endpoint:'',token_env:'',timeout:90},status:{}},
 };
 
 // ── Editor state ───────────────────────────────────────────────────────────────
@@ -890,7 +892,9 @@ function newResource(kind='') {
 function _showNewTab(preKind='') {
   const ec = document.getElementById('editor-content');
   ec.style.overflow='hidden'; ec.style.display='flex'; ec.style.flexDirection='column'; ec.style.padding='0';
-  const kinds = [...new Set([...Object.keys(_MANIFEST_TPL), ...Object.keys(allKinds)])].sort();
+  // Qualquer kind definido no schema é criável (P11), além de templates e dos já existentes.
+  const fromSchema = Object.keys(allSchema||{}).filter(k=>!allSchema[k]?.meta?.hidden);
+  const kinds = [...new Set([...Object.keys(_MANIFEST_TPL), ...fromSchema, ...Object.keys(allKinds)])].sort();
   const chips = kinds.map(k=>`<button class="kind-chip${k===preKind?' sel':''}" onclick="_newSelectKind('${escJs(k)}')">${kindIcon(k)} ${esc(k)}</button>`).join('');
   const tpl = _MANIFEST_TPL[preKind] || {kind:preKind||'',name:'',labels:{},spec:{},status:{}};
   const schema = _KIND_SCHEMA[preKind];

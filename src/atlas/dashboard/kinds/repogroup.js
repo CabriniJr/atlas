@@ -23,7 +23,8 @@ function _rgShell(r) {
         <div style="font-size:11px;color:var(--muted)">${repos.length} repositório${repos.length !== 1 ? 's' : ''}</div>
       </div>
       <div class="rk-actions">
-        <button class="btn" data-action="syncall" title="Sincronizar todos">↻ Sync todos</button>
+        <button class="btn" data-action="daily" title="Garante Job de sync diário + Telegram p/ cada repo">🔔 Sync diário</button>
+        <button class="btn" data-action="syncall" title="Sincronizar todos agora">↻ Sync todos</button>
         <button class="btn" data-action="refresh" title="Atualizar">⟳</button>
         <button class="btn rk-fullscreen-btn" onclick="toggleFullscreen()" title="Tela cheia">⤢</button>
       </div>
@@ -45,6 +46,8 @@ function _wireRepoGroup(name, r, container) {
     ?.addEventListener('click', () => _loadRgTab(name, r, 'overview', container));
   container.querySelector('[data-action="syncall"]')
     ?.addEventListener('click', () => _rgSyncAll(name, r, container));
+  container.querySelector('[data-action="daily"]')
+    ?.addEventListener('click', () => _rgSetupDaily(name, r, container));
   container.querySelectorAll('.rk-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.rk-tab').forEach(b => b.classList.remove('active'));
@@ -196,6 +199,42 @@ async function _rgSyncAll(name, r, container) {
     apiFetch(`${API}/_run`, {method: 'POST', body: JSON.stringify({repo: n})})
       .catch(() => null)));
   if (btn) { btn.disabled = false; btn.textContent = '↻ Sync todos'; }
+  _loadRgTab(name, r, 'overview', container);
+}
+
+// Garante, para cada repo do grupo, um Job de sync diário com saída Telegram
+// (vínculo por label, P11). Produção: avaliar repos diariamente + notificar.
+async function _rgSetupDaily(name, r, container) {
+  const repoNames = _rgRepoNames(r.spec || {});
+  if (!repoNames.length) { toast('grupo sem repos', true); return; }
+  const btn = container.querySelector('[data-action="daily"]');
+  if (btn) { btn.disabled = true; btn.textContent = '🔔 configurando…'; }
+
+  const allJobs = await apiFetch(`${API}/Job`).catch(() => []);
+  let criados = 0, jaTinha = 0;
+  for (const repo of repoNames) {
+    const exists = (allJobs || []).some(j =>
+      (j.spec?.coletar === 'repo-sync') && (j.spec?.label === repo));
+    if (exists) { jaTinha++; continue; }
+    try {
+      await apiFetch(`${API}/Job/${encodeURIComponent(repo + '-sync')}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          kind: 'Job', name: repo + '-sync',
+          spec: {
+            coletar: 'repo-sync', label: repo, schedule: '@daily 09:00',
+            model: 'none', saida: 'telegram', active: true,
+            description: `Sync diário de ${repo} (insights + Telegram)`,
+          },
+          labels: {domain: 'dev'},
+        }),
+      });
+      criados++;
+    } catch (e) { /* segue */ }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🔔 Sync diário'; }
+  toast(`sync diário: ${criados} criado(s), ${jaTinha} já existia(m)`);
+  if (typeof _refreshStore === 'function') _refreshStore();
   _loadRgTab(name, r, 'overview', container);
 }
 
