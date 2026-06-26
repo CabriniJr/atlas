@@ -161,7 +161,7 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "analyze_agente",
                 "type": "text",
                 "label": "Agente de análise",
-                "hint": "Nome de um Agente (default: repo-analyzer) — faz insight manual e automático",
+                "hint": "Nome de um Agente (default: repo-analyzer) — insight manual e automático",
             },
             {
                 "k": "analyze_branches",
@@ -362,7 +362,12 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "label": "Endpoint Ollama",
                 "hint": "Ex: http://192.168.86.22:11434 (só para motor=ollama)",
             },
-            {"k": "timeout", "type": "number", "label": "Timeout (s)", "hint": "Default: 60 (chat) / 300 (code)"},
+            {
+                "k": "timeout",
+                "type": "number",
+                "label": "Timeout (s)",
+                "hint": "Default: 60 (chat) / 300 (code)",
+            },
         ],
         "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral · dev"}],
     },

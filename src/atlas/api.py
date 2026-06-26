@@ -23,9 +23,9 @@ import logging
 import os
 import subprocess
 import threading
-from datetime import datetime
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -600,7 +600,7 @@ def _resolve_repo_sync_job(repo: str) -> str | None:
     return None
 
 
-def _rotina_from_job(job) -> "object":
+def _rotina_from_job(job):  # noqa: ANN001, ANN201
     """Constrói uma ``Rotina`` a partir de um Job do store (criado pela API/IA)."""
     from atlas.routines import Rotina
 
@@ -951,9 +951,9 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
 
     spec = agente.spec or {}
     eng = _resolve_engine(spec, store)
-    # modo code roda sempre via claude CLI; o provider dita o modelo (default sonnet)
-    modelo = eng["modelo"] if eng["modelo"] not in ("gemma4",) else "claude-sonnet-4-6"
-    if not spec.get("modelo") and not (eng.get("provider")):
+    # modo code roda sempre via claude CLI → exige um modelo claude (default sonnet).
+    modelo = eng["modelo"]
+    if not modelo or not modelo.startswith("claude"):
         modelo = "claude-sonnet-4-6"
     system_prompt = spec.get("prompt", "")
     timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
