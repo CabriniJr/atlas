@@ -16,9 +16,15 @@ registerRender('Agente', function renderAgente(r, container) {
 // ── Shell ─────────────────────────────────────────────────────────────────────
 function _agenteShell(r) {
   const s = r.spec || {};
+  const st = r.status || {};
   const motor = s.motor || 'claude';
-  const modelo = s.modelo || (motor === 'ollama' ? 'gemma4' : 'claude-haiku-4-5-20251001');
+  const modelo = s.modelo || s.provider || (motor === 'ollama' ? 'gemma4' : 'claude-haiku-4-5-20251001');
   const nivel = s.nivel_contexto || 'none';
+  const runs = st.runs || 0;
+  const custo = st.custo_total_usd != null ? Number(st.custo_total_usd) : null;
+  const gasto = (runs || custo != null)
+    ? `<span class="ag-badge cost" title="Gasto de IA acumulado deste agente">💰 ${custo != null ? '$' + custo.toFixed(4) : '—'} · ${runs} run${runs !== 1 ? 's' : ''}</span>`
+    : '';
   return `<div class="ag-wrap">
     <div class="ag-header">
       <span style="font-size:18px">🤖</span>
@@ -28,6 +34,7 @@ function _agenteShell(r) {
           <span class="ag-badge ${motor}">${esc(motor)}</span>
           <span style="color:var(--muted)">${esc(modelo)}</span>
           <span style="color:var(--muted)">ctx: ${esc(nivel)}</span>
+          ${gasto}
         </div>
       </div>
       <button class="btn rk-fullscreen-btn" onclick="toggleFullscreen()" title="Tela cheia">⤢</button>

@@ -23,13 +23,16 @@ function _rgShell(r) {
         <div style="font-size:11px;color:var(--muted)">${repos.length} repositório${repos.length !== 1 ? 's' : ''}</div>
       </div>
       <div class="rk-actions">
-        <button class="btn" data-action="syncall" title="Sincronizar todos">↻ Sync todos</button>
+        <button class="btn" data-action="daily" title="Garante Job de sync diário + Telegram p/ cada repo">🔔 Sync diário</button>
+        <button class="btn" data-action="syncall" title="Sincronizar todos agora">↻ Sync todos</button>
         <button class="btn" data-action="refresh" title="Atualizar">⟳</button>
         <button class="btn rk-fullscreen-btn" onclick="toggleFullscreen()" title="Tela cheia">⤢</button>
       </div>
     </div>
     <div class="rk-tabbar">
       <button class="rk-tab active" data-tab="overview">📊 Visão</button>
+      <button class="rk-tab" data-tab="goals">🎯 Objetivos</button>
+      <button class="rk-tab" data-tab="analyses">🔍 Análises</button>
       <button class="rk-tab" data-tab="config">⚙️ Config</button>
     </div>
     <div class="rk-body" id="rg-body-${esc(r.name)}">
@@ -43,6 +46,8 @@ function _wireRepoGroup(name, r, container) {
     ?.addEventListener('click', () => _loadRgTab(name, r, 'overview', container));
   container.querySelector('[data-action="syncall"]')
     ?.addEventListener('click', () => _rgSyncAll(name, r, container));
+  container.querySelector('[data-action="daily"]')
+    ?.addEventListener('click', () => _rgSetupDaily(name, r, container));
   container.querySelectorAll('.rk-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.rk-tab').forEach(b => b.classList.remove('active'));
@@ -64,6 +69,8 @@ async function _loadRgTab(name, r, tab, container) {
   body.innerHTML = '<div style="padding:16px;color:var(--muted)">carregando…</div>';
   try {
     if (tab === 'overview') await _rgTabOverview(name, r, body);
+    else if (tab === 'goals') await _rgTabGoals(name, r, body);
+    else if (tab === 'analyses') await _rgTabAnalyses(name, r, body);
     else if (tab === 'config') await _rgTabConfig(name, body);
   } catch (e) {
     body.innerHTML = `<div style="padding:16px;color:var(--red)">erro: ${esc(e.message)}</div>`;
@@ -193,6 +200,177 @@ async function _rgSyncAll(name, r, container) {
       .catch(() => null)));
   if (btn) { btn.disabled = false; btn.textContent = '↻ Sync todos'; }
   _loadRgTab(name, r, 'overview', container);
+}
+
+// Garante, para cada repo do grupo, um Job de sync diário com saída Telegram
+// (vínculo por label, P11). Produção: avaliar repos diariamente + notificar.
+async function _rgSetupDaily(name, r, container) {
+  const repoNames = _rgRepoNames(r.spec || {});
+  if (!repoNames.length) { toast('grupo sem repos', true); return; }
+  const btn = container.querySelector('[data-action="daily"]');
+  if (btn) { btn.disabled = true; btn.textContent = '🔔 configurando…'; }
+
+  const allJobs = await apiFetch(`${API}/Job`).catch(() => []);
+  let criados = 0, jaTinha = 0;
+  for (const repo of repoNames) {
+    const exists = (allJobs || []).some(j =>
+      (j.spec?.coletar === 'repo-sync') && (j.spec?.label === repo));
+    if (exists) { jaTinha++; continue; }
+    try {
+      await apiFetch(`${API}/Job/${encodeURIComponent(repo + '-sync')}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          kind: 'Job', name: repo + '-sync',
+          spec: {
+            coletar: 'repo-sync', label: repo, schedule: '@daily 09:00',
+            model: 'none', saida: 'telegram', active: true,
+            description: `Sync diário de ${repo} (insights + Telegram)`,
+          },
+          labels: {domain: 'dev'},
+        }),
+      });
+      criados++;
+    } catch (e) { /* segue */ }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🔔 Sync diário'; }
+  toast(`sync diário: ${criados} criado(s), ${jaTinha} já existia(m)`);
+  if (typeof _refreshStore === 'function') _refreshStore();
+  _loadRgTab(name, r, 'overview', container);
+}
+
+// ── Tab: Objetivos (Goals do grupo, por label, com barras de progresso) ─────────
+function _pctOf(goal) {
+  // status.progress é "NN%"; senão calcula de current/target/start
+  const p = (goal.status?.progress || '').replace('%', '').trim();
+  const n = parseFloat(p);
+  if (!isNaN(n)) return Math.max(0, Math.min(100, n));
+  return null;
+}
+
+async function _rgTabGoals(name, r, el) {
+  const [goals, trackers] = await Promise.all([
+    apiFetch(`${API}/Goal`).catch(() => []),
+    apiFetch(`${API}/Tracker`).catch(() => []),
+  ]);
+  // Vínculo por label (P11): Goals com labels.group == este grupo
+  const mine = (goals || []).filter(g => (g.labels?.group || '') === name);
+
+  const bars = mine.length ? mine.map(g => {
+    const s = g.spec || {}, st = g.status || {};
+    const pct = _pctOf(g);
+    const cur = st.current != null ? st.current : '—';
+    const dir = s.direction === 'up' ? '↑' : '↓';
+    return `<div class="rg-goal">
+      <div class="rg-goal-head">
+        <span class="rg-goal-name" onclick="openResource('Goal','${escJs(g.name)}')">🎯 ${esc(g.name)}</span>
+        <span class="rg-goal-nums">${esc(String(cur))}${esc(s.unit || '')} ${dir} ${esc(String(s.target ?? '?'))}${esc(s.unit || '')}</span>
+        <button class="btn rg-goal-recalc" data-goal="${esc(g.name)}" title="Recalcular do tracker">↻</button>
+      </div>
+      <div class="rg-goal-bar"><div class="rg-goal-fill" style="width:${pct == null ? 0 : pct}%"></div>
+        <span class="rg-goal-pct">${pct == null ? 'sem dados' : pct + '%'}</span></div>
+      <div class="rg-goal-sub">tracker: <code>${esc(s.tracker || '—')}</code></div>
+    </div>`;
+  }).join('') : '<div class="sv-empty">Nenhum objetivo neste grupo ainda.</div>';
+
+  // form de criar objetivo a partir de um tracker
+  const trackerOpts = (trackers || []).map(t =>
+    `<option value="${esc(t.name)}">${esc(t.name)}${t.spec?.unit ? ' (' + esc(t.spec.unit) + ')' : ''}</option>`).join('');
+
+  el.innerHTML = `<div class="rg-wrap">
+    <div class="home-subhead" style="margin-top:0">🎯 Objetivos do grupo — barras ligadas a Trackers (P11: labels.group=${esc(name)})</div>
+    <div class="rg-goals">${bars}</div>
+
+    <div class="rg-newgoal">
+      <div class="home-subhead">＋ Novo objetivo a partir de um Tracker</div>
+      ${(trackers || []).length ? `<div class="rg-newgoal-form">
+        <input class="rk-cfg-input" id="rg-g-name" placeholder="nome do objetivo">
+        <select class="rk-cfg-input" id="rg-g-tracker">${trackerOpts}</select>
+        <input class="rk-cfg-input" id="rg-g-target" placeholder="target" style="width:90px">
+        <input class="rk-cfg-input" id="rg-g-start" placeholder="início" style="width:90px">
+        <select class="rk-cfg-input" id="rg-g-dir" style="width:120px"><option value="down">↓ menor é melhor</option><option value="up">↑ maior é melhor</option></select>
+        <button class="btn" id="rg-g-add" style="color:var(--green);border-color:var(--green)">Criar</button>
+        <span id="rg-g-status" style="font-size:11px"></span>
+      </div>` : '<div class="sv-empty">Crie um Tracker antes (＋ Novo · Tracker).</div>'}
+    </div>
+  </div>`;
+
+  // recalcular cada goal
+  el.querySelectorAll('.rg-goal-recalc').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        await apiFetch(`${API}/_cmd`, {method: 'POST', body: JSON.stringify({text: `/goal check ${btn.dataset.goal}`})});
+        _rgTabGoals(name, r, el);
+      } catch (e) { toast('❌ ' + e.message, true); btn.disabled = false; btn.textContent = '↻'; }
+    });
+  });
+
+  // criar objetivo
+  const addBtn = el.querySelector('#rg-g-add');
+  addBtn?.addEventListener('click', async () => {
+    const gname = el.querySelector('#rg-g-name').value.trim();
+    const tracker = el.querySelector('#rg-g-tracker').value;
+    const target = el.querySelector('#rg-g-target').value.trim();
+    const start = el.querySelector('#rg-g-start').value.trim();
+    const dir = el.querySelector('#rg-g-dir').value;
+    const st = el.querySelector('#rg-g-status');
+    if (!gname || !target) { st.textContent = 'nome e target obrigatórios'; return; }
+    const trackerRes = (trackers || []).find(t => t.name === tracker);
+    const unit = trackerRes?.spec?.unit || '';
+    addBtn.disabled = true; st.textContent = 'criando…';
+    try {
+      const spec = {tracker, target, direction: dir, unit};
+      if (start) spec.start = start;
+      await apiFetch(`${API}/Goal/${encodeURIComponent(gname)}`, {
+        method: 'PUT',
+        body: JSON.stringify({kind: 'Goal', name: gname, spec, labels: {group: name}}),
+      });
+      // já calcula o progresso do último valor do tracker
+      await apiFetch(`${API}/_cmd`, {method: 'POST', body: JSON.stringify({text: `/goal check ${gname}`})}).catch(() => {});
+      _rgTabGoals(name, r, el);
+    } catch (e) { st.textContent = '❌ ' + e.message; addBtn.disabled = false; }
+  });
+}
+
+// ── Tab: Análises (últimas análises/insights por repo do grupo) ─────────────────
+async function _rgTabAnalyses(name, r, el) {
+  const repoNames = _rgRepoNames(r.spec || {});
+  if (!repoNames.length) {
+    el.innerHTML = '<div class="sv-empty">Nenhum repo no grupo.</div>';
+    return;
+  }
+  const docs = await apiFetch(`${API}/Doc`).catch(() => []);
+  const blocks = repoNames.map(repo => {
+    const insights = (docs || [])
+      .filter(d => d.labels?.repo === repo && d.labels?.tipo === 'insight')
+      .sort((a, b) => String(b.status?.gerado_em || b.criado_em || '').localeCompare(String(a.status?.gerado_em || a.criado_em || '')));
+    const last = insights[0];
+    return `<div class="rg-an-block">
+      <div class="rg-an-head">
+        <span onclick="openResource('Repo','${escJs(repo)}')" style="cursor:pointer">📦 <strong>${esc(repo)}</strong></span>
+        <button class="btn rg-an-gen" data-repo="${esc(repo)}" style="border-color:var(--purple);color:var(--purple)">🧠 Analisar</button>
+      </div>
+      ${last
+        ? `<div class="rg-an-body"><div style="font-size:10px;color:var(--muted);margin-bottom:4px">${esc(fmtDt(last.status?.gerado_em || last.criado_em))} · ${insights.length} análise(s)</div><div class="md">${markdownToHtml(String(last.spec?.body || ''))}</div></div>`
+        : '<div class="sv-empty" style="font-size:11px">sem análises ainda</div>'}
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="rg-wrap">
+    <div class="home-subhead" style="margin-top:0">🔍 Últimas análises por repo (Agente de análise de cada Repo)</div>
+    ${blocks}
+  </div>`;
+
+  el.querySelectorAll('.rg-an-gen').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const repo = btn.dataset.repo;
+      btn.disabled = true; btn.textContent = '🧠 …';
+      try {
+        await apiFetch(`${API}/_insight`, {method: 'POST', body: JSON.stringify({scope: 'repo', name: repo})});
+        _rgTabAnalyses(name, r, el);
+      } catch (e) { toast('❌ ' + e.message, true); btn.disabled = false; btn.textContent = '🧠 Analisar'; }
+    });
+  });
 }
 
 // ── Tab: Config ─────────────────────────────────────────────────────────────────

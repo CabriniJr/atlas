@@ -297,11 +297,13 @@ const _KIND_SCHEMA = {
   Job: {
     meta: {icon:'🧩', desc:'Job agendado ou por trigger (ex-Routine, ADR-0021)'},
     spec: [
-      {k:'agenda',  type:'cron',  label:'Agenda',         hint:'Escolha um preset ou edite o cron'},
-      {k:'modelo',  type:'select',label:'Modelo IA',      opts:['none','claude-haiku-4-5-20251001','claude-sonnet-4-6'], hint:'none = sem IA'},
+      {k:'description', type:'text', label:'Descrição',     hint:'O que o job faz'},
+      {k:'schedule', type:'cron',  label:'Agenda',         hint:'Escolha um preset ou edite o cron'},
+      {k:'model',    type:'select',label:'Modelo IA',      opts:['none','claude-haiku-4-5-20251001','claude-sonnet-4-6'], hint:'none = sem IA'},
       {k:'saida',   type:'select',label:'Saída',          opts:['telegram','none'], hint:'Destino do resultado'},
-      {k:'label',   type:'text',  label:'Label grupo',    hint:'Grupo de recursos (coletar-por-label)'},
-      {k:'coletar', type:'text',  label:'Collect fn',     hint:'Nome da função collect; default = nome do job'},
+      {k:'label',   type:'text',  label:'Label (vínculo)', hint:'Grupo (coletar-por-label) ou nome do Repo (repo-sync)'},
+      {k:'coletar', type:'text',  label:'Collect fn',     hint:'Nome da função collect; repos usam repo-sync'},
+      {k:'active',  type:'bool',  label:'Ativo',          hint:'Liga/desliga a agenda'},
     ],
     labels: [{k:'domain',label:'Domínio',hint:'fisico · estudo · sono · saude · trabalho'}],
   },
@@ -379,16 +381,18 @@ const _MANIFEST_TPL = {
   Goal:           {kind:'Goal',          name:'',labels:{},spec:{target:0,start:0,unit:'',tracker:'',direction:'down'},status:{}},
   Alarm:          {kind:'Alarm',         name:'',labels:{},spec:{hora:'07:30',mensagem:'',once:false},status:{}},
   Timer:          {kind:'Timer',         name:'',labels:{},spec:{},status:{}},
-  Job:            {kind:'Job',           name:'',labels:{},spec:{agenda:'0 9 * * *',modelo:'none',saida:'telegram',ativa:false},status:{}},
-  Routine:        {kind:'Job',           name:'',labels:{},spec:{agenda:'0 9 * * *',modelo:'none',saida:'telegram',ativa:false},status:{}},
+  Job:            {kind:'Job',           name:'',labels:{},spec:{schedule:'0 9 * * *',model:'none',saida:'telegram',active:false},status:{}},
+  Routine:        {kind:'Job',           name:'',labels:{},spec:{schedule:'0 9 * * *',model:'none',saida:'telegram',active:false},status:{}},
   Repo:           {kind:'Repo',          name:'',labels:{},spec:{url:'https://github.com/user/repo'},status:{}},
   Diff:           {kind:'Diff',          name:'',labels:{repo:''},spec:{commit:'',diff_raw:'',explicacao:''},status:{}},
   Idea:           {kind:'Idea',          name:'',labels:{},spec:{body:''},status:{}},
   Task:           {kind:'Task',          name:'',labels:{},spec:{body:'',done:false},status:{}},
   Doc:            {kind:'Doc',           name:'',labels:{topic:'user'},spec:{title:'',body:'# Título\n\nConteúdo…'},status:{}},
   RoutineRequest: {kind:'RoutineRequest',name:'',labels:{},spec:{body:''},status:{}},
-  Agente:         {kind:'Agente',        name:'',labels:{},spec:{motor:'claude',modelo:'claude-haiku-4-5-20251001',nivel_contexto:'resumo',prompt:'Responda em PT-BR:\n{mensagem}',timeout:60},status:{}},
+  Agente:         {kind:'Agente',        name:'',labels:{},spec:{modo:'chat',provider:'claude-default',nivel_contexto:'resumo',prompt:'Responda em PT-BR:\n{mensagem}'},status:{}},
   Prompt:         {kind:'Prompt',        name:'',labels:{},spec:{template:'Analise e dê insights em PT-BR:\n{dados}',model:'claude-haiku-4-5-20251001',fonte:'grupo:saude',timeout:90},status:{}},
+  RepoGroup:      {kind:'RepoGroup',     name:'',labels:{},spec:{repos:'',description:''},status:{}},
+  LLMProvider:    {kind:'LLMProvider',   name:'',labels:{},spec:{motor:'claude',modelo:'claude-sonnet-4-6',endpoint:'',token_env:'',timeout:90},status:{}},
 };
 
 // ── Editor state ───────────────────────────────────────────────────────────────
@@ -888,7 +892,9 @@ function newResource(kind='') {
 function _showNewTab(preKind='') {
   const ec = document.getElementById('editor-content');
   ec.style.overflow='hidden'; ec.style.display='flex'; ec.style.flexDirection='column'; ec.style.padding='0';
-  const kinds = [...new Set([...Object.keys(_MANIFEST_TPL), ...Object.keys(allKinds)])].sort();
+  // Qualquer kind definido no schema é criável (P11), além de templates e dos já existentes.
+  const fromSchema = Object.keys(allSchema||{}).filter(k=>!allSchema[k]?.meta?.hidden);
+  const kinds = [...new Set([...Object.keys(_MANIFEST_TPL), ...fromSchema, ...Object.keys(allKinds)])].sort();
   const chips = kinds.map(k=>`<button class="kind-chip${k===preKind?' sel':''}" onclick="_newSelectKind('${escJs(k)}')">${kindIcon(k)} ${esc(k)}</button>`).join('');
   const tpl = _MANIFEST_TPL[preKind] || {kind:preKind||'',name:'',labels:{},spec:{},status:{}};
   const schema = _KIND_SCHEMA[preKind];

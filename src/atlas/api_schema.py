@@ -74,9 +74,10 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
     "Job": {
         "meta": {"icon": "🧩", "desc": "Job agendado ou por trigger (ex-Routine, ADR-0021)"},
         "spec": [
-            {"k": "agenda", "type": "cron", "label": "Agenda", "hint": "Preset ou cron"},
+            {"k": "description", "type": "text", "label": "Descrição", "hint": "O que o job faz"},
+            {"k": "schedule", "type": "cron", "label": "Agenda", "hint": "Preset ou cron"},
             {
-                "k": "modelo",
+                "k": "model",
                 "type": "select",
                 "label": "Modelo IA",
                 "opts": ["none", "claude-haiku-4-5-20251001", "claude-sonnet-4-6"],
@@ -89,13 +90,19 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "opts": ["telegram", "none"],
                 "hint": "Destino do resultado",
             },
-            {"k": "label", "type": "text", "label": "Label grupo", "hint": "coletar-por-label"},
+            {
+                "k": "label",
+                "type": "text",
+                "label": "Label (vínculo)",
+                "hint": "grupo p/ coletar-por-label, ou nome do Repo p/ repo-sync",
+            },
             {
                 "k": "coletar",
                 "type": "text",
                 "label": "Collect fn",
-                "hint": "default = nome do job",
+                "hint": "default = nome do job; repos usam 'repo-sync'",
             },
+            {"k": "active", "type": "bool", "label": "Ativo", "hint": "Liga/desliga a agenda"},
         ],
         "labels": [
             {"k": "domain", "label": "Domínio", "hint": "fisico · estudo · sono · saude · trabalho"}

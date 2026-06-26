@@ -997,12 +997,15 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             cwd=cwd,
         )
 
+        custo = 0.0  # acumula o gasto de IA deste run (evento result)
         for raw_line in proc.stdout:  # type: ignore[union-attr]
             line = raw_line.strip()
             if not line:
                 continue
             try:
                 event = json.loads(line)
+                if event.get("type") == "result":
+                    custo = float(event.get("total_cost_usd") or event.get("cost_usd") or 0) or custo
                 _emit(run, event)
             except json.JSONDecodeError:
                 _emit(run, {"type": "raw", "text": line})
@@ -1012,6 +1015,7 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             _emit(run, {"type": "error", "message": f"claude encerrou com código {proc.returncode}"})
         else:
             _emit(run, {"type": "done"})
+        _registrar_gasto_agente(store, agente_name, custo, modelo)
 
     except subprocess.TimeoutExpired:
         _emit(run, {"type": "error", "message": f"timeout após {timeout}s"})
@@ -1026,6 +1030,35 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             except Exception:  # noqa: BLE001
                 pass
         _finish_run(run)
+
+
+def _registrar_gasto_agente(
+    store: ResourceStore, agente_name: str, custo: float, modelo: str,
+) -> None:
+    """Acumula gasto de IA no status do Agente (E7-44): runs, custo total, último.
+
+    "Gasto da IA como métrica do agente quando evocado" — fica visível no render do
+    Agente e pode virar base de orçamento/meta.
+    """
+    if store is None or not agente_name:
+        return
+    try:
+        agente = store.get("Agente", agente_name)
+        if agente is None:
+            return
+        st = dict(agente.status or {})
+        runs = int(st.get("runs", 0)) + 1
+        total = round(float(st.get("custo_total_usd", 0) or 0) + (custo or 0), 6)
+        st.update({
+            "runs": runs,
+            "custo_total_usd": total,
+            "ultimo_custo_usd": round(custo or 0, 6),
+            "ultimo_modelo": modelo,
+            "ultima_execucao": datetime.now().isoformat(timespec="seconds"),
+        })
+        store.set_status("Agente", agente_name, st, datetime.now())
+    except Exception:  # noqa: BLE001 — telemetria não pode derrubar o run
+        pass
 
 
 def _stream_run_sse(run: dict, wfile) -> None:

@@ -1,0 +1,17 @@
+# Atlas CD (oneshot) — disparado pelo atlas-deploy.timer.
+# Instalação (uma vez, na Rasp):
+#   cp ~/atlas/scripts/atlas-deploy.{service,timer} ~/.config/systemd/user/
+#   chmod +x ~/atlas/scripts/atlas-deploy.sh
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now atlas-deploy.timer
+[Unit]
+Description=Atlas CD — pull do ref de produção + restart se houver novidades
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/atlas
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin
+# Opcional: ATLAS_DEPLOY_REF=main | ATLAS_DEPLOY_TRACK=tags
+ExecStart=%h/atlas/scripts/atlas-deploy.sh
