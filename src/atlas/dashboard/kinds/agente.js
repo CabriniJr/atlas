@@ -1,6 +1,8 @@
 /* Render especializada do Kind Agente (ADR-0020 / E7-25).
- * Abas: 💬 Chat | ⚙️ Config. Fullscreen destacável.
+ * Abas: 💬 Chat | 🔍 Curadoria | ⚙️ Config. Fullscreen destacável.
  * Chat: histórico em memória, POST /_chat, motor plugável (ADR-0022/0024).
+ * Curadoria: runs gated do modo code → diff + aprovar (branch) / descartar
+ *   (SPEC-CURADORIA-GATE / ADR-0028 §4).
  * Config: edição de todos os campos spec via formulário, PUT na API.
  */
 
@@ -11,6 +13,7 @@ registerRender('Agente', function renderAgente(r, container) {
   container.innerHTML = _agenteShell(r);
   _wireAgente(name, s, container);
   _loadAgenteTab(name, s, 'chat', container);
+  _updateCuradoriaBadge(name, container);
 });
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
@@ -41,6 +44,7 @@ function _agenteShell(r) {
     </div>
     <div class="ag-tabbar">
       <button class="ag-tab active" data-tab="chat">💬 Chat</button>
+      <button class="ag-tab" data-tab="curadoria">🔍 Curadoria<span class="ag-cur-badge" id="ag-cur-badge-${esc(r.name)}"></span></button>
       <button class="ag-tab" data-tab="config">⚙️ Config</button>
     </div>
     <div class="ag-body" id="ag-body-${esc(r.name)}"></div>
@@ -64,6 +68,8 @@ function _loadAgenteTab(name, s, tab, container) {
   if (tab === 'chat') {
     if (s.modo === 'code') _tabChatCode(name, s, body);
     else _tabChat(name, s, body);
+  } else if (tab === 'curadoria') {
+    _tabCuradoria(name, body, container);
   } else if (tab === 'config') {
     _tabAgenteConfig(name, body);
   }
@@ -505,6 +511,125 @@ async function _tabAgenteConfig(name, el) {
 
   el.querySelector(`#ag-cfg-reset-${CSS.escape(name)}`)
     ?.addEventListener('click', () => _tabAgenteConfig(name, el));
+}
+
+// ── Tab: Curadoria do gate (SPEC-CURADORIA-GATE / ADR-0028 §4) ──────────────────
+// Lista os runs gated pendentes do agente; revisa o diff e aprova (branch) / descarta.
+
+async function _pendingRuns(name) {
+  const all = await apiFetch(`${API}/AgentRun`);
+  return (all || [])
+    .filter(r => (r.spec || {}).agente === name && (r.status || {}).review === 'pending')
+    .sort((a, b) => ((b.spec || {}).started_at || '').localeCompare((a.spec || {}).started_at || ''));
+}
+
+async function _updateCuradoriaBadge(name, container) {
+  const badge = container.querySelector(`#ag-cur-badge-${CSS.escape(name)}`);
+  if (!badge) return;
+  try {
+    const n = (await _pendingRuns(name)).length;
+    badge.textContent = n ? ` • ${n}` : '';
+  } catch { badge.textContent = ''; }
+}
+
+async function _tabCuradoria(name, el, container) {
+  el.innerHTML = `<div class="ag-cur" style="padding:12px"><div style="color:var(--muted)">Carregando runs pendentes…</div></div>`;
+  let runs;
+  try {
+    runs = await _pendingRuns(name);
+  } catch (e) {
+    el.innerHTML = `<div style="padding:16px;color:var(--red)">Erro: ${esc(e.message)}</div>`;
+    return;
+  }
+  if (!runs.length) {
+    el.innerHTML = `<div style="padding:16px;color:var(--muted)">Nenhum run aguardando revisão. 🎉<br><span style="font-size:12px">Runs do modo <code>code</code> com gate ativo aparecem aqui ao terminar.</span></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="ag-cur" style="padding:8px">
+    <div style="font-size:12px;color:var(--muted);padding:4px 6px">${runs.length} run${runs.length !== 1 ? 's' : ''} aguardando revisão</div>
+    ${runs.map(r => _curItemHtml(r)).join('')}
+  </div>`;
+
+  runs.forEach(r => {
+    const item = el.querySelector(`#cur-${CSS.escape(r.name)}`);
+    item?.querySelector('.cur-review')?.addEventListener('click', () => _curLoadDiff(name, r, item, el, container));
+  });
+}
+
+function _curItemHtml(r) {
+  const sp = r.spec || {};
+  const task = (sp.task || '').split('\n')[0];
+  const when = (sp.started_at || '').replace('T', ' ').slice(0, 16);
+  return `<div class="cur-item" id="cur-${esc(r.name)}" style="border:1px solid var(--border);border-radius:8px;margin:6px 0;padding:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <code style="color:var(--muted)">#${esc(r.name)}</code>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(sp.task || '')}">${esc(task || '(sem descrição)')}</span>
+      <span style="font-size:11px;color:var(--muted)">${esc(when)}</span>
+      <button class="btn cur-review">🔍 Revisar</button>
+    </div>
+    <div class="cur-diff-wrap"></div>
+  </div>`;
+}
+
+async function _curLoadDiff(name, r, item, el, container) {
+  const wrap = item.querySelector('.cur-diff-wrap');
+  const btn = item.querySelector('.cur-review');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await apiFetch(`${API}/_agent_run/${encodeURIComponent(r.name)}/diff`);
+    const diff = (res.diff || '').trim();
+    wrap.innerHTML = `
+      <pre class="cur-diff" style="max-height:340px;overflow:auto;margin:8px 0;padding:8px;background:var(--bg2,#111);border-radius:6px;font-size:12px;line-height:1.4">${_diffHtml(diff)}</pre>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn cur-discard" style="color:var(--red);border-color:var(--red)">🗑 Descartar</button>
+        <button class="btn cur-approve" style="color:var(--green);border-color:var(--green)">✓ Aprovar → branch</button>
+        <span class="cur-status" style="font-size:12px;color:var(--muted)"></span>
+      </div>`;
+    const statusEl = wrap.querySelector('.cur-status');
+    wrap.querySelector('.cur-discard').addEventListener('click', () => _curAction(name, r, 'discard', wrap, item, el, container, statusEl));
+    wrap.querySelector('.cur-approve').addEventListener('click', () => _curAction(name, r, 'approve', wrap, item, el, container, statusEl));
+  } catch (e) {
+    wrap.innerHTML = `<div style="color:var(--red);padding:6px">Erro ao carregar diff: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Revisar';
+  }
+}
+
+async function _curAction(name, r, acao, wrap, item, el, container, statusEl) {
+  const btns = wrap.querySelectorAll('button');
+  btns.forEach(b => b.disabled = true);
+  statusEl.textContent = acao === 'approve' ? 'aprovando…' : 'descartando…';
+  try {
+    const res = await apiFetch(`${API}/_agent_run/${encodeURIComponent(r.name)}/${acao}`, { method: 'POST' });
+    if (acao === 'approve') {
+      statusEl.innerHTML = `✅ aprovado → <code>${esc(res.branch || '')}</code>`;
+    } else {
+      statusEl.textContent = '🗑 descartado';
+    }
+    // Some o item da lista e atualiza o badge.
+    setTimeout(() => { item.remove(); _updateCuradoriaBadge(name, container); _refreshCurEmpty(el); }, 900);
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">❌ ${esc(e.message)}</span>`;
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+function _refreshCurEmpty(el) {
+  if (!el.querySelector('.cur-item')) {
+    el.innerHTML = `<div style="padding:16px;color:var(--muted)">Nenhum run aguardando revisão. 🎉</div>`;
+  }
+}
+
+function _diffHtml(diff) {
+  if (!diff) return '<span style="color:var(--muted)">(sem mudanças não-commitadas no workspace)</span>';
+  return diff.split('\n').map(line => {
+    const c = esc(line);
+    if (line.startsWith('+') && !line.startsWith('+++')) return `<span style="color:var(--green)">${c}</span>`;
+    if (line.startsWith('-') && !line.startsWith('---')) return `<span style="color:var(--red)">${c}</span>`;
+    if (line.startsWith('@@')) return `<span style="color:var(--accent,#6cf)">${c}</span>`;
+    if (line.startsWith('diff ') || line.startsWith('index ')) return `<span style="color:var(--muted)">${c}</span>`;
+    return c;
+  }).join('\n');
 }
 
 function _agenteDefaultFields() {

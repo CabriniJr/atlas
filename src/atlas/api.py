@@ -29,7 +29,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from atlas import credentials, github_auth, scoping, sessions, users
+from atlas import credentials, curadoria, github_auth, scoping, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 
@@ -162,6 +162,39 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
         self.end_headers()
 
+    def _handle_curadoria(self, path: str, prefix: str) -> None:
+        """POST /_agent_run/{id}/discard|approve — curadoria do gate (SPEC-CURADORIA-GATE)."""
+        acao = "discard" if path.endswith("/discard") else "approve"
+        run_id = path[len(prefix):-len("/" + acao)]
+        owner, role = self._identity()
+        res = _curate_run(_store, run_id, owner, role)
+        if res is None:
+            self._json(404, {"error": f"run '{run_id}' não encontrado"})
+            return
+        ws = res.spec.get("workspace")
+        try:
+            if acao == "discard":
+                curadoria.discard_workspace(_PROJECT_DIR, ws)
+                res.status["review"] = "discarded"
+                _store.set_status("AgentRun", run_id, res.status, datetime.now())
+                self._json(200, {"id": run_id, "review": "discarded"})
+            else:
+                branch = f"agent/{run_id}"
+                task = (res.spec.get("task") or "").splitlines()[0][:60]
+                agente = res.spec.get("agente") or "agente"
+                msg = (
+                    f"agent({agente}): {task}\n\n"
+                    f"Curadoria do run {run_id} (modo code).\n\n"
+                    "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+                )
+                curadoria.approve_to_branch(_PROJECT_DIR, ws, branch, msg)
+                res.status["review"] = "approved"
+                res.status["branch"] = branch
+                _store.set_status("AgentRun", run_id, res.status, datetime.now())
+                self._json(200, {"id": run_id, "review": "approved", "branch": branch})
+        except Exception as exc:  # noqa: BLE001
+            self._json(500, {"error": f"falha na curadoria ({acao}): {exc}"})
+
     def _handle_auth_post(self, path: str, body: dict) -> None:
         """Endpoints públicos de login/sessão (ADR-0027 F4)."""
         if path == _API_PREFIX + "/_auth/login":
@@ -254,6 +287,22 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             _stream_run_sse(run, self.wfile)
+            return
+
+        # GET /_agent_run/{run_id}/diff → diff da curadoria (SPEC-CURADORIA-GATE)
+        if path.startswith(_ar_prefix) and path.endswith("/diff"):
+            run_id = path[len(_ar_prefix):-len("/diff")]
+            owner, role = self._identity()
+            res = _curate_run(_store, run_id, owner, role)
+            if res is None:
+                self._json(404, {"error": f"run '{run_id}' não encontrado"})
+                return
+            try:
+                diff = curadoria.workspace_diff(_PROJECT_DIR, res.spec.get("workspace"))
+            except Exception as exc:  # noqa: BLE001
+                self._json(500, {"error": f"falha ao calcular diff: {exc}"})
+                return
+            self._json(200, {"id": run_id, "diff": diff, "review": res.status.get("review")})
             return
 
         # GET /_agent_run/{run_id} → estado do run (done, event count)
@@ -399,6 +448,12 @@ class _Handler(BaseHTTPRequestHandler):
                 daemon=True, name=f"agent-run-{run['id']}",
             ).start()
             self._json(202, {"run_id": run["id"], "agente": agente_name})
+            return
+
+        # Curadoria do gate (SPEC-CURADORIA-GATE): descartar/aprovar o diff de um run.
+        _ar_prefix = _API_PREFIX + "/_agent_run/"
+        if path.startswith(_ar_prefix) and path.endswith(("/discard", "/approve")):
+            self._handle_curadoria(path, _ar_prefix)
             return
 
         # GitHub device flow (ADR-0027 F3): conectar a conta do usuário sem callback.
@@ -1190,16 +1245,34 @@ def summarize_run(run: dict) -> dict:
         status = "error"
     else:
         status = "done"
+    # Pede curadoria só quando o run foi gated e terminou bem (SPEC-CURADORIA-GATE).
+    review = "pending" if (run.get("gated") and status == "done") else None
     return {
         "agente": run.get("agente"),
         "task": run.get("task"),
         "owner": run.get("owner"),
+        "workspace": run.get("workspace"),
         "status": status,
+        "review": review,
         "cost_usd": run.get("cost", 0.0),
         "events": len(events),
         "started_at": run.get("started_at"),
         "finished_at": run.get("finished_at"),
     }
+
+
+def _curate_run(
+    store: ResourceStore, run_id: str, owner: str | None, role: str | None,
+) -> Resource | None:
+    """Resolve o ``AgentRun`` para curadoria, respeitando o dono (ADR-0027).
+
+    Retorna ``None`` se não existe **ou** se é de outro dono (caller responde 404 —
+    não revela a existência de recurso alheio, como ``scoping.py``).
+    """
+    res = store.get("AgentRun", run_id)
+    if res is None or not scoping.can_see(res, owner, role):
+        return None
+    return res
 
 
 def persist_agent_run(store: ResourceStore | None, run: dict) -> None:
@@ -1212,14 +1285,20 @@ def persist_agent_run(store: ResourceStore | None, run: dict) -> None:
     if store is None:
         return
     s = summarize_run(run)
+    status = {k: s[k] for k in ("status", "cost_usd", "events", "finished_at")}
+    if s["review"] is not None:
+        status["review"] = s["review"]
     try:
         store.apply(
             Resource(
                 kind="AgentRun",
                 name=run["id"],
                 labels={"owner": s["owner"] or _DEFAULT_OWNER, "origem": "agent-run"},
-                spec={"agente": s["agente"], "task": s["task"], "started_at": s["started_at"]},
-                status={k: s[k] for k in ("status", "cost_usd", "events", "finished_at")},
+                spec={
+                    "agente": s["agente"], "task": s["task"],
+                    "started_at": s["started_at"], "workspace": s["workspace"],
+                },
+                status=status,
             ),
             datetime.now(),
         )
@@ -1331,6 +1410,8 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         "false", "0", "no", "",
     )
     amplo = cwd == str(Path(_PROJECT_DIR).resolve())
+    run["workspace"] = os.path.relpath(cwd, _PROJECT_DIR)  # relativo p/ a curadoria
+    run["gated"] = gated
     _emit(run, {
         "type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd,
         "workspace_amplo": amplo, "gated": gated,

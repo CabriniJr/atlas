@@ -16,6 +16,7 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-06-26 | Tech Lead | Proposta — consolida as §Pendências de segurança do [ADR-0025](ADR-0025-agente-modo-code.md) (Tema 1 do hardening) | — |
+| 0.2    | 2026-06-26 | Tech Lead | Implementado: workspace/tools/concorrência/gate/persistência + UI de curadoria (SPEC-CURADORIA-GATE) | — |
 
 ---
 
@@ -125,7 +126,10 @@ recomendar a configuração endurecida.
   constituição; estende o schema do Kind `Agente` (ADR-0024).
 
 ## Pendências
-- **UI de curadoria** do gate (revisar/promover/descartar diff dentro do app).
+- ~~**UI de curadoria** do gate~~ — **entregue** (SPEC-CURADORIA-GATE: aba 🔍 Curadoria
+  no Agente; `curadoria.py`; endpoints `diff`/`discard`/`approve`).
+- **Isolamento por git worktree** do run (hoje a working tree é compartilhada; `approve`
+  troca de branch no repo vivo → dev-time).
 - **Sandbox de SO** real por run (container/namespace) — endurecimento forte futuro.
 - **Retenção/limpeza** dos runs persistidos (alinhar com E1-08 observabilidade e o
   item 6.3 de [`proximos-passos.md`](../../roadmap/proximos-passos.md)).

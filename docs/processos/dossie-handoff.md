@@ -175,16 +175,19 @@ admin sem tela de login.
 
 ## 7. Pendências/known issues abertas
 
-- **E7-28** — endurecer o modo `code`. **Em curso** (ADR-0028, branch
-  `feat/hardening-agente-code`): já entraram **workspace restrito**
+- **E7-28** — endurecer o modo `code`. **Feito** (ADR-0028, branch
+  `feat/hardening-agente-code`): **workspace restrito**
   (`resolve_workspace` confina cwd/`--add-dir`, recusa traversal/symlink),
   **allow/deny de tools** (`build_tool_args` → `--allowedTools`/`--disallowedTools`,
   campos `allowed_tools`/`denied_tools` no schema), **teto de concorrência**
-  (`active_runs_count` + `ATLAS_AGENT_MAX_CONCURRENT`, default 3 → 429), **flag de
-  gate** (`spec.gate`, carimbada no `init`) e **persistência de runs**
-  (`persist_agent_run` → Kind `AgentRun` escopado por `labels.owner`; a API genérica
-  do ADR-0027 já serve/escopa o histórico). **Falta:** UI de curadoria
-  (revisar/promover/descartar diff).
+  (`active_runs_count` + `ATLAS_AGENT_MAX_CONCURRENT`, default 3 → 429), **gate**
+  (`spec.gate`, carimbada no `init`), **persistência de runs**
+  (`persist_agent_run` → Kind `AgentRun` escopado por `labels.owner`) e **UI de
+  curadoria** ([curadoria.py](../../src/atlas/curadoria.py) + aba 🔍 Curadoria no
+  Agente: diff → aprovar em branch `agent/<id>` / descartar; endpoints
+  `GET/POST /_agent_run/{id}/diff|discard|approve` escopados por dono).
+  **Limitações documentadas** (SPEC-CURADORIA): working tree compartilhada; `approve`
+  no repo vivo da Rasp é dev-time.
 - **Sessões em memória** — perdidas no restart (usuário refaz login). Persistir é
   evolução (ADR-0027 §Pendências).
 - **Chave mestra do cofre** — sem rotação/backup formalizados (ADR-0027 §Pendências).
