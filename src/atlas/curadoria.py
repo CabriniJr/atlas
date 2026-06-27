@@ -41,7 +41,7 @@ def discard_workspace(repo: str, path: str | None) -> None:
     root = Path(repo)
     rel = _rel(path)
     gitcmd.git(["checkout", "--", rel], cwd=root, check=False)  # rastreados → HEAD
-    gitcmd.git(["clean", "-fd", "--", rel], cwd=root)           # remove não-rastreados
+    gitcmd.git(["clean", "-fd", "--", rel], cwd=root)  # remove não-rastreados
 
 
 def approve_to_branch(repo: str, path: str | None, branch: str, message: str) -> str:

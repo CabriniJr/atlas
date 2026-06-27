@@ -63,7 +63,7 @@ _KIND_ALIASES: dict[str, str] = {
     "tasks": "Task",
     "job": "Job",
     "jobs": "Job",
-    "routine": "Job",   # alias legado → Job (ADR-0021)
+    "routine": "Job",  # alias legado → Job (ADR-0021)
     "routines": "Job",
     "rot": "Job",
     "doc": "Doc",

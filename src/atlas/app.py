@@ -126,8 +126,9 @@ def run(config: Config | None = None) -> None:
         owner_primario = os.environ.get("ATLAS_DEFAULT_OWNER", "admin")
         migrados = scoping.migrate_unowned(store, owner_primario)
         if migrados:
-            _log.info("Isolamento: %d recurso(s) sem dono migrado(s) p/ '%s'.",
-                      migrados, owner_primario)
+            _log.info(
+                "Isolamento: %d recurso(s) sem dono migrado(s) p/ '%s'.", migrados, owner_primario
+            )
     except Exception:  # noqa: BLE001 — migração não pode derrubar o boot (ADR-0006)
         _log.exception("Falha ao migrar recursos sem dono; seguindo.")
 

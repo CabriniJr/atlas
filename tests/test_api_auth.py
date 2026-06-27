@@ -61,7 +61,8 @@ def test_login_usuario_inexistente_falha(store):
 
 def test_github_login_conecta_cria_user_credencial_e_sessao(store, monkeypatch):
     monkeypatch.setattr(
-        gh, "poll_access_token",
+        gh,
+        "poll_access_token",
         lambda dc, **kw: {"status": "connected", "access_token": "gho_X", "scope": "repo"},
     )
     monkeypatch.setattr(gh, "fetch_github_login", lambda tok, **kw: "CabriniJr")
@@ -77,7 +78,8 @@ def test_github_login_conecta_cria_user_credencial_e_sessao(store, monkeypatch):
 
 def test_github_login_pendente_nao_cria_sessao(store, monkeypatch):
     monkeypatch.setattr(
-        gh, "poll_access_token",
+        gh,
+        "poll_access_token",
         lambda dc, **kw: {"status": "pending", "error": "authorization_pending"},
     )
     body, token = api._github_login_poll(store, device_code="DEV")
@@ -171,7 +173,9 @@ def test_admin_cria_usuario_e_member_nao(server_token):
     store, port = server_token
     # admin (Bearer token) cria um usuário com senha
     st, out, _ = _req(
-        port, "POST", "/apis/atlas/v1/_auth/users",
+        port,
+        "POST",
+        "/apis/atlas/v1/_auth/users",
         body={"user": "novo", "password": "p", "role": "member"},
         bearer="secret-token",
     )
@@ -180,7 +184,5 @@ def test_admin_cria_usuario_e_member_nao(server_token):
     assert users.verify_password("novo", "p") is True
 
     # sem admin → 403
-    st, _, _ = _req(
-        port, "POST", "/apis/atlas/v1/_auth/users", body={"user": "x", "password": "p"}
-    )
+    st, _, _ = _req(port, "POST", "/apis/atlas/v1/_auth/users", body={"user": "x", "password": "p"})
     assert st == 403

@@ -44,13 +44,13 @@ _SESSION_COOKIE = "atlas_session"
 
 def _set_cookie(token: str) -> str:
     """Cookie de sessão httpOnly (SameSite=Lax). HTTP na Tailnet ⇒ sem Secure."""
-    return (
-        f"{_SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={sessions._DEFAULT_TTL}"
-    )
+    return f"{_SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={sessions._DEFAULT_TTL}"
 
 
 def _clear_cookie() -> str:
     return f"{_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+
+
 _PORT = int(os.environ.get("ATLAS_API_PORT", "8080"))
 # Raiz do projeto Atlas — usada pelo agente modo=code para cwd + --add-dir
 _PROJECT_DIR = str(
@@ -83,12 +83,14 @@ def _dashboard_static(path: str) -> tuple[bytes, str] | None:
     if not target.is_file():
         return None
     ext = target.suffix.lower()
-    ct_map = {".js": "application/javascript", ".css": "text/css",
-              ".html": "text/html; charset=utf-8", ".json": "application/json"}
+    ct_map = {
+        ".js": "application/javascript",
+        ".css": "text/css",
+        ".html": "text/html; charset=utf-8",
+        ".json": "application/json",
+    }
     ct = ct_map.get(ext, "application/octet-stream")
     return target.read_bytes(), ct
-
-
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -165,7 +167,7 @@ class _Handler(BaseHTTPRequestHandler):
     def _handle_curadoria(self, path: str, prefix: str) -> None:
         """POST /_agent_run/{id}/discard|approve — curadoria do gate (SPEC-CURADORIA-GATE)."""
         acao = "discard" if path.endswith("/discard") else "approve"
-        run_id = path[len(prefix):-len("/" + acao)]
+        run_id = path[len(prefix) : -len("/" + acao)]
         owner, role = self._identity()
         res = _curate_run(_store, run_id, owner, role)
         if res is None:
@@ -216,7 +218,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "user obrigatório"})
                 return
             u = users.create_user(
-                _store, name,
+                _store,
+                name,
                 display_name=body.get("display_name", "").strip(),
                 role=body.get("role", "member").strip() or "member",
                 password=body.get("password") or None,
@@ -274,7 +277,7 @@ class _Handler(BaseHTTPRequestHandler):
         # SSE stream de um run agêntico: GET /_agent_run/{run_id}/stream
         _ar_prefix = _API_PREFIX + "/_agent_run/"
         if path.startswith(_ar_prefix) and path.endswith("/stream"):
-            run_id = path[len(_ar_prefix):-len("/stream")]
+            run_id = path[len(_ar_prefix) : -len("/stream")]
             with _runs_lock:
                 run = _runs.get(run_id)
             if run is None:
@@ -291,7 +294,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         # GET /_agent_run/{run_id}/diff → diff da curadoria (SPEC-CURADORIA-GATE)
         if path.startswith(_ar_prefix) and path.endswith("/diff"):
-            run_id = path[len(_ar_prefix):-len("/diff")]
+            run_id = path[len(_ar_prefix) : -len("/diff")]
             owner, role = self._identity()
             res = _curate_run(_store, run_id, owner, role)
             if res is None:
@@ -307,19 +310,24 @@ class _Handler(BaseHTTPRequestHandler):
 
         # GET /_agent_run/{run_id} → estado do run (done, event count)
         if path.startswith(_ar_prefix):
-            run_id = path[len(_ar_prefix):]
+            run_id = path[len(_ar_prefix) :]
             with _runs_lock:
                 run = _runs.get(run_id)
             if run is None:
                 self._json(404, {"error": f"run '{run_id}' não encontrado"})
                 return
             with run["cond"]:
-                self._json(200, {
-                    "id": run["id"], "agente": run["agente"],
-                    "task": run["task"], "done": run["done"],
-                    "event_count": len(run["events"]),
-                    "started_at": run["started_at"],
-                })
+                self._json(
+                    200,
+                    {
+                        "id": run["id"],
+                        "agente": run["agente"],
+                        "task": run["task"],
+                        "done": run["done"],
+                        "event_count": len(run["events"]),
+                        "started_at": run["started_at"],
+                    },
+                )
             return
 
         if path == _API_PREFIX:
@@ -397,12 +405,15 @@ class _Handler(BaseHTTPRequestHandler):
             if repo and not name:
                 name = _resolve_repo_sync_job(repo) or ""
                 if not name:
-                    self._json(404, {
-                        "ok": False,
-                        "error": f"nenhum Job de sync para o repo '{repo}' "
-                                 "(esperado um Job com spec.coletar=repo-sync e spec.label="
-                                 f"'{repo}')",
-                    })
+                    self._json(
+                        404,
+                        {
+                            "ok": False,
+                            "error": f"nenhum Job de sync para o repo '{repo}' "
+                            "(esperado um Job com spec.coletar=repo-sync e spec.label="
+                            f"'{repo}')",
+                        },
+                    )
                     return
             if not name:
                 self._json(400, {"error": "routine ou repo obrigatório"})
@@ -436,16 +447,21 @@ class _Handler(BaseHTTPRequestHandler):
                 return
             # Teto de concorrência (ADR-0028 §3): protege a Rasp e a assinatura.
             if active_runs_count() >= _RUNS_CONCURRENT_MAX:
-                self._json(429, {
-                    "error": f"limite de {_RUNS_CONCURRENT_MAX} runs simultâneos atingido",
-                    "retry": True,
-                })
+                self._json(
+                    429,
+                    {
+                        "error": f"limite de {_RUNS_CONCURRENT_MAX} runs simultâneos atingido",
+                        "retry": True,
+                    },
+                )
                 return
             run = _new_run(agente_name, mensagem)
             run["owner"] = self._owner()
             threading.Thread(
-                target=_run_agent_bg, args=(run, _store),
-                daemon=True, name=f"agent-run-{run['id']}",
+                target=_run_agent_bg,
+                args=(run, _store),
+                daemon=True,
+                name=f"agent-run-{run['id']}",
             ).start()
             self._json(202, {"run_id": run["id"], "agente": agente_name})
             return
@@ -461,20 +477,26 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, _github_device_start(body.get("scope", "")))
             return
         if path == _API_PREFIX + "/_github/device/poll":
-            self._json(200, _github_device_poll(
-                _store,
-                owner=body.get("owner", "").strip() or self._owner(),
-                device_code=body.get("device_code", "").strip(),
-            ))
+            self._json(
+                200,
+                _github_device_poll(
+                    _store,
+                    owner=body.get("owner", "").strip() or self._owner(),
+                    device_code=body.get("device_code", "").strip(),
+                ),
+            )
             return
         # Fallback: colar um PAT quando o OAuth App não está configurado.
         if path == _API_PREFIX + "/_github/pat":
-            self._json(200, _github_pat(
-                _store,
-                owner=body.get("owner", "").strip() or self._owner(),
-                token=body.get("token", "").strip(),
-                account=body.get("account", "").strip(),
-            ))
+            self._json(
+                200,
+                _github_pat(
+                    _store,
+                    owner=body.get("owner", "").strip() or self._owner(),
+                    token=body.get("token", "").strip(),
+                    account=body.get("account", "").strip(),
+                ),
+            )
             return
 
         if path != _API_PREFIX + "/_cmd":
@@ -922,8 +944,13 @@ def _ai_insight(scope: str, name: str = "", model: str = "claude-haiku-4-5-20251
             used_model = res.get("modelo", model)
             doc_name = _salvar_insight_doc(scope, name, resposta, used_model)
             return {
-                "ok": True, "scope": scope, "name": name, "model": used_model,
-                "agente": agente_name, "insight": resposta, "doc": doc_name,
+                "ok": True,
+                "scope": scope,
+                "name": name,
+                "model": used_model,
+                "agente": agente_name,
+                "insight": resposta,
+                "doc": doc_name,
             }
         # Fallback: Agente ausente → prompt embutido (retrocompat)
         prompt = (
@@ -1040,8 +1067,12 @@ def _github_login_poll(store: ResourceStore, *, device_code: str) -> tuple[dict,
         users.create_user(store, user, display_name=login)
     # guarda a credencial cifrada (o repo-sync passa a usar a conta do usuário)
     credentials.save_credential(
-        store, owner=user, provider="github", secret=token,
-        account=login, scopes=out.get("scope", ""),
+        store,
+        owner=user,
+        provider="github",
+        secret=token,
+        account=login,
+        scopes=out.get("scope", ""),
     )
     sess = sessions.create_session(user, role=_user_role(store, user))
     return ({"status": "connected", "user": user}, sess)
@@ -1113,8 +1144,7 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
         ctx_inject = _schema_context(store, completo=(nivel == "completo"))
 
     prompt = (
-        template
-        .replace("{mensagem}", mensagem)
+        template.replace("{mensagem}", mensagem)
         .replace("{agora}", agora_str)
         .replace("{schema}", ctx_inject)
     )
@@ -1125,6 +1155,7 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
     invoke_kwargs: dict = {"modelo": modelo, "timeout": timeout, "motor": motor}
     if motor == "ollama" and endpoint:
         import atlas.ia as _ia_mod
+
         try:
             resposta = _ia_mod.invocar_ollama(prompt, modelo, endpoint, timeout)
         except InvocarErro as e:
@@ -1137,6 +1168,7 @@ def _agente_chat(agente_name: str, mensagem: str, store: ResourceStore) -> dict:
 
     # Extrai comandos /apply da resposta para o front destacar (E7-24)
     import re
+
     commands = re.findall(r"(?m)^/?apply\s+\S[^\n]*", resposta)
     result: dict = {"response": resposta, "motor": motor, "modelo": modelo}
     if commands:
@@ -1159,10 +1191,7 @@ def _schema_context(store: ResourceStore, *, completo: bool = False) -> str:
         if info["meta"].get("hidden"):
             continue
         if completo:
-            campos = "; ".join(
-                f"{f['k']} ({f['type']}): {f.get('hint','')}"
-                for f in info["spec"]
-            )
+            campos = "; ".join(f"{f['k']} ({f['type']}): {f.get('hint', '')}" for f in info["spec"])
         else:
             campos = ", ".join(f["k"] for f in info["spec"])
         linhas.append(f"- {kind}: [{campos}]")
@@ -1262,7 +1291,10 @@ def summarize_run(run: dict) -> dict:
 
 
 def _curate_run(
-    store: ResourceStore, run_id: str, owner: str | None, role: str | None,
+    store: ResourceStore,
+    run_id: str,
+    owner: str | None,
+    role: str | None,
 ) -> Resource | None:
     """Resolve o ``AgentRun`` para curadoria, respeitando o dono (ADR-0027).
 
@@ -1295,8 +1327,10 @@ def persist_agent_run(store: ResourceStore | None, run: dict) -> None:
                 name=run["id"],
                 labels={"owner": s["owner"] or _DEFAULT_OWNER, "origem": "agent-run"},
                 spec={
-                    "agente": s["agente"], "task": s["task"],
-                    "started_at": s["started_at"], "workspace": s["workspace"],
+                    "agente": s["agente"],
+                    "task": s["task"],
+                    "started_at": s["started_at"],
+                    "workspace": s["workspace"],
                 },
                 status=status,
             ),
@@ -1391,13 +1425,18 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     # O prompt é argumento posicional — deve vir DEPOIS de todos os flags
     # stream-json exige --verbose (retorna eventos em tempo real)
     args = [
-        claude_bin, "-p",
-        "--output-format", "stream-json",
+        claude_bin,
+        "-p",
+        "--output-format",
+        "stream-json",
         "--verbose",
         "--dangerously-skip-permissions",
-        "--model", modelo,
-        "--add-dir", cwd,
-        "--append-system-prompt", full_system,
+        "--model",
+        modelo,
+        "--add-dir",
+        cwd,
+        "--append-system-prompt",
+        full_system,
     ]
     # Allow/deny de tools por Agente (ADR-0028 §2) — vazios = sem restrição.
     args += build_tool_args(spec.get("allowed_tools"), spec.get("denied_tools"))
@@ -1406,16 +1445,31 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     # Gate de curadoria (ADR-0028 §4): default true p/ code. Nada gerado aqui é
     # auto-comitado/ativado — a promoção é a revisão humana do diff (CLAUDE.md §6).
     gate_raw = spec.get("gate", True)
-    gated = gate_raw if isinstance(gate_raw, bool) else str(gate_raw).strip().lower() not in (
-        "false", "0", "no", "",
+    gated = (
+        gate_raw
+        if isinstance(gate_raw, bool)
+        else str(gate_raw).strip().lower()
+        not in (
+            "false",
+            "0",
+            "no",
+            "",
+        )
     )
     amplo = cwd == str(Path(_PROJECT_DIR).resolve())
     run["workspace"] = os.path.relpath(cwd, _PROJECT_DIR)  # relativo p/ a curadoria
     run["gated"] = gated
-    _emit(run, {
-        "type": "init", "agente": agente_name, "modelo": modelo, "cwd": cwd,
-        "workspace_amplo": amplo, "gated": gated,
-    })
+    _emit(
+        run,
+        {
+            "type": "init",
+            "agente": agente_name,
+            "modelo": modelo,
+            "cwd": cwd,
+            "workspace_amplo": amplo,
+            "gated": gated,
+        },
+    )
 
     proc = None
     custo = 0.0  # acumula o gasto de IA deste run (evento result)
@@ -1436,14 +1490,18 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             try:
                 event = json.loads(line)
                 if event.get("type") == "result":
-                    custo = float(event.get("total_cost_usd") or event.get("cost_usd") or 0) or custo
+                    custo = (
+                        float(event.get("total_cost_usd") or event.get("cost_usd") or 0) or custo
+                    )
                 _emit(run, event)
             except json.JSONDecodeError:
                 _emit(run, {"type": "raw", "text": line})
 
         proc.wait(timeout=30)
         if proc.returncode != 0:
-            _emit(run, {"type": "error", "message": f"claude encerrou com código {proc.returncode}"})
+            _emit(
+                run, {"type": "error", "message": f"claude encerrou com código {proc.returncode}"}
+            )
         else:
             _emit(run, {"type": "done"})
         _registrar_gasto_agente(store, agente_name, custo, modelo)
@@ -1464,7 +1522,10 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
 
 
 def _registrar_gasto_agente(
-    store: ResourceStore, agente_name: str, custo: float, modelo: str,
+    store: ResourceStore,
+    agente_name: str,
+    custo: float,
+    modelo: str,
 ) -> None:
     """Acumula gasto de IA no status do Agente (E7-44): runs, custo total, último.
 
@@ -1480,13 +1541,15 @@ def _registrar_gasto_agente(
         st = dict(agente.status or {})
         runs = int(st.get("runs", 0)) + 1
         total = round(float(st.get("custo_total_usd", 0) or 0) + (custo or 0), 6)
-        st.update({
-            "runs": runs,
-            "custo_total_usd": total,
-            "ultimo_custo_usd": round(custo or 0, 6),
-            "ultimo_modelo": modelo,
-            "ultima_execucao": datetime.now().isoformat(timespec="seconds"),
-        })
+        st.update(
+            {
+                "runs": runs,
+                "custo_total_usd": total,
+                "ultimo_custo_usd": round(custo or 0, 6),
+                "ultimo_modelo": modelo,
+                "ultima_execucao": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
         store.set_status("Agente", agente_name, st, datetime.now())
     except Exception:  # noqa: BLE001 — telemetria não pode derrubar o run
         pass
@@ -1558,7 +1621,7 @@ def _agent_api_context(store: ResourceStore) -> str:
         "  Criar/atualizar (idempotente):",
         f"    curl -s -X PUT {base}/<Kind>/<name> \\",
         "      -H 'Content-Type: application/json' \\",
-        "      -d '{\"spec\": {<campos>}, \"labels\": {<labels>}}'",
+        '      -d \'{"spec": {<campos>}, "labels": {<labels>}}\'',
         f"  Listar:    curl -s {base}/<Kind>",
         f"  Detalhe:   curl -s {base}/<Kind>/<name>",
         f"  Remover:   curl -s -X DELETE {base}/<Kind>/<name>",
@@ -1597,15 +1660,15 @@ def _agent_api_context(store: ResourceStore) -> str:
         "",
         "IMPORTANTE — tornar um Repo sincronizável (criar Repo + seu Job de sync):",
         "  1) Crie o Repo:",
-        f"     PUT {base}/Repo/<repo> -d '{{\"spec\": {{\"url\": \"https://github.com/u/r\"}}}}'",
+        f'     PUT {base}/Repo/<repo> -d \'{{"spec": {{"url": "https://github.com/u/r"}}}}\'',
         "  2) Crie o Job de sync — o vínculo é spec.label (= nome do Repo), e",
         "     spec.coletar DEVE ser exatamente 'repo-sync'. O NOME do Job é livre",
         "     (convenção sugerida: '<repo>-sync', mas o que liga é o label):",
-        f"     PUT {base}/Job/<repo>-sync -d '{{\"spec\": {{",
+        f'     PUT {base}/Job/<repo>-sync -d \'{{"spec": {{',
         '       "coletar": "repo-sync", "label": "<repo>", "schedule": "@daily 09:00",',
         '       "model": "none", "active": true, "description": "Sincroniza <repo>"',
         "     }}}}'",
-        "  Rodar sob demanda: POST /_run -d '{\"repo\": \"<repo>\"}' (resolve o Job por label).",
+        '  Rodar sob demanda: POST /_run -d \'{"repo": "<repo>"}\' (resolve o Job por label).',
         "",
         "Ao criar um novo TIPO de coisa, crie um novo Kind (não force em Kind existente).",
         "",

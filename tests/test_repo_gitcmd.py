@@ -118,7 +118,10 @@ def test_git_prepende_auth_args(monkeypatch):
     gitcmd.git(["fetch", "origin"], auth_args=["-c", "http.extraheader=Authorization: Basic X"])
     # auth_args vêm logo após "git", antes do subcomando
     assert capturado["args"][:4] == [
-        "git", "-c", "http.extraheader=Authorization: Basic X", "fetch",
+        "git",
+        "-c",
+        "http.extraheader=Authorization: Basic X",
+        "fetch",
     ]
 
 

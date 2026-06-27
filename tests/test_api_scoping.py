@@ -75,8 +75,9 @@ def _req(port, method, path, *, body=None, cookie=None, bearer=None):
 
 
 def _login(port, user, password):
-    _st, _out, sc = _req(port, "POST", "/apis/atlas/v1/_auth/login",
-                         body={"user": user, "password": password})
+    _st, _out, sc = _req(
+        port, "POST", "/apis/atlas/v1/_auth/login", body={"user": user, "password": password}
+    )
     return sc.split(";")[0]
 
 

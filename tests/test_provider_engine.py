@@ -29,8 +29,12 @@ def store(tmp_path):
         Resource(
             kind="LLMProvider",
             name="ollama-local",
-            spec={"motor": "ollama", "modelo": "gemma4",
-                  "endpoint": "http://x:11434", "timeout": 30},
+            spec={
+                "motor": "ollama",
+                "modelo": "gemma4",
+                "endpoint": "http://x:11434",
+                "timeout": 30,
+            },
         ),
         _AGORA,
     )
@@ -125,8 +129,12 @@ def test_rotina_from_job_mapeia_spec(store):
         kind="Job",
         name="meu-job",
         spec={
-            "coletar": "repo-sync", "label": "r1", "schedule": "@daily 09:00",
-            "model": "none", "active": True, "description": "desc",
+            "coletar": "repo-sync",
+            "label": "r1",
+            "schedule": "@daily 09:00",
+            "model": "none",
+            "active": True,
+            "description": "desc",
         },
     )
     rot = _rotina_from_job(job)

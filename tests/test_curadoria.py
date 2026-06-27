@@ -122,8 +122,13 @@ def test_approve_branch_existente_erro(repo):
 def _store_with_run(tmp_path, owner="luigi"):
     store = ResourceStore(str(tmp_path / "s.db"))
     store.apply(
-        Resource(kind="AgentRun", name="r1", labels={"owner": owner},
-                 spec={"agente": "a", "workspace": "ws"}, status={"review": "pending"}),
+        Resource(
+            kind="AgentRun",
+            name="r1",
+            labels={"owner": owner},
+            spec={"agente": "a", "workspace": "ws"},
+            status={"review": "pending"},
+        ),
         datetime.now(),
     )
     return store

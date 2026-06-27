@@ -31,10 +31,36 @@ _log = logging.getLogger(__name__)
 # Presets de extensão (minúsculas, com ponto).
 _TEXT_EXTS = {".md", ".mdx", ".rst", ".txt", ".adoc", ".tex", ".csv"}
 _CODE_EXTS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".c", ".h", ".cpp", ".hpp", ".cc",
-    ".go", ".rs", ".java", ".kt", ".rb", ".php", ".cs", ".swift", ".scala",
-    ".sh", ".sql", ".html", ".css", ".scss", ".vue", ".toml", ".yaml", ".yml",
-    ".json", ".xml",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".c",
+    ".h",
+    ".cpp",
+    ".hpp",
+    ".cc",
+    ".go",
+    ".rs",
+    ".java",
+    ".kt",
+    ".rb",
+    ".php",
+    ".cs",
+    ".swift",
+    ".scala",
+    ".sh",
+    ".sql",
+    ".html",
+    ".css",
+    ".scss",
+    ".vue",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".xml",
 }
 _OFFICE_EXTS = {".docx", ".pptx", ".odt"}
 _PDF_EXTS = {".pdf"}
@@ -145,8 +171,14 @@ def _slug(path: str) -> str:
 
 
 def _serializar_um(
-    repo_dir, label: str, sha: str, path: str,
-    preset: str, extra_globs: list[str], store: ResourceStore, ctx,
+    repo_dir,
+    label: str,
+    sha: str,
+    path: str,
+    preset: str,
+    extra_globs: list[str],
+    store: ResourceStore,
+    ctx,
 ) -> bool:
     """Serializa um único ``path`` (no commit ``sha``) → Doc. True se persistiu."""
     if not should_serialize(path, preset, extra_globs):
@@ -211,12 +243,17 @@ def snapshot_tree(
     """
     if preset == "off":
         return {
-            "serializados": 0, "total": 0, "pulados": 0,
-            "truncado": False, "erro": "serialize=off",
+            "serializados": 0,
+            "total": 0,
+            "pulados": 0,
+            "truncado": False,
+            "erro": "serialize=off",
         }
-    sha = gitcmd.branch_head(repo_dir, ref) if ref != "HEAD" else gitcmd.git(
-        ["rev-parse", "HEAD"], cwd=repo_dir, check=False
-    ).strip()
+    sha = (
+        gitcmd.branch_head(repo_dir, ref)
+        if ref != "HEAD"
+        else gitcmd.git(["rev-parse", "HEAD"], cwd=repo_dir, check=False).strip()
+    )
     paths = gitcmd.list_tree(repo_dir, ref)
     candidatos = [p for p in paths if should_serialize(p, preset, extra_globs)]
     truncado = len(candidatos) > max_files

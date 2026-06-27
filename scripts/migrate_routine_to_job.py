@@ -27,9 +27,7 @@ def run(db_path: str) -> None:
     agora = datetime.now().isoformat()
 
     # 1. Routine → Job
-    routines = conn.execute(
-        "SELECT name FROM resources WHERE kind = 'Routine'"
-    ).fetchall()
+    routines = conn.execute("SELECT name FROM resources WHERE kind = 'Routine'").fetchall()
     migrated = 0
     for row in routines:
         name = row["name"]
@@ -38,9 +36,7 @@ def run(db_path: str) -> None:
         ).fetchone()
         if existing_job:
             # já existe como Job — apaga o Routine duplicado
-            conn.execute(
-                "DELETE FROM resources WHERE kind = 'Routine' AND name = ?", (name,)
-            )
+            conn.execute("DELETE FROM resources WHERE kind = 'Routine' AND name = ?", (name,))
             print(f"  [skip-dup] Routine/{name} → Job/{name} já existia; Routine removido")
         else:
             conn.execute(
@@ -78,9 +74,7 @@ def run(db_path: str) -> None:
             "SELECT 1 FROM resources WHERE kind = 'Doc' AND name = 'kind-job'"
         ).fetchone()
         if existing_job_doc:
-            conn.execute(
-                "DELETE FROM resources WHERE kind = 'Doc' AND name = 'kind-routine'"
-            )
+            conn.execute("DELETE FROM resources WHERE kind = 'Doc' AND name = 'kind-routine'")
             print("  [skip-dup] Doc/kind-routine deletado (Doc/kind-job já existe)")
         else:
             conn.execute(
