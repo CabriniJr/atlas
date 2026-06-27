@@ -195,9 +195,11 @@ admin sem tela de login.
   corrompido) → sobrevivem a restart. Path: `ATLAS_SESSIONS_PATH` ou `<dir do DB>/sessions.json`.
 - ~~**Chave mestra do cofre** — sem rotação/backup~~ — **resolvido** (item 1.4):
   `secrets_store.rotate_key()` + `scripts/rotate_secret_key.py` (re-cifra tudo,
-  backup automático da chave antiga). Falta a UX de convite de usuários.
-- **UX de cadastro de usuários** — hoje admin cria via `POST /_auth/users`; convite/
-  auto-registro não definidos.
+  backup automático da chave antiga).
+- ~~**UX de cadastro de usuários**~~ — **resolvido** (item 1.4b): **auto-registro com
+  código** (`ATLAS_SIGNUP_CODE` habilita "criar conta" na tela de login;
+  `POST /_auth/register`; papel sempre `member`). Convite individual por link e
+  rate-limit de brute-force ficam em backlog (SPEC-AUTO-REGISTRO).
 
 > Os **próximos passos priorizáveis** estão consolidados em
 > [`docs/roadmap/proximos-passos.md`](../roadmap/proximos-passos.md).

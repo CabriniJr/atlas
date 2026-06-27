@@ -50,6 +50,23 @@ async function doLogin() {
   } catch(e) { authMsg('erro: ' + e.message); }
 }
 
+// Auto-registro com código compartilhado (SPEC-AUTO-REGISTRO)
+async function doSignup() {
+  const user = document.getElementById('signup-user').value.trim();
+  const password = document.getElementById('signup-pass').value;
+  const code = document.getElementById('signup-code').value;
+  if (!user || !password || !code) { authMsg('preencha usuário, senha e código'); return; }
+  try {
+    const r = await fetch(API + '/_auth/register', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      credentials:'same-origin', body:JSON.stringify({user, password, code}),
+    });
+    const out = await r.json();
+    if (r.ok && out.ok) { authMsg(''); hideLoginOverlay(); init(); }
+    else authMsg(out.error || 'não foi possível criar a conta');
+  } catch(e) { authMsg('erro: ' + e.message); }
+}
+
 // Device flow genérico do GitHub (login OU conectar credencial). startPath/pollPath
 // variam; onConnected é chamado no sucesso; onError(msg) no erro.
 async function _ghDeviceFlow(startPath, pollPath, flow, onConnected, onError) {
@@ -142,6 +159,16 @@ document.getElementById('login-submit').onclick = doLogin;
 document.getElementById('gh-login').onclick = ghLogin;
 document.getElementById('login-pass').addEventListener('keydown', e => {
   if (e.key === 'Enter') doLogin();
+});
+document.getElementById('signup-toggle').onclick = (e) => {
+  e.preventDefault();
+  const box = document.getElementById('signup-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  if (box.style.display === 'block') document.getElementById('signup-user').focus();
+};
+document.getElementById('signup-submit').onclick = doSignup;
+document.getElementById('signup-code').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSignup();
 });
 document.getElementById('adv-token-toggle').onclick = (e) => {
   e.preventDefault();

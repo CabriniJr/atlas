@@ -145,7 +145,10 @@ fica registrado como evolução possível, fora do escopo agora.)
    [`main.js`](../../../src/atlas/dashboard/main.js), [`style.css`](../../../src/atlas/dashboard/style.css)).
 
 ## Pendências
-- Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).
+- ~~Definir UX de cadastro/convite de usuários~~ — **feito** (item 1.4b):
+  **auto-registro com código** (`ATLAS_SIGNUP_CODE` → `POST /_auth/register`; papel
+  sempre `member`; "criar conta" na tela de login). Convite individual por link e
+  rate-limit ficam em backlog (SPEC-AUTO-REGISTRO).
 - ~~Rotação da chave mestra e backup seguro~~ — **feito** (item 1.4):
   `secrets_store.rotate_key()` re-cifra todos os segredos com uma chave nova
   (transacional/ADR-0006), faz backup da antiga; CLI `scripts/rotate_secret_key.py`.

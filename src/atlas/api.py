@@ -18,6 +18,7 @@ Roda em thread daemon paralela ao bot Telegram.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -203,6 +204,14 @@ class _Handler(BaseHTTPRequestHandler):
             out, token = _auth_login(_store, body.get("user", ""), body.get("password", ""))
             cookies = [_set_cookie(token)] if token else None
             self._json(200 if out.get("ok") else 401, out, cookies=cookies)
+            return
+        # Auto-registro com código compartilhado (SPEC-AUTO-REGISTRO) — público.
+        if path == _API_PREFIX + "/_auth/register":
+            out, token, status = _auth_register(
+                _store, body.get("user", ""), body.get("password", ""), body.get("code", "")
+            )
+            cookies = [_set_cookie(token)] if token else None
+            self._json(status, out, cookies=cookies)
             return
         if path == _API_PREFIX + "/_auth/logout":
             sessions.destroy_session(self._session_token())
@@ -1048,6 +1057,32 @@ def _auth_login(store: ResourceStore, user: str, password: str) -> tuple[dict, s
     role = _user_role(store, user)
     token = sessions.create_session(user, role=role)
     return ({"ok": True, "user": user, "role": role}, token)
+
+
+def _auth_register(
+    store: ResourceStore, user: str, password: str, code: str
+) -> tuple[dict, str | None, int]:
+    """Auto-registro com código compartilhado (SPEC-AUTO-REGISTRO).
+
+    Cria sempre um usuário ``member`` e abre sessão. Devolve ``(body, token, status)``.
+    Desabilitado se ``ATLAS_SIGNUP_CODE`` não estiver setado.
+    """
+    expected = os.environ.get("ATLAS_SIGNUP_CODE", "")
+    if not expected:
+        return ({"ok": False, "error": "auto-registro desabilitado"}, None, 403)
+    if not code or not hmac.compare_digest(str(code), expected):
+        return ({"ok": False, "error": "código de cadastro inválido"}, None, 403)
+    try:
+        name = users.normalize_name(user)
+    except ValueError:
+        return ({"ok": False, "error": "usuário inválido"}, None, 400)
+    if not password:
+        return ({"ok": False, "error": "senha obrigatória"}, None, 400)
+    if store.get("User", name) is not None:
+        return ({"ok": False, "error": "usuário já existe"}, None, 409)
+    users.create_user(store, name, role="member", password=password)
+    token = sessions.create_session(name, role="member")
+    return ({"ok": True, "user": name, "role": "member"}, token, 200)
 
 
 def _github_login_poll(store: ResourceStore, *, device_code: str) -> tuple[dict, str | None]:

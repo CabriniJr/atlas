@@ -56,6 +56,64 @@ def test_login_usuario_inexistente_falha(store):
     assert token is None
 
 
+# ── auto-registro com código compartilhado (SPEC-AUTO-REGISTRO / 1.4b) ────────
+
+
+def test_register_codigo_correto_cria_member_e_sessao(store, monkeypatch):
+    monkeypatch.setenv("ATLAS_SIGNUP_CODE", "deixa-entrar")
+    body, token, status = api._auth_register(store, "Nova Pessoa", "senha123", "deixa-entrar")
+    assert body["ok"] is True
+    assert status == 200
+    assert body["user"] == "nova-pessoa"
+    assert body["role"] == "member"
+    assert token and sessions.resolve_session(token)["user"] == "nova-pessoa"
+    assert users.verify_password("nova-pessoa", "senha123")
+
+
+def test_register_codigo_errado_falha(store, monkeypatch):
+    monkeypatch.setenv("ATLAS_SIGNUP_CODE", "certo")
+    body, token, status = api._auth_register(store, "x", "senha", "errado")
+    assert body["ok"] is False
+    assert status == 403
+    assert token is None
+    assert store.get("User", "x") is None
+
+
+def test_register_desabilitado_sem_env(store, monkeypatch):
+    monkeypatch.delenv("ATLAS_SIGNUP_CODE", raising=False)
+    body, token, status = api._auth_register(store, "x", "senha", "qualquer")
+    assert body["ok"] is False
+    assert status == 403
+    assert token is None
+
+
+def test_register_usuario_existente_nao_sobrescreve(store, monkeypatch):
+    monkeypatch.setenv("ATLAS_SIGNUP_CODE", "ok")
+    users.create_user(store, "luigi", role="admin", password="senha-original")
+    body, token, status = api._auth_register(store, "luigi", "nova-senha", "ok")
+    assert body["ok"] is False
+    assert status == 409
+    assert token is None
+    # senha e papel originais intactos
+    assert users.verify_password("luigi", "senha-original")
+    assert store.get("User", "luigi").spec["role"] == "admin"
+
+
+def test_register_sempre_member_ignora_admin(store, monkeypatch):
+    monkeypatch.setenv("ATLAS_SIGNUP_CODE", "ok")
+    body, token, status = api._auth_register(store, "trapaceiro", "senha", "ok")
+    assert body["role"] == "member"
+    assert store.get("User", "trapaceiro").spec["role"] == "member"
+
+
+def test_register_senha_vazia_falha(store, monkeypatch):
+    monkeypatch.setenv("ATLAS_SIGNUP_CODE", "ok")
+    body, token, status = api._auth_register(store, "x", "", "ok")
+    assert body["ok"] is False
+    assert status == 400
+    assert token is None
+
+
 # ── login via GitHub (device flow) ───────────────────────────────────────────
 
 
