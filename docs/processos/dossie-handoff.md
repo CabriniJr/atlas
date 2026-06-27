@@ -62,14 +62,16 @@ systemctl --user restart atlas.service
 journalctl --user -u atlas -f
 ```
 
-**⚠️ Gotcha de testes (importante):** rode os testes com o **Python do sistema**
-(`python -m pytest`), **não** o do venv — o fixture `free_tcp_port` (usado em
-`test_api.py`) só existe no Python do sistema. O `cryptography` precisa estar nos
-**dois** (venv e sistema). Lint usa o venv: `.venv/bin/ruff check src/`.
+**Testes (gotcha resolvido):** a suíte roda com **qualquer Python** — `python -m
+pytest` (sistema) **ou** `.venv/bin/pytest` (venv). O fixture `free_tcp_port` agora
+é definido em [`tests/conftest.py`](../../tests/conftest.py) (não depende mais do
+plugin do `anyio` no Python do sistema), e `pythonpath=["src","."]` no
+`pyproject.toml` faz o `pytest` puro do CI achar `tests.repohelpers`.
 
 ```bash
-python -m pytest tests/ -q        # 490 testes, devem passar
-.venv/bin/ruff check src/ tests/  # deve passar limpo
+.venv/bin/pytest -q                 # 526 testes, devem passar (igual ao CI)
+.venv/bin/ruff check .              # repo inteiro, deve passar limpo
+.venv/bin/ruff format --check .     # idem (CI também checa)
 ```
 
 **CD (Rasp):** o timer `atlas-deploy.timer` puxa `main` e reinicia sozinho. Para
