@@ -160,8 +160,8 @@ logout no titlebar; botão **🔗 Conectar GitHub** (credencial p/ repo-sync do 
 logado). `init()` checa `GET /_auth/me` e abre o login no 401. Local (loopback) segue
 admin sem tela de login.
 
-**Pendências do épico (não-bloqueantes, viram backlog):** persistência de sessões
-(hoje em memória); rotação/backup da chave mestra do cofre. Ver ADR-0027 §Pendências.
+**Pendências do épico (não-bloqueantes, viram backlog):** ~~persistência de sessões~~
+(feito, item 1.2); rotação/backup da chave mestra do cofre. Ver ADR-0027 §Pendências.
 
 ## 6. Convenções de trabalho (não-negociáveis)
 
@@ -188,8 +188,9 @@ admin sem tela de login.
   `GET/POST /_agent_run/{id}/diff|discard|approve` escopados por dono).
   **Limitações documentadas** (SPEC-CURADORIA): working tree compartilhada; `approve`
   no repo vivo da Rasp é dev-time.
-- **Sessões em memória** — perdidas no restart (usuário refaz login). Persistir é
-  evolução (ADR-0027 §Pendências).
+- ~~**Sessões em memória**~~ — **resolvido** (item 1.2): `sessions.py` persiste em
+  `sessions.json` (só o hash sha256 do token; escrita atômica; degrade em IO/arquivo
+  corrompido) → sobrevivem a restart. Path: `ATLAS_SESSIONS_PATH` ou `<dir do DB>/sessions.json`.
 - **Chave mestra do cofre** — sem rotação/backup formalizados (ADR-0027 §Pendências).
 - **UX de cadastro de usuários** — hoje admin cria via `POST /_auth/users`; convite/
   auto-registro não definidos.

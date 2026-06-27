@@ -44,7 +44,7 @@ Não é desenvolvimento — é colocar o que já existe pra rodar de verdade na 
 | # | Item (ref backlog) | Por quê | Tam. |
 |---|---|---|---|
 | 1.1 | ✅ **E7-28 — endurecer o modo `code`**: workspace restrito + allow/deny de tools + teto de concorrência + gate + persistência de runs + UI de curadoria (ADR-0028, em `feat/hardening-agente-code`) | Hoje o agente escreve livre sob a raiz do projeto — maior superfície de risco interna | G |
-| 1.2 | **Persistência de sessões** (hoje em memória; perdem no restart) | UX: usuário não precisa relogar a cada deploy/restart | P |
+| 1.2 | ✅ **Persistência de sessões** — feito: `sessions.json` (hash do token, atômico, degrade); sobrevive a restart | UX: usuário não precisa relogar a cada deploy/restart | P |
 | 1.3 | ✅ **Persistência dos runs agênticos** — feito (ADR-0028: Kind `AgentRun` escopado por dono) | Não perder histórico/estado de runs no restart | M |
 | 1.4 | **Rotação da chave mestra + UX de cadastro/convite de usuários** | Operação seborosa a longo prazo; hoje só admin cria por API | M |
 

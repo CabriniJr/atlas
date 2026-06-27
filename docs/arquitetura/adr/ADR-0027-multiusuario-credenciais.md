@@ -127,7 +127,9 @@ fica registrado como evolução possível, fora do escopo agora.)
    `GET /_auth/me`; `POST /_auth/users` (admin cria usuário + senha — bootstrap). O
    login via GitHub reusa o device flow (Fase 3): resolve o username,
    cria o `User`, salva a credencial e abre sessão. A **UI de login** no front (Fase 6)
-   consome estes endpoints. **Pendente:** persistência de sessões (hoje em memória).
+   consome estes endpoints. ~~**Pendente:** persistência de sessões~~ — **feito**
+   (item 1.2 do hardening): `sessions.py` persiste em `sessions.json` (hash do token,
+   escrita atômica, degrade) → sobrevivem a restart.
 5. **Isolamento por `labels.owner`** no store/API + migração dos recursos atuais.
    **(feito)** — [`scoping.py`](../../../src/atlas/scoping.py): `can_see`/`can_write`/
    `stamp_owner`/`visible`. A API escopa **list/get/put/delete** pelo dono da sessão

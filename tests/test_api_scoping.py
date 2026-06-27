@@ -25,6 +25,7 @@ _AGORA = datetime(2026, 6, 26, 12, 0)
 @pytest.fixture(autouse=True)
 def _vault(tmp_path, monkeypatch):
     monkeypatch.setenv("ATLAS_SECRETS_DIR", str(tmp_path / "secrets"))
+    monkeypatch.setenv("ATLAS_SESSIONS_PATH", str(tmp_path / "sessions.json"))
     monkeypatch.delenv("ATLAS_SECRET_KEY", raising=False)
     sec.reset_cache()
     sessions.reset()
