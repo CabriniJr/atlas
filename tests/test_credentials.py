@@ -30,7 +30,11 @@ def test_credential_id_estavel_e_seguro():
 
 def test_save_persiste_metadados_sem_segredo(store):
     cid = cred.save_credential(
-        store, owner="luigi", provider="github", secret="ghp_SECRET", account="luigi",
+        store,
+        owner="luigi",
+        provider="github",
+        secret="ghp_SECRET",
+        account="luigi",
         scopes="repo",
     )
     r = store.get("Credential", cid)

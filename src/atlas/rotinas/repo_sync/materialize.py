@@ -28,9 +28,7 @@ def branch_name(label: str, branch: str) -> str:
     return f"{label}-{branch_slug(branch)}"
 
 
-def materialize_commit(
-    store: ResourceStore, label: str, branch: str, meta: dict, ctx
-) -> bool:
+def materialize_commit(store: ResourceStore, label: str, branch: str, meta: dict, ctx) -> bool:
     """Cria/atualiza o Commit leve. Devolve False se já existia (idempotência)."""
     name = commit_name(label, meta["sha7"])
     ja_existe = store.get("Commit", name) is not None
@@ -115,9 +113,7 @@ def _is_stale(last_activity: str, agora: datetime, stale_days: int) -> bool:
     return (agora - dt) > timedelta(days=stale_days)
 
 
-def update_repo_status(
-    store: ResourceStore, label: str, resumo: dict, ctx
-) -> None:
+def update_repo_status(store: ResourceStore, label: str, resumo: dict, ctx) -> None:
     """Atualiza o Repo.status com ponteiros + métricas-resumo do pull multi-branch."""
     repo_res = store.get("Repo", label)
     if repo_res is None:

@@ -91,9 +91,7 @@ def test_poll_slow_down_devolve_pending_com_intervalo():
 
 
 def test_poll_erro_terminal_devolve_error():
-    out = gh.poll_access_token(
-        "DEV123", cid="Iv1.x", post=lambda u, d: {"error": "expired_token"}
-    )
+    out = gh.poll_access_token("DEV123", cid="Iv1.x", post=lambda u, d: {"error": "expired_token"})
     assert out["status"] == "error"
     assert out["error"] == "expired_token"
 

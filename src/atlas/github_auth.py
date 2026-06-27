@@ -80,9 +80,7 @@ def start_device_flow(
     """Inicia o device flow: devolve ``device_code``/``user_code``/``verification_uri``."""
     cid = (cid if cid is not None else client_id()).strip()
     if not cid:
-        raise GitHubAuthError(
-            "ATLAS_GITHUB_CLIENT_ID não configurado — use o fallback de PAT."
-        )
+        raise GitHubAuthError("ATLAS_GITHUB_CLIENT_ID não configurado — use o fallback de PAT.")
     return post(DEVICE_CODE_URL, {"client_id": cid, "scope": scope})
 
 
@@ -138,9 +136,7 @@ def complete_device_login(
 # ── PAT fallback ─────────────────────────────────────────────────────────────
 
 
-def connect_via_pat(
-    store: ResourceStore, *, owner: str, token: str, account: str = ""
-) -> str:
+def connect_via_pat(store: ResourceStore, *, owner: str, token: str, account: str = "") -> str:
     """Salva um PAT colado como ``Credential`` cifrada. Devolve o id."""
     token = (token or "").strip()
     if not token:

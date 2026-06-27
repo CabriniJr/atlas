@@ -78,11 +78,13 @@ def invocar_ollama(
     Raises:
         InvocarErro: qualquer falha de rede ou parsing.
     """
-    payload = json.dumps({
-        "model": modelo,
-        "messages": [{"role": "user", "content": prompt}],
-        "stream": False,
-    }).encode()
+    payload = json.dumps(
+        {
+            "model": modelo,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+    ).encode()
     req = urllib.request.Request(
         endpoint.rstrip("/") + "/api/chat",
         data=payload,

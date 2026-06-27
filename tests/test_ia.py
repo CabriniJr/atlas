@@ -102,6 +102,7 @@ def test_invocar_strip_saida(monkeypatch):
 # E7-26 — Adapter Ollama (invocar_ollama + motor plugável)
 # ---------------------------------------------------------------------------
 
+
 def _mock_ollama_response(content: str) -> MagicMock:
     """Simula urllib.request.urlopen com resposta Ollama."""
     payload = json.dumps({"message": {"role": "assistant", "content": content}}).encode()

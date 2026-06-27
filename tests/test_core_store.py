@@ -132,6 +132,7 @@ def test_resiliencia_objeto_corrompido_nao_quebra_list():
 # E7-21 — Alias Job ↔ Routine (ADR-0021)
 # ---------------------------------------------------------------------------
 
+
 def test_job_lista_recursos_routine():
     """list('Job') devolve recursos criados como kind=Routine."""
     s = _store()

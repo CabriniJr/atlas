@@ -44,7 +44,7 @@ def _snapshot(label: str, store: ResourceStore, agora: datetime) -> str:
     trunc = " (truncado)" if res.get("truncado") else ""
     return (
         f"📸 snapshot/{label}: {res['serializados']} arquivo(s) serializado(s) de "
-        f"{res.get('candidatos', 0)} candidato(s) na árvore (commit {res.get('commit','')}) "
+        f"{res.get('candidatos', 0)} candidato(s) na árvore (commit {res.get('commit', '')}) "
         f"— preset={preset}{trunc}. 0 IA."
     )
 

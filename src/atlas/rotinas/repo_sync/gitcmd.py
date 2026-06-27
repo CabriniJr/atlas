@@ -198,9 +198,7 @@ def commit_count(repo_dir: Path, branch: str) -> int:
 
 def all_commit_count(repo_dir: Path) -> int:
     """Total de commits distintos em todas as branches remotas."""
-    out = git(
-        ["rev-list", "--count", "--remotes=origin"], cwd=repo_dir, check=False
-    )
+    out = git(["rev-list", "--count", "--remotes=origin"], cwd=repo_dir, check=False)
     return int(out.strip()) if out.strip().isdigit() else 0
 
 

@@ -46,9 +46,7 @@ def test_backfill_materializa_e_idempotente(db, tmp_path, monkeypatch):
     origin = init_origin(tmp_path / "origin")
     repo_dir = tmp_path / "repos" / "nora"
     repo_dir.parent.mkdir(parents=True)
-    subprocess.run(
-        ["git", "clone", str(origin), str(repo_dir)], check=True, capture_output=True
-    )
+    subprocess.run(["git", "clone", str(origin), str(repo_dir)], check=True, capture_output=True)
     store = _store(tmp_path, {"url": str(origin)})
 
     out1 = backfill("nora", store, _ctx(db, store))

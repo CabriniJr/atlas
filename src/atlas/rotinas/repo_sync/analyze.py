@@ -92,7 +92,10 @@ def _resolver_agente_analise(repo_res, store) -> tuple[str | None, str | None]:
 
 
 def _analisar(
-    diff: str, label: str, modelo: str, contexto: str = "",
+    diff: str,
+    label: str,
+    modelo: str,
+    contexto: str = "",
     template: str | None = None,
 ) -> str | None:
     """IA explica o que mudou e sugere — usando o contexto do projeto + o diff.
@@ -103,8 +106,11 @@ def _analisar(
     bloco_ctx = f"## Contexto do projeto (resumo represado)\n{contexto}\n\n" if contexto else ""
     if template:
         mensagem = f"Repositório: {label}\n\n{bloco_ctx}```diff\n{diff}\n```"
-        prompt = template.replace("{mensagem}", mensagem) if "{mensagem}" in template \
+        prompt = (
+            template.replace("{mensagem}", mensagem)
+            if "{mensagem}" in template
             else f"{template}\n\n{mensagem}"
+        )
     else:
         prompt = (
             f"Você é um revisor técnico do repositório '{label}'. "

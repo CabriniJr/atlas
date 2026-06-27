@@ -27,5 +27,7 @@ per-file-ignores = {"src/atlas/api.py" = ["E501"]}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# "." põe a raiz no sys.path → `from tests.repohelpers import ...` funciona sob o
+# `pytest` puro do CI (não só com `python -m pytest`).
+pythonpath = ["src", "."]
 addopts = "-q"
