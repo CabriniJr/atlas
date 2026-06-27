@@ -19,6 +19,14 @@
     <input id="login-pass" type="password" placeholder="senha" autocomplete="current-password">
     <button id="login-submit">Entrar</button>
 
+    <a id="signup-toggle" class="auth-adv" href="#">criar conta (com código de cadastro)</a>
+    <div id="signup-box" style="display:none">
+      <input id="signup-user" type="text" placeholder="novo usuário" autocomplete="username">
+      <input id="signup-pass" type="password" placeholder="senha" autocomplete="new-password">
+      <input id="signup-code" type="password" placeholder="código de cadastro" autocomplete="off">
+      <button id="signup-submit">Criar conta e entrar</button>
+    </div>
+
     <div class="auth-or"><span>ou</span></div>
     <button id="gh-login" class="auth-gh">Conectar com GitHub</button>
     <div id="gh-flow" class="gh-flow" style="display:none"></div>
