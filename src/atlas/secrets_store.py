@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -132,3 +133,81 @@ def delete_secret(cid: str) -> bool:
         p.unlink()
         return True
     return False
+
+
+# ── rotação da chave mestra (ADR-0027 §Pendências) ───────────────────────────
+
+
+def list_secret_ids() -> list[str]:
+    """Ids de todas as credenciais cifradas no cofre."""
+    d = _creds_dir()
+    if not d.is_dir():
+        return []
+    return sorted(p.stem for p in d.glob("*.enc"))
+
+
+def rotate_key(new_key: bytes | str | None = None) -> dict:
+    """Re-cifra **todos** os segredos com uma chave nova (Fernet).
+
+    Transacional/seguro (ADR-0006): decifra tudo com a chave atual **primeiro** —
+    se algum blob falhar, aborta **antes** de tocar na chave (sem perda de dados).
+    Faz backup da chave antiga em ``secret.key.bak-<ts>``. Retorna
+    ``{rotated, new_key, backup}`` (a nova chave em base64 para o operador guardar).
+
+    Não suporta rotação quando a chave vem de ``ATLAS_SECRET_KEY`` (env) — nesse caso
+    a env sobreporia a chave nova do arquivo. Remova a env e rode de novo.
+    """
+    if os.environ.get("ATLAS_SECRET_KEY"):
+        raise SecretsError(
+            "rotação usa o arquivo de chave; remova ATLAS_SECRET_KEY do ambiente e "
+            "rode de novo (depois atualize a env/.env com a nova chave)."
+        )
+
+    # 1. decifra tudo com a chave atual — aborta se algo falhar (sem perda).
+    plain: dict[str, str] = {}
+    for cid in list_secret_ids():
+        val = get_secret(cid)
+        if val is None:
+            raise SecretsError(f"credencial {cid!r} ilegível durante a rotação")
+        plain[cid] = val
+
+    # 2. valida/gera a nova chave.
+    if new_key is None:
+        new_key = Fernet.generate_key()
+    elif isinstance(new_key, str):
+        new_key = new_key.encode()
+    try:
+        Fernet(new_key)
+    except Exception as exc:  # noqa: BLE001
+        raise SecretsError(f"chave nova inválida: {exc}") from exc
+
+    # 3. backup da chave antiga (se houver arquivo).
+    backup: Path | None = None
+    kp = _key_path()
+    if kp.exists():
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = kp.with_name(f"secret.key.bak-{ts}")
+        backup.write_bytes(kp.read_bytes())
+        try:
+            backup.chmod(0o600)
+        except OSError:
+            pass
+
+    # 4. grava a nova chave e passa a usá-la.
+    kp.parent.mkdir(parents=True, exist_ok=True)
+    kp.write_bytes(new_key)
+    try:
+        kp.chmod(0o600)
+    except OSError:
+        pass
+    reset_cache()
+
+    # 5. recifra todos os segredos com a chave nova.
+    for cid, val in plain.items():
+        put_secret(cid, val)
+
+    return {
+        "rotated": len(plain),
+        "new_key": new_key.decode(),
+        "backup": str(backup) if backup else None,
+    }
