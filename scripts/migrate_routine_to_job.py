@@ -44,7 +44,8 @@ def run(db_path: str) -> None:
             print(f"  [skip-dup] Routine/{name} → Job/{name} já existia; Routine removido")
         else:
             conn.execute(
-                "UPDATE resources SET kind = 'Job', atualizado_em = ? WHERE kind = 'Routine' AND name = ?",
+                "UPDATE resources SET kind = 'Job', atualizado_em = ? "
+                "WHERE kind = 'Routine' AND name = ?",
                 (agora, name),
             )
             print(f"  [migrado ] Routine/{name} → Job/{name}")
