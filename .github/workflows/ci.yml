@@ -34,7 +34,7 @@ jobs:
               echo "::error::Commit $sha não segue Conventional Commits: '$subject'"
               fail=1
             fi
-          done < <(git rev-list "$base"..HEAD)
+          done < <(git rev-list --no-merges "$base"..HEAD)
           [ "$fail" -eq 0 ] && echo "Todos os commits seguem Conventional Commits."
           exit $fail
 
