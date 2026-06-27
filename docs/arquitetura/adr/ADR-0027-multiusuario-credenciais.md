@@ -146,6 +146,8 @@ fica registrado como evolução possível, fora do escopo agora.)
 
 ## Pendências
 - Definir UX de cadastro/convite de usuários (admin cria? auto-registro?).
-- Rotação da chave mestra e backup seguro.
+- ~~Rotação da chave mestra e backup seguro~~ — **feito** (item 1.4):
+  `secrets_store.rotate_key()` re-cifra todos os segredos com uma chave nova
+  (transacional/ADR-0006), faz backup da antiga; CLI `scripts/rotate_secret_key.py`.
 - Escopo fino de kinds globais (system) vs por-usuário.
 - Login Claude por-usuário (evolução, se necessário).

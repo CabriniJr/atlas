@@ -193,7 +193,9 @@ admin sem tela de login.
 - ~~**Sessões em memória**~~ — **resolvido** (item 1.2): `sessions.py` persiste em
   `sessions.json` (só o hash sha256 do token; escrita atômica; degrade em IO/arquivo
   corrompido) → sobrevivem a restart. Path: `ATLAS_SESSIONS_PATH` ou `<dir do DB>/sessions.json`.
-- **Chave mestra do cofre** — sem rotação/backup formalizados (ADR-0027 §Pendências).
+- ~~**Chave mestra do cofre** — sem rotação/backup~~ — **resolvido** (item 1.4):
+  `secrets_store.rotate_key()` + `scripts/rotate_secret_key.py` (re-cifra tudo,
+  backup automático da chave antiga). Falta a UX de convite de usuários.
 - **UX de cadastro de usuários** — hoje admin cria via `POST /_auth/users`; convite/
   auto-registro não definidos.
 
