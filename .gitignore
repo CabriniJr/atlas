@@ -40,3 +40,4 @@ build/
 
 # Dados do repo-sync (clones de repositórios monitorados)
 repos/
+.atlas-local.log
