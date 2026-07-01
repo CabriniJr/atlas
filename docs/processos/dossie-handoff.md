@@ -16,6 +16,42 @@ atualizado-em: 2026-06-26
 | 1.0    | 2026-06-26 | Tech Lead | Criação — handoff do trabalho recente (E7-24..44, ADR-0025/0026/0027) p/ outro agente | — |
 | 1.1    | 2026-06-26 | Tech Lead | Épico multiusuário (ADR-0027) concluído e mergeado em `main` (Fases 1–5 + UI); estado/branches/testes atualizados | — |
 | 1.2    | 2026-06-26 | Tech Lead | E7-28 em curso (ADR-0028): workspace restrito + allow/deny de tools + teto de concorrência + flag de gate | — |
+| 1.3    | 2026-07-01 | Tech Lead | Épico E9 (tradutor editorial): fixes de store/resume + export md/epub; ADR-0033 + spec + plano do render editorial; E9-01 tarefas 1–4 feitas | — |
+
+---
+
+## ⭐ Estado atual (2026-07-01) — Épico E9: tradutor editorial
+
+**Contexto:** norte do produto = tradução **nível editorial** de artigos/PDFs
+(ver [[atlas-project-vision]] na memória do agente). Backlog em
+[`roadmap/backlog.md` §E9](../roadmap/backlog.md#épico-tradutor-editorial).
+
+**Feito e commitado em `main` (com testes):**
+- `1c34a0a` fix store thread-safe (RLock+WAL) — causa raiz de "travou nas 7 páginas".
+- `18c81b2` apagar tradução em 1 clique + limpa artefatos.
+- `74d60a9` export `.md`/`.epub` via pandoc (ADR-0032).
+- `1a8e0bf` **resume real** — MT bruta cacheada (fim do "Continuar recomeça").
+- `a60d9cb` ADR-0033 + spec do render editorial; `0b44778` plano de implementação.
+- `ad81e6e` E9-01 Task 1 (classificação de papel); `a6c88a1` Tasks 2–4 (`layout.py`).
+
+**Em andamento — E9-01 (render editorial), 4/9 tarefas:**
+- ✅ Task 1 classificação; ✅ Tasks 2–4 `layout.py` (medição/fit/paginação, testes verdes).
+- ⏳ Task 5 config `min_fonte_pct`/`notas_rodape`; ⏳ Task 6 `remontar_documento`
+  (fit-in-place + reflow + página de continuação) — **núcleo**; ⏳ Task 7 ligar no
+  pipeline; ⏳ Task 8 notas de rodapé; ⏳ Task 9 regressão de fidelidade.
+
+**Como retomar (spec-driven):**
+1. Ler [ADR-0033](../arquitetura/adr/ADR-0033-render-editorial-hibrido.md) +
+   [spec](../specs/traducao-render-editorial.md).
+2. Abrir o [plano](../superpowers/plans/2026-07-01-render-editorial.md) e continuar
+   nas tarefas com `[ ]` (TDD; commit por tarefa).
+3. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
+   mecânico mais recente (commits, testes, checkboxes).
+
+**Ambiente:** local via `python -m atlas` (env `ATLAS_DB_PATH=data/atlas.sqlite`,
+`ATLAS_API_PORT=8080`) → `http://atlas.local:8080`. Já reiniciado no código novo.
+**Pendência do PO:** `sudo dnf install -y pandoc` (botão EPUB). Sub-projetos B/C/D
+(qualidade AI-augmented, Agente editor + judge, configs de qualidade) = E9-02..04.
 
 ---
 

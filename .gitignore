@@ -41,3 +41,6 @@ build/
 # Dados do repo-sync (clones de repositórios monitorados)
 repos/
 .atlas-local.log
+
+# snapshot automático do hook PreCompact (local; narrativa durável vai no dossie-handoff.md)
+docs/processos/handoff-auto.md
