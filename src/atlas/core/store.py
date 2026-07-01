@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -53,67 +54,84 @@ class ResourceStore:
     def __init__(self, path: str = ":memory:") -> None:
         self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
+        # A conexão é compartilhada entre threads (servidor HTTP + threads de
+        # collect, ex.: a tradução em background). O módulo sqlite3 NÃO serializa
+        # o uso concorrente de uma mesma conexão — sem isto, leituras/escritas
+        # simultâneas levantam Interface('bad parameter or other API misuse') e a
+        # tradução "trava" na página em que a escrita de status falhou. Um RLock
+        # reentrante serializa toda operação e mantém composto (get→update)
+        # atômico. WAL + busy_timeout reduzem contenção de disco.
+        self._lock = threading.RLock()
+        if path != ":memory:":
+            self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA busy_timeout=5000")
         self.connection.executescript(SCHEMA)
         self.connection.commit()
 
     # --- escrita -----------------------------------------------------------
 
     def create(self, res: Resource, agora: datetime) -> Resource:
-        if self.get(res.kind, res.name) is not None:
-            raise ResourceJaExiste(f"{res.kind}/{res.name} já existe")
-        carimbo = agora.isoformat()
-        res.criado_em = carimbo
-        res.atualizado_em = carimbo
-        self._inserir(res)
-        return res
-
-    def apply(self, res: Resource, agora: datetime) -> Resource:
-        """Upsert: cria, ou atualiza spec/labels/status preservando ``criado_em``."""
-        existente = self.get(res.kind, res.name)
-        carimbo = agora.isoformat()
-        if existente is None:
+        with self._lock:
+            if self.get(res.kind, res.name) is not None:
+                raise ResourceJaExiste(f"{res.kind}/{res.name} já existe")
+            carimbo = agora.isoformat()
             res.criado_em = carimbo
             res.atualizado_em = carimbo
             self._inserir(res)
             return res
-        res.criado_em = existente.criado_em
-        res.atualizado_em = carimbo
-        self._atualizar(res)
-        return res
+
+    def apply(self, res: Resource, agora: datetime) -> Resource:
+        """Upsert: cria, ou atualiza spec/labels/status preservando ``criado_em``."""
+        with self._lock:
+            existente = self.get(res.kind, res.name)
+            carimbo = agora.isoformat()
+            if existente is None:
+                res.criado_em = carimbo
+                res.atualizado_em = carimbo
+                self._inserir(res)
+                return res
+            res.criado_em = existente.criado_em
+            res.atualizado_em = carimbo
+            self._atualizar(res)
+            return res
 
     def patch(self, kind: str, name: str, spec_patch: dict[str, Any], agora: datetime) -> Resource:
         """Merge raso em ``spec``. Erro se o objeto não existe."""
-        res = self._exigir(kind, name)
-        res.spec.update(spec_patch)
-        res.atualizado_em = agora.isoformat()
-        self._atualizar(res)
-        return res
+        with self._lock:
+            res = self._exigir(kind, name)
+            res.spec.update(spec_patch)
+            res.atualizado_em = agora.isoformat()
+            self._atualizar(res)
+            return res
 
     def set_status(self, kind: str, name: str, status: dict[str, Any], agora: datetime) -> Resource:
         """Escreve o ``status`` (só o motor deveria chamar). Erro se não existe."""
-        res = self._exigir(kind, name)
-        res.status = status
-        res.atualizado_em = agora.isoformat()
-        self._atualizar(res)
-        return res
+        with self._lock:
+            res = self._exigir(kind, name)
+            res.status = status
+            res.atualizado_em = agora.isoformat()
+            self._atualizar(res)
+            return res
 
     def delete(self, kind: str, name: str) -> bool:
-        cur = self.connection.execute(
-            "DELETE FROM resources WHERE kind = ? AND name = ?", (kind, name)
-        )
-        self.connection.commit()
-        return cur.rowcount > 0
+        with self._lock:
+            cur = self.connection.execute(
+                "DELETE FROM resources WHERE kind = ? AND name = ?", (kind, name)
+            )
+            self.connection.commit()
+            return cur.rowcount > 0
 
     # --- leitura -----------------------------------------------------------
 
     def get(self, kind: str, name: str) -> Resource | None:
-        for k in _KIND_READ_ALIASES.get(kind, (kind,)):
-            row = self.connection.execute(
-                "SELECT * FROM resources WHERE kind = ? AND name = ?", (k, name)
-            ).fetchone()
-            if row is not None:
-                return self._row_to_resource(row)
-        return None
+        with self._lock:
+            for k in _KIND_READ_ALIASES.get(kind, (kind,)):
+                row = self.connection.execute(
+                    "SELECT * FROM resources WHERE kind = ? AND name = ?", (k, name)
+                ).fetchone()
+                if row is not None:
+                    return self._row_to_resource(row)
+            return None
 
     def list(
         self,
@@ -129,10 +147,11 @@ class ResourceStore:
         selector = selector or labels
         kinds_sql = _KIND_READ_ALIASES.get(kind, (kind,))
         placeholders = ",".join("?" * len(kinds_sql))
-        rows = self.connection.execute(
-            f"SELECT * FROM resources WHERE kind IN ({placeholders}) ORDER BY name",
-            kinds_sql,
-        ).fetchall()
+        with self._lock:
+            rows = self.connection.execute(
+                f"SELECT * FROM resources WHERE kind IN ({placeholders}) ORDER BY name",
+                kinds_sql,
+            ).fetchall()
         out: list[Resource] = []
         for row in rows:
             res = self._row_to_resource_safe(row)
@@ -144,9 +163,10 @@ class ResourceStore:
         return out
 
     def kinds(self) -> list[str]:
-        rows = self.connection.execute(
-            "SELECT DISTINCT kind FROM resources ORDER BY kind"
-        ).fetchall()
+        with self._lock:
+            rows = self.connection.execute(
+                "SELECT DISTINCT kind FROM resources ORDER BY kind"
+            ).fetchall()
         raw = {r["kind"] for r in rows}
         # Se há recursos Routine, expõe Job (novo nome canônico) em vez de Routine.
         if "Routine" in raw:
