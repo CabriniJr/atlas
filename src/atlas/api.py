@@ -185,6 +185,43 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _exportar_traducao(self, label: str, fmt: str) -> None:
+        """Gera e faz stream do arquivo ``fmt`` (md|epub) da tradução (ADR-0032)."""
+        from atlas.traducao.exportar import PandocAusente, exportar
+
+        if _store is None:
+            self._json(503, {"error": "store not ready"})
+            return
+        t = _store.get("Traducao", label) if label else None
+        if t is None:
+            self._json(404, {"error": f"Traducao/{label} not found"})
+            return
+        saida = (t.status or {}).get("saida")
+        if not saida or not Path(saida).is_file():
+            self._json(409, {"error": "tradução ainda não concluída (sem saída)"})
+            return
+        try:
+            caminho = exportar(saida, fmt)
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        except PandocAusente as exc:
+            self._json(503, {"error": str(exc)})
+            return
+        except Exception as exc:  # noqa: BLE001 — falha de conversão não derruba a API
+            self._json(500, {"error": f"falha ao exportar: {exc}"})
+            return
+        alvo = Path(caminho)
+        data = alvo.read_bytes()
+        ctype = "application/epub+zip" if fmt == "epub" else "text/markdown; charset=utf-8"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'attachment; filename="{alvo.name}"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -400,6 +437,16 @@ class _Handler(BaseHTTPRequestHandler):
 
             label = parse_qs(urlparse(self.path).query).get("label", [""])[0].strip()
             self._download_traducao(label)
+            return
+
+        # /_exportar?label=<Traducao>&fmt=md|epub → serializa e baixa (ADR-0032)
+        if path == _API_PREFIX + "/_exportar":
+            from urllib.parse import parse_qs, urlparse
+
+            q = parse_qs(urlparse(self.path).query)
+            label = q.get("label", [""])[0].strip()
+            fmt = (q.get("fmt", ["md"])[0] or "md").strip().lower()
+            self._exportar_traducao(label, fmt)
             return
 
         if path == _API_PREFIX + "/_estimar":

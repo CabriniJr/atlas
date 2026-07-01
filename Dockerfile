@@ -14,8 +14,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # git + CA certs: necessários para a rotina repo-sync clonar/pull de repositórios.
+# pandoc: exporta traduções para EPUB (ADR-0032; md é nativo, não precisa dele).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates pandoc \
     && rm -rf /var/lib/apt/lists/*
 
 # Credencial para repos privados: o git lê de um arquivo montado em runtime

@@ -29,6 +29,7 @@ atualizado-em: 2026-06-23
 | 1.13   | 2026-06-26 | Tech Lead | ADR-0028 (Endurecimento do Agente modo `code` — workspace restrito, allow/deny de tools, concorrência, gate) — proposto | — |
 | 1.14   | 2026-07-01 | Tech Lead | ADR-0030 (Kind `Traducao` — tradutor de PDFs de alta fidelidade via PyMuPDF) — **aceito** | PO/PM |
 | 1.15   | 2026-07-01 | Tech Lead | ADR-0031 (Tradução em 2 estágios — MT bruta + refino por LLM, modular e resumível) — **aceito** | PO/PM |
+| 1.16   | 2026-07-01 | Tech Lead | ADR-0032 (Export de tradução para Markdown/EPUB via pandoc) — **aceito** | PO/PM |
 
 ---
 
@@ -81,6 +82,7 @@ atualizado-em: 2026-06-23
 | [0029](ADR-0029-web-shell-da-api.md) | **`web/` como shell gráfico principal da API** (Electron/Tauri-ready, design system DesignSync) | aceito | Pedido do PO (overhaul do front) |
 | [0030](ADR-0030-kind-traducao-pdf.md) | **Kind `Traducao`** (tradutor de PDFs de alta fidelidade; in-place redaction+reinsert via PyMuPDF) | **aceito** | Pedido do PO ("traduzir PDFs preservando design") |
 | [0031](ADR-0031-traducao-mt-mais-refino.md) | **Tradução em 2 estágios** (MT bruta via deep-translator + refino por LLM; modular, Haiku default, resumível) | **aceito** | Pedido do PO (timeout/tokens; refino sobre bruto) |
+| [0032](ADR-0032-export-traducao-md-epub.md) | **Export `.md`/`.epub`** (serializa PDF traduzido → Markdown; EPUB via pandoc) | **aceito** | Pedido do PO ("out epub/md, reusar programa que já faz isso") |
 
 ## Lastro
 

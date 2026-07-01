@@ -84,7 +84,9 @@ function _trProgresso(st, name) {
       ? `<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="document.getElementById('tr-traduzir').click()">▶ Continuar refino</button>`
       : '';
     return `${cabec}
-      ${st.saida ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${btnContinuar}<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar ${parcial ? '(bruto)' : 'tradução'}</button></div>
+      ${st.saida ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${btnContinuar}<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar ${parcial ? '(bruto)' : 'tradução'}</button>
+      <button class="btn" title="Exportar como Markdown" onclick="trExport('${escJs(name || '')}','md')">📝 .md</button>
+      <button class="btn" title="Exportar como EPUB (requer pandoc)" onclick="trExport('${escJs(name || '')}','epub')">📚 .epub</button></div>
       <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trLog(st)}`;
   }
   // preparando (ex.: detectando glossário) ou traduzindo
@@ -203,5 +205,28 @@ async function trDownload(name) {
     URL.revokeObjectURL(url);
   } catch (err) {
     alert('download falhou: ' + err.message);
+  }
+}
+
+// Exporta a tradução como .md ou .epub (ADR-0032); serializa no servidor + baixa.
+async function trExport(name, fmt) {
+  try {
+    const h = {}; if (typeof TOKEN !== 'undefined' && TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+    const r = await fetch(API + '/_exportar?fmt=' + encodeURIComponent(fmt) + '&label=' + encodeURIComponent(name),
+      { credentials: 'same-origin', headers: h });
+    if (!r.ok) {
+      let msg = await r.text();
+      try { msg = JSON.parse(msg).error || msg; } catch (e) { /* texto cru */ }
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name + '.' + fmt;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('exportar ' + fmt + ' falhou: ' + err.message);
   }
 }

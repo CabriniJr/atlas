@@ -64,6 +64,11 @@ Com o CD ligado (abaixo), o merge em `main` é puxado e aplicado sozinho em até
 Um timer systemd verifica `main` a cada 5 min e, se houver commits novos, faz
 `git pull` + (re)instala deps se mudaram + `systemctl --user restart atlas`.
 
+**Dependências de sistema (uma vez, na Rasp):**
+```bash
+sudo apt install -y pandoc   # export de tradução para EPUB (ADR-0032; .md não precisa)
+```
+
 **Instalação (uma vez, na Rasp):**
 ```bash
 cd ~/atlas
