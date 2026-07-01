@@ -452,6 +452,52 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral · dev"}],
     },
+    "Traducao": {
+        "meta": {
+            "icon": "📖",
+            "desc": "Tradução de PDF preservando o design (ADR-0030)",
+        },
+        "spec": [
+            {
+                "k": "origem",
+                "type": "text",
+                "label": "PDF de origem",
+                "hint": "Caminho do PDF a traduzir, ex: data/pdfs/livro.pdf",
+            },
+            {
+                "k": "idioma_origem",
+                "type": "text",
+                "label": "Idioma de origem",
+                "hint": "Default: en",
+            },
+            {
+                "k": "idioma_destino",
+                "type": "text",
+                "label": "Idioma de destino",
+                "hint": "Default: pt-BR",
+            },
+            {
+                "k": "assunto",
+                "type": "text",
+                "label": "Assunto / domínio",
+                "hint": "Contexto p/ a IA (ex: 'Kubernetes'); melhora a tradução",
+            },
+            {
+                "k": "motor",
+                "type": "select",
+                "label": "Motor (IA)",
+                "opts": ["claude", "ollama"],
+                "hint": "claude = assinatura; ollama = local (grátis)",
+            },
+            {
+                "k": "modelo",
+                "type": "text",
+                "label": "Modelo (override)",
+                "hint": "Vazio = default do motor",
+            },
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "estudo · trabalho · geral"}],
+    },
 }
 
 # Ações de domínio por kind (ADR-0017). ``verbo`` indica para qual endpoint a

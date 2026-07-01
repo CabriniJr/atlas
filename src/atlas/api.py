@@ -444,6 +444,16 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, _run_routine(name))
             return
 
+        # Traduz um Traducao/<label> em background (ADR-0030): dispara o collect
+        # traduzir-pdf numa thread; o progresso vai para o status (polling da view).
+        if path == _API_PREFIX + "/_traduzir":
+            label = body.get("label", "").strip()
+            if not label:
+                self._json(400, {"error": "label obrigatório"})
+                return
+            self._json(*_iniciar_traducao(label))
+            return
+
         # Insight por IA (sob demanda) — sistema ou repositório.
         if path == _API_PREFIX + "/_insight":
             self._json(
@@ -737,6 +747,45 @@ def _estimar_payload(
     except Exception as exc:  # noqa: BLE001 — PDF inválido não derruba a API
         return 500, {"error": f"falha ao estimar: {exc}"}
     return 200, est.to_dict()
+
+
+def _iniciar_traducao(label: str) -> tuple[int, dict]:
+    """Dispara a tradução de ``Traducao/<label>`` em background (ADR-0030).
+
+    Roda o collect ``traduzir-pdf`` numa thread daemon; o progresso é gravado no
+    ``status`` do recurso (a view faz polling em ``GET /Traducao/<label>``).
+    Devolve ``(código_http, corpo)``.
+    """
+    from atlas.executor import ContextoExecucao
+    from atlas.rotinas import obter as _obter
+    from atlas.routines import Rotina
+
+    if _store is None:
+        return 503, {"error": "store not ready"}
+    t = _store.get("Traducao", label)
+    if t is None:
+        return 404, {"error": f"Traducao/{label} not found"}
+    if (t.status or {}).get("fase") == "traduzindo":
+        return 409, {"ok": False, "error": f"Traducao/{label} já está traduzindo"}
+    origem = (t.spec.get("origem") or "").strip()
+    if not origem or not Path(origem).exists():
+        return 400, {"error": f"origem inválida: {origem!r}"}
+    try:
+        collect = _obter("traduzir-pdf")
+    except Exception as exc:  # noqa: BLE001
+        return 500, {"error": f"collect traduzir-pdf não registrado: {exc}"}
+
+    rot = Rotina(nome=label, descricao="", label=label, coletar="traduzir-pdf")
+
+    def _run() -> None:
+        ctx = ContextoExecucao(agora=datetime.now(), rotina=rot, origem="web", store=_store)
+        try:
+            collect(ctx)
+        except Exception:  # noqa: BLE001 — status já é marcado como erro pelo collect
+            _log.exception("traducao %s falhou", label)
+
+    threading.Thread(target=_run, daemon=True, name=f"traduzir-{label}").start()
+    return 200, {"ok": True, "label": label, "fase": "traduzindo"}
 
 
 def _status_payload() -> dict:
