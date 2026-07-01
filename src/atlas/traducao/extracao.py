@@ -29,10 +29,30 @@ class BlocoTraducao:
     texto: str
     spans: list[Span] = field(default_factory=list)
     skip: bool = False
+    papel: str = "encaixado"  # ADR-0033: prosa | encaixado | imutavel
 
 
 def _tem_letra(texto: str) -> bool:
     return any(c.isalpha() for c in texto)
+
+
+def classificar_papel(bloco: dict, largura_pagina: float) -> str:
+    """Classifica o papel do bloco para o render editorial (ADR-0033).
+
+    - ``imutavel``: sem texto tradutível OU código monoespaçado (nunca reflui).
+    - ``prosa``: parágrafo largo (≥ metade da página) e multi-linha (≥ 3 linhas) —
+      reflui e gera página de continuação quando cresce.
+    - ``encaixado`` (default seguro): legenda/label/célula — fit-in-place no bbox.
+    """
+    texto = (bloco.get("texto") or "").strip()
+    if not texto or bloco.get("mono"):
+        return "imutavel"
+    x0, _, x1, _ = bloco["bbox"]
+    largo = (x1 - x0) >= 0.5 * largura_pagina
+    multilinha = bloco.get("n_linhas", 1) >= 3
+    if largo and multilinha:
+        return "prosa"
+    return "encaixado"
 
 
 def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
@@ -63,6 +83,11 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
             continue
         texto = " ".join(p.strip() for p in partes if p.strip())
         skip = mono or not _tem_letra(texto)
+        papel = classificar_papel(
+            {"texto": texto, "bbox": tuple(bloco["bbox"]),
+             "n_linhas": len(bloco["lines"]), "mono": mono},
+            page.rect.width,
+        )
         blocos.append(
             BlocoTraducao(
                 id=bid,
@@ -71,6 +96,7 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                 texto=texto,
                 spans=spans,
                 skip=skip,
+                papel=papel,
             )
         )
     return blocos
