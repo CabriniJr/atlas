@@ -11,6 +11,25 @@ em alto nível. Por isso a documentação não é um apoio: **é o contrato**.
 
 ---
 
+## 0. Diretriz absoluta — desenvolvimento é full-auto (todo agente DEVE saber)
+
+Este projeto é **full agent-based**: o humano decide **arquitetura**; o agente executa
+**tudo** o resto sozinho. Regras inegociáveis:
+
+- **Desenvolvimento é 100% automático.** Nunca pare para pedir confirmação de commit,
+  teste, comando de shell, salvar arquivo ou subir instância. Permissão é total
+  (`bypassPermissions` em `.claude/settings.local.json`). Só pare em **decisão de
+  produto/arquitetura**.
+- **Conversa rica só na ideação/spec.** Prosa, alternativas e discussão pertencem ao
+  **brainstorm e à criação da spec**. Durante o desenvolvimento, seja **econômico com
+  tokens**: respostas curtas, sem despejar output de comando, sem narrar cada passo.
+- **Versionamento direto, sem PR.** Commit direto (Conventional Commits) e **merge/push
+  em `main`** — nada de abrir PR e esperar review. Prod roda na **Raspy** a partir de
+  `main`. O humano quer **bom histórico de commits**, não cerimônia.
+- Fugir disso é **fugir do escopo do projeto**.
+
+---
+
 ## 1. Regra de ouro
 
 **A documentação em `docs/` é a fonte de verdade.** Se o código diverge da doc, o
