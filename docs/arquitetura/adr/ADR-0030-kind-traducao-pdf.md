@@ -84,8 +84,12 @@ Design completo em
 
 ## Pendências
 
-- View no web shell ([ADR-0029](ADR-0029-web-shell-da-api.md)): upload, estimativa de
-  custo, progresso, download.
-- Estimativa de custo/budget ([ADR-0005](ADR-0005-orcamento-reativo.md)) antes de rodar.
+- ✅ Estimativa de custo/budget ([ADR-0005](ADR-0005-orcamento-reativo.md)) antes de
+  rodar — módulo `traducao/estimativa.py` + `GET /_estimar` (grátis, sem IA).
+- ✅ View no web shell ([ADR-0029](ADR-0029-web-shell-da-api.md)): Kind `Traducao` no
+  `/_schema`, render dedicada (`kinds/traducao.js`) com prévia, disparo (`POST
+  /_traduzir`, background) e barra de progresso via polling do status.
+- View no web shell — **falta** upload do PDF e download do resultado pela UI (hoje o
+  caminho de origem/saída é do filesystem do servidor).
 - `glossario_auto` (detecção de termos técnicos pela IA) e cache persistido em disco.
 - OCR de PDFs escaneados (fora de escopo inicial).
