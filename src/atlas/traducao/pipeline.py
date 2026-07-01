@@ -27,6 +27,7 @@ class ProgressoTraducao:
     paginas_prontas: int
     blocos_traduzidos: int
     glossario_auto: list[str] = field(default_factory=list)
+    fase: str = "traduzindo"  # "preparando" | "glossario" | "traduzindo"
 
 
 def _mesclar_glossario(base: list[str], extra: list[str]) -> list[str]:
@@ -65,6 +66,8 @@ def traduzir_pdf(
     # glossario_auto: detecta termos técnicos a preservar antes de traduzir (ADR-0030).
     detectados: list[str] = []
     if cfg.glossario_auto:
+        if on_progress:
+            on_progress(ProgressoTraducao(total, 0, 0, [], fase="glossario"))
         detectados = _amostra_para_glossario(doc, cfg, invocar_fn)
         if detectados:
             cfg.glossario = _mesclar_glossario(cfg.glossario, detectados)
@@ -77,7 +80,7 @@ def traduzir_pdf(
         traducoes = traduzir_blocos(traduziveis, cfg, cache, invocar_fn=invocar_fn)
         blocos_traduzidos += len(traducoes)
         remontar_pagina(page, blocos, traducoes)
-        prog = ProgressoTraducao(total, i + 1, blocos_traduzidos, detectados)
+        prog = ProgressoTraducao(total, i + 1, blocos_traduzidos, detectados, fase="traduzindo")
         if on_progress:
             on_progress(prog)
     doc.save(destino, garbage=4, deflate=True)

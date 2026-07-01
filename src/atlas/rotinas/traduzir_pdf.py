@@ -37,6 +37,26 @@ def _verdade(v) -> bool:
     return bool(v)
 
 
+def _evento(msg: str) -> dict:
+    """Linha de log de atividade (t + mensagem) para a view acompanhar ao vivo."""
+    from datetime import datetime
+
+    return {"t": datetime.now().isoformat(timespec="seconds"), "msg": msg}
+
+
+def _eta(iniciado_iso: str, pct: int) -> int | None:
+    """Estimativa grosseira de segundos restantes a partir do ritmo até agora."""
+    if pct <= 0:
+        return None
+    from datetime import datetime
+
+    try:
+        decorrido = (datetime.now() - datetime.fromisoformat(iniciado_iso)).total_seconds()
+    except (ValueError, TypeError):
+        return None
+    return int(decorrido * (100 - pct) / pct)
+
+
 @registrar("traduzir-pdf")
 def collect(ctx: ContextoExecucao) -> CollectResult:
     label = getattr(ctx.rotina, "label", None) or ctx.rotina.nome
@@ -76,21 +96,54 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         modelo=t.spec.get("modelo"),
     )
 
-    _status(store, t, ctx, {"fase": "traduzindo", "progresso_pct": 0, "saida": None, "erro": None})
+    iniciado = ctx.agora.isoformat()
+    _status(
+        store,
+        t,
+        ctx,
+        {
+            "fase": "preparando",
+            "progresso_pct": 0,
+            "saida": None,
+            "erro": None,
+            "iniciado_em": iniciado,
+            "atividade": "abrindo PDF e preparando a tradução…",
+            "log": [_evento("▶ tradução iniciada")],
+        },
+    )
 
     def on_progress(prog):
-        pct = int(prog.paginas_prontas * 100 / prog.paginas_total) if prog.paginas_total else 0
-        _status(
-            store,
-            t,
-            ctx,
-            {
+        atual = store.get("Traducao", t.name).status or {}
+        log = list(atual.get("log") or [])
+        if prog.fase == "glossario":
+            msg = "🔤 detectando termos técnicos (glossário automático)…"
+            patch = {"fase": "preparando", "progresso_pct": 0, "atividade": msg}
+            log.append(_evento(msg))
+        else:
+            pct = int(prog.paginas_prontas * 100 / prog.paginas_total) if prog.paginas_total else 0
+            msg = (
+                f"📄 página {prog.paginas_prontas}/{prog.paginas_total} traduzida "
+                f"· {prog.blocos_traduzidos} blocos"
+            )
+            patch = {
                 "fase": "traduzindo",
                 "paginas_total": prog.paginas_total,
                 "paginas_prontas": prog.paginas_prontas,
+                "blocos_traduzidos": prog.blocos_traduzidos,
                 "progresso_pct": pct,
-            },
-        )
+                "atividade": msg,
+                "eta_seg": _eta(iniciado, pct),
+            }
+            # loga só marcos (1ª página, a cada 5, e a última) p/ não inflar o status
+            if prog.paginas_prontas == 1 or prog.paginas_prontas % 5 == 0 or (
+                prog.paginas_prontas == prog.paginas_total
+            ):
+                log.append(_evento(msg))
+            if prog.glossario_auto and not atual.get("glossario_auto"):
+                patch["glossario_auto"] = prog.glossario_auto
+                log.append(_evento("🔤 glossário: " + ", ".join(prog.glossario_auto)))
+        patch["log"] = log[-40:]  # mantém as últimas 40 linhas
+        _status(store, t, ctx, patch)
 
     try:
         prog = traduzir_pdf(
@@ -103,6 +156,8 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         return CollectResult(data={"_saida": f"⚠️ traduzir-pdf/{label} falhou: {exc}"})
 
     cache.salvar(cache_path)  # persiste o cache p/ reruns baratos (ADR-0030)
+    log = list((store.get("Traducao", t.name).status or {}).get("log") or [])
+    log.append(_evento(f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"))
     _status(
         store,
         t,
@@ -112,8 +167,12 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             "saida": saida,
             "paginas_total": prog.paginas_total,
             "paginas_prontas": prog.paginas_prontas,
+            "blocos_traduzidos": prog.blocos_traduzidos,
             "progresso_pct": 100,
             "glossario_auto": prog.glossario_auto,
+            "atividade": "tradução concluída",
+            "eta_seg": 0,
+            "log": log[-40:],
             "erro": None,
         },
     )
@@ -128,4 +187,11 @@ def _status(store, t, ctx, patch: dict) -> None:
 
 
 def _erro(store, t, ctx, msg: str) -> None:
-    _status(store, t, ctx, {"fase": "erro", "progresso_pct": 0, "erro": msg})
+    log = list((store.get("Traducao", t.name).status or {}).get("log") or [])
+    log.append(_evento(f"⚠️ erro: {msg}"))
+    _status(
+        store,
+        t,
+        ctx,
+        {"fase": "erro", "progresso_pct": 0, "erro": msg, "atividade": f"erro: {msg}", "log": log[-40:]},
+    )

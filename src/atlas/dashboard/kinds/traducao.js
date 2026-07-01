@@ -40,29 +40,60 @@ function _trShell(r) {
   </div>`;
 }
 
+function _trDur(seg) {
+  if (seg == null || seg < 0) return '';
+  seg = Math.round(seg);
+  const m = Math.floor(seg / 60), s = seg % 60;
+  return m ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
+}
+
+function _trLog(st) {
+  const log = st.log || [];
+  if (!log.length) return '';
+  const linhas = log.slice(-30).map(e => {
+    const t = (e.t || '').slice(11, 19);
+    return `<div style="display:flex;gap:8px"><span style="color:var(--muted);flex:0 0 auto">${esc(t)}</span><span>${esc(e.msg || '')}</span></div>`;
+  }).join('');
+  return `<div style="margin-top:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">📋 atividade</div>
+    <div id="tr-log" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;line-height:1.6">${linhas}</div>
+  </div>`;
+}
+
 function _trProgresso(st, name) {
   const fase = st.fase;
   if (!fase) return '';
   if (fase === 'erro') {
-    return `<div style="color:var(--red);font-size:13px">⚠️ ${esc(st.erro || 'falhou')}</div>`;
+    return `<div style="color:var(--red);font-size:13px">⚠️ ${esc(st.erro || 'falhou')}</div>${_trLog(st)}`;
   }
   if (fase === 'pronto') {
     const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
+    const bl = st.blocos_traduzidos != null ? ` · ${st.blocos_traduzidos} blocos` : '';
+    const dur = st.iniciado_em ? _trDur((Date.now() - new Date(st.iniciado_em)) / 1000) : '';
     const ga = (st.glossario_auto && st.glossario_auto.length)
       ? `<div style="color:var(--muted);font-size:12px;margin-top:6px">🔤 glossário auto: ${st.glossario_auto.map(esc).join(', ')}</div>`
       : '';
-    return `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)</div>
+    return `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)${bl}${dur ? ' · ' + dur : ''}</div>
       ${st.saida ? `<div style="margin-top:8px"><button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar tradução</button></div>
-      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}`;
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trLog(st)}`;
   }
-  // traduzindo
+  // preparando (ex.: detectando glossário) ou traduzindo
   const pct = st.progresso_pct != null ? st.progresso_pct : 0;
   const tot = st.paginas_total || 0;
   const pr = st.paginas_prontas || 0;
-  return `<div style="font-size:13px;margin-bottom:6px">traduzindo… ${pr}/${tot} páginas</div>
+  const atividade = st.atividade || (fase === 'preparando' ? 'preparando…' : `traduzindo… ${pr}/${tot} páginas`);
+  const elapsed = st.iniciado_em ? _trDur((Date.now() - new Date(st.iniciado_em)) / 1000) : '';
+  const eta = (st.eta_seg != null && fase === 'traduzindo') ? _trDur(st.eta_seg) : '';
+  const tempo = [elapsed && '⏱ ' + elapsed, eta && 'faltam ~' + eta].filter(Boolean).join(' · ');
+  return `<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:6px">
+      <span>${fase === 'preparando' ? '⚙️ ' : '📄 '}${esc(atividade)}</span>
+      <span style="color:var(--muted);font-size:11px">${esc(tempo)}</span>
+    </div>
     <div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden">
       <div style="background:var(--blue);height:100%;width:${pct}%;transition:width .3s"></div>
-    </div>`;
+    </div>
+    <div style="text-align:right;color:var(--muted);font-size:11px;margin-top:3px">${pct}%${tot ? ` · ${pr}/${tot} pág` : ''}</div>
+    ${_trLog(st)}`;
 }
 
 function _trWire(name, container) {
@@ -106,13 +137,19 @@ function _trWire(name, container) {
     estBtn.disabled = false;
   };
 
+  const ATIVO = new Set(['preparando', 'traduzindo']);
   let polling = null;
+  function _autoScrollLog() {
+    const el = container.querySelector('#tr-log');
+    if (el) el.scrollTop = el.scrollHeight;
+  }
   async function poll() {
     try {
       const r = await apiFetch(API + '/Traducao/' + encodeURIComponent(name));
       const st = r.status || {};
       progBox.innerHTML = _trProgresso(st, name);
-      if (st.fase !== 'traduzindo') {
+      _autoScrollLog();
+      if (!ATIVO.has(st.fase)) {
         clearInterval(polling); polling = null;
         if (trBtn) trBtn.disabled = false;
       }
@@ -121,22 +158,23 @@ function _trWire(name, container) {
 
   if (trBtn) trBtn.onclick = async () => {
     trBtn.disabled = true;
-    progBox.innerHTML = _trProgresso({ fase: 'traduzindo', progresso_pct: 0, paginas_total: 0, paginas_prontas: 0 }, name);
+    progBox.innerHTML = _trProgresso({ fase: 'preparando', progresso_pct: 0, atividade: 'iniciando…', iniciado_em: new Date().toISOString(), log: [] }, name);
     try {
       await apiFetch(API + '/_traduzir', { method: 'POST', body: JSON.stringify({ label: name }) });
-      if (!polling) polling = setInterval(poll, 2000);
+      if (!polling) { polling = setInterval(poll, 1500); poll(); }
     } catch (err) {
       progBox.innerHTML = `<div style="color:var(--red);font-size:13px">erro: ${esc(err.message)}</div>`;
       trBtn.disabled = false;
     }
   };
 
-  // Se já estava traduzindo ao abrir, retoma o polling.
+  // Se já estava em andamento ao abrir, retoma o polling.
   const cur = container.querySelector('#tr-progresso').textContent || '';
-  if (cur.includes('traduzindo')) {
+  if (cur.includes('traduzindo') || cur.includes('preparando') || cur.includes('detectando')) {
     if (trBtn) trBtn.disabled = true;
-    polling = setInterval(poll, 2000);
+    polling = setInterval(poll, 1500);
   }
+  _autoScrollLog();
 }
 
 // Baixa o PDF traduzido (blob + auth); global p/ o onclick do botão de progresso.
