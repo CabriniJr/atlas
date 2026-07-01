@@ -25,6 +25,9 @@ function _trShell(r) {
           ${esc(io)} → ${esc(id)}
         </div>
       </div>
+      <button class="btn danger" title="Apagar esta tradução e seus arquivos gerados"
+        onclick="deleteResource('Traducao','${escJs(r.name)}')"
+        style="font-size:12px;padding:4px 10px">🗑 Apagar</button>
     </div>
     <div style="color:var(--muted);font-size:13px;margin-bottom:12px;word-break:break-all">
       ${origem ? '📄 ' + esc(origem) : '<span style="color:var(--red)">sem PDF de origem (edite o spec)</span>'}

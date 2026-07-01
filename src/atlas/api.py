@@ -652,6 +652,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         ok = _store.delete(kind, name)
         if ok:
+            _limpar_artefatos(existing)  # tradução pronta é efêmera: some com o objeto
             self._json(200, {"deleted": f"{kind}/{name}"})
         else:
             self._json(404, {"error": f"{kind}/{name} not found"})
@@ -869,6 +870,36 @@ def _iniciar_traducao(label: str) -> tuple[int, dict]:
 
     threading.Thread(target=_run, daemon=True, name=f"traduzir-{label}").start()
     return 200, {"ok": True, "label": label, "fase": "traduzindo"}
+
+
+def _limpar_artefatos(res) -> None:
+    """Remove arquivos gerados por um recurso ao deletá-lo (tradução é efêmera).
+
+    Para ``Traducao``: apaga o PDF de saída (``status.saida``) e o cache de
+    tradução em disco. Best-effort — nunca levanta (ADR-0006). O PDF de origem
+    (enviado pelo usuário) é preservado.
+    """
+    if res is None or getattr(res, "kind", None) != "Traducao":
+        return
+    from atlas.rotinas.traduzir_pdf import _cache_para
+
+    spec = res.spec or {}
+    status = res.status or {}
+    origem = (spec.get("origem") or "").strip()
+    idioma_destino = spec.get("idioma_destino", "pt-BR")
+    candidatos = [status.get("saida")]
+    if origem:
+        candidatos.append(_cache_para(origem, idioma_destino))
+    for caminho in candidatos:
+        if not caminho:
+            continue
+        try:
+            p = Path(caminho)
+            if p.exists():
+                p.unlink()
+                _log.info("artefato removido: %s", caminho)
+        except OSError as exc:
+            _log.warning("falha ao remover artefato %s: %s", caminho, exc)
 
 
 def _status_payload() -> dict:
