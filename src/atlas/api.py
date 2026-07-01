@@ -364,6 +364,20 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(200, schema_payload())
             return
 
+        # /_estimar?label=<Traducao> | ?origem=<pdf>&motor=<claude|ollama>
+        # Prévia grátis (sem IA, P1) de páginas/blocos/tokens/custo antes de rodar
+        # (ADR-0030 §Estimativa; ADR-0005 orçamento reativo).
+        if path == _API_PREFIX + "/_estimar":
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            label = qs.get("label", [""])[0].strip()
+            origem = qs.get("origem", [""])[0].strip()
+            motor = qs.get("motor", [""])[0].strip()
+            code, payload = _estimar_payload(_store, label, origem, motor)
+            self._json(code, payload)
+            return
+
         rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
 
@@ -694,6 +708,35 @@ def _resource_to_dict(r: Resource) -> dict:
         "criado_em": r.criado_em,
         "atualizado_em": r.atualizado_em,
     }
+
+
+def _estimar_payload(
+    store: ResourceStore | None, label: str, origem: str, motor: str
+) -> tuple[int, dict]:
+    """Prévia de custo/tamanho de uma tradução (ADR-0030). Grátis: não chama IA (P1).
+
+    Aceita ``label`` de um ``Traducao`` existente (usa spec.origem/motor) OU ``origem``
+    (caminho do PDF) + ``motor`` diretos. Devolve ``(código_http, corpo)``.
+    """
+    from atlas.traducao.estimativa import estimar
+
+    if label:
+        if store is None:
+            return 503, {"error": "store not ready"}
+        t = store.get("Traducao", label)
+        if t is None:
+            return 404, {"error": f"Traducao/{label} not found"}
+        origem = (t.spec.get("origem") or "").strip()
+        motor = motor or t.spec.get("motor", "claude")
+    if not origem:
+        return 400, {"error": "label ou origem obrigatório"}
+    if not Path(origem).exists():
+        return 400, {"error": f"origem inexistente: {origem!r}"}
+    try:
+        est = estimar(origem, motor=motor or "claude")
+    except Exception as exc:  # noqa: BLE001 — PDF inválido não derruba a API
+        return 500, {"error": f"falha ao estimar: {exc}"}
+    return 200, est.to_dict()
 
 
 def _status_payload() -> dict:
