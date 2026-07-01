@@ -6,14 +6,19 @@ Resumível: o cache cobre blocos já traduzidos, então reprocessar é barato.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import fitz
 
 from atlas.ia import invocar as _invocar_padrao
 from atlas.traducao.extracao import extrair_pagina
 from atlas.traducao.remontagem import remontar_pagina
-from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao, traduzir_blocos
+from atlas.traducao.traducao_ia import (
+    CacheTraducao,
+    ConfigTraducao,
+    detectar_glossario,
+    traduzir_blocos,
+)
 
 
 @dataclass
@@ -21,6 +26,28 @@ class ProgressoTraducao:
     paginas_total: int
     paginas_prontas: int
     blocos_traduzidos: int
+    glossario_auto: list[str] = field(default_factory=list)
+
+
+def _mesclar_glossario(base: list[str], extra: list[str]) -> list[str]:
+    """Une glossários preservando ordem e sem duplicar (case-insensitive)."""
+    vistos = {t.lower() for t in base}
+    out = list(base)
+    for t in extra:
+        if t.lower() not in vistos:
+            vistos.add(t.lower())
+            out.append(t)
+    return out
+
+
+def _amostra_para_glossario(doc, cfg, invocar_fn, max_paginas: int = 5, limite: int = 40):
+    """Extrai blocos das primeiras páginas e detecta o glossário automático (1 chamada IA)."""
+    amostra = []
+    for i in range(min(doc.page_count, max_paginas)):
+        amostra.extend(b for b in extrair_pagina(doc[i], i) if not b.skip)
+        if len(amostra) >= limite:
+            break
+    return detectar_glossario(amostra, cfg, invocar_fn=invocar_fn, limite=limite)
 
 
 def traduzir_pdf(
@@ -34,6 +61,14 @@ def traduzir_pdf(
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
     total = doc.page_count
+
+    # glossario_auto: detecta termos técnicos a preservar antes de traduzir (ADR-0030).
+    detectados: list[str] = []
+    if cfg.glossario_auto:
+        detectados = _amostra_para_glossario(doc, cfg, invocar_fn)
+        if detectados:
+            cfg.glossario = _mesclar_glossario(cfg.glossario, detectados)
+
     blocos_traduzidos = 0
     for i in range(total):
         page = doc[i]
@@ -42,9 +77,9 @@ def traduzir_pdf(
         traducoes = traduzir_blocos(traduziveis, cfg, cache, invocar_fn=invocar_fn)
         blocos_traduzidos += len(traducoes)
         remontar_pagina(page, blocos, traducoes)
-        prog = ProgressoTraducao(total, i + 1, blocos_traduzidos)
+        prog = ProgressoTraducao(total, i + 1, blocos_traduzidos, detectados)
         if on_progress:
             on_progress(prog)
     doc.save(destino, garbage=4, deflate=True)
     doc.close()
-    return ProgressoTraducao(total, total, blocos_traduzidos)
+    return ProgressoTraducao(total, total, blocos_traduzidos, detectados)

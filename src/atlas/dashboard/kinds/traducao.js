@@ -48,9 +48,12 @@ function _trProgresso(st, name) {
   }
   if (fase === 'pronto') {
     const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
+    const ga = (st.glossario_auto && st.glossario_auto.length)
+      ? `<div style="color:var(--muted);font-size:12px;margin-top:6px">🔤 glossário auto: ${st.glossario_auto.map(esc).join(', ')}</div>`
+      : '';
     return `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)</div>
       ${st.saida ? `<div style="margin-top:8px"><button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar tradução</button></div>
-      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}`;
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}`;
   }
   // traduzindo
   const pct = st.progresso_pct != null ? st.progresso_pct : 0;

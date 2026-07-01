@@ -483,6 +483,13 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "hint": "Contexto p/ a IA (ex: 'Kubernetes'); melhora a tradução",
             },
             {
+                "k": "glossario_auto",
+                "type": "select",
+                "label": "Glossário automático",
+                "opts": ["false", "true"],
+                "hint": "true = a IA detecta termos técnicos a manter em inglês (1 chamada extra)",
+            },
+            {
                 "k": "motor",
                 "type": "select",
                 "label": "Motor (IA)",

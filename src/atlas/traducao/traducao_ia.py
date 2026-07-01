@@ -8,8 +8,10 @@ texto normalizado evita repagar blocos idênticos (repetições, reprocessamento
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from atlas.ia import _MODELO_PADRAO
 from atlas.ia import invocar as _invocar_padrao
@@ -24,6 +26,7 @@ class ConfigTraducao:
     idioma_destino: str = "pt-BR"
     assunto: str = ""
     glossario: list[str] = field(default_factory=list)
+    glossario_auto: bool = False
     motor: str = "claude"
     modelo: str | None = None
 
@@ -47,6 +50,66 @@ class CacheTraducao:
 
     def to_dict(self) -> dict[str, str]:
         return dict(self._d)
+
+    @classmethod
+    def carregar(cls, path: str | Path) -> CacheTraducao:
+        """Carrega o cache de um JSON em disco; ausente/corrompido ⇒ cache vazio."""
+        try:
+            dados = json.loads(Path(path).read_text(encoding="utf-8"))
+            if isinstance(dados, dict):
+                return cls({str(k): str(v) for k, v in dados.items()})
+        except (OSError, ValueError):
+            pass
+        return cls()
+
+    def salvar(self, path: str | Path) -> None:
+        """Persiste o cache em JSON (cria o diretório se preciso)."""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(self._d, ensure_ascii=False), encoding="utf-8")
+
+
+_RE_TERMO = re.compile(r"[A-Za-z][A-Za-z0-9._+-]{1,}")
+
+
+def detectar_glossario(
+    blocos: list[BlocoTraducao],
+    cfg: ConfigTraducao,
+    invocar_fn=_invocar_padrao,
+    limite: int = 40,
+) -> list[str]:
+    """Detecta termos técnicos a preservar em inglês (glossario_auto, ADR-0030).
+
+    Uma única chamada de IA sobre uma amostra dos blocos tradutíveis. Devolve a
+    lista de termos (nomes de APIs, comandos, jargão) que **não** devem ser
+    traduzidos. Robusto a ruído: só aceita termos que aparecem no texto amostrado.
+    """
+    amostra = [b.texto for b in blocos if not b.skip][:limite]
+    if not amostra:
+        return []
+    corpus = "\n".join(amostra)
+    prompt = (
+        f"Abaixo, trechos de um livro técnico sobre {cfg.assunto or 'tecnologia'} "
+        f"em {cfg.idioma_origem}. Liste os termos técnicos que devem permanecer em "
+        f"inglês numa tradução para {cfg.idioma_destino}: nomes de APIs, comandos, "
+        f"ferramentas e jargão consagrado. Responda APENAS os termos separados por "
+        f"vírgula, sem explicações.\n\n{corpus}"
+    )
+    try:
+        resposta = invocar_fn(prompt, modelo=cfg.modelo or _MODELO_PADRAO, motor=cfg.motor)
+    except Exception:  # noqa: BLE001 — detecção é best-effort; falha não derruba a tradução
+        return []
+
+    presentes = {t.strip("._+-").lower() for t in _RE_TERMO.findall(corpus)}
+    vistos: set[str] = set()
+    termos: list[str] = []
+    for bruto in resposta.replace("\n", ",").split(","):
+        termo = bruto.strip().strip(".;:")
+        low = termo.lower()
+        if termo and low in presentes and low not in vistos:
+            vistos.add(low)
+            termos.append(termo)
+    return termos
 
 
 def montar_prompt(blocos: list[BlocoTraducao], cfg: ConfigTraducao) -> str:

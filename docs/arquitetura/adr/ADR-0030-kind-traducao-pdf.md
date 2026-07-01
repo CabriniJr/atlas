@@ -91,5 +91,8 @@ Design completo em
   /_traduzir`, background) e barra de progresso via polling do status.
 - ✅ Upload do PDF (`POST /_upload`, grava em `data/pdfs/` e preenche `spec.origem`) e
   download do resultado (`GET /_download?label=`) pela UI.
-- `glossario_auto` (detecção de termos técnicos pela IA) e cache persistido em disco.
+- ✅ `glossario_auto`: a IA detecta termos técnicos a manter em inglês (1 chamada sobre
+  amostra) e mescla no glossário antes de traduzir; termos vão para `status.glossario_auto`.
+- ✅ Cache persistido em disco: `data/pdfs/<origem>.<dst>.cache.json`, carregado/salvo
+  pelo collect (reruns baratos e resumíveis, mesmo após falha).
 - OCR de PDFs escaneados (fora de escopo inicial).
