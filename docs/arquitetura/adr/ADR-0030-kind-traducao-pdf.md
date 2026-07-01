@@ -89,7 +89,7 @@ Design completo em
 - ✅ View no web shell ([ADR-0029](ADR-0029-web-shell-da-api.md)): Kind `Traducao` no
   `/_schema`, render dedicada (`kinds/traducao.js`) com prévia, disparo (`POST
   /_traduzir`, background) e barra de progresso via polling do status.
-- View no web shell — **falta** upload do PDF e download do resultado pela UI (hoje o
-  caminho de origem/saída é do filesystem do servidor).
+- ✅ Upload do PDF (`POST /_upload`, grava em `data/pdfs/` e preenche `spec.origem`) e
+  download do resultado (`GET /_download?label=`) pela UI.
 - `glossario_auto` (detecção de termos técnicos pela IA) e cache persistido em disco.
 - OCR de PDFs escaneados (fora de escopo inicial).

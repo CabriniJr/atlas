@@ -22,6 +22,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import subprocess
 import threading
 import uuid
@@ -155,6 +156,32 @@ class _Handler(BaseHTTPRequestHandler):
         # (evita celular/navegador servir HTML antigo após um rebuild).
         self.send_header("Cache-Control", "no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _download_traducao(self, label: str) -> None:
+        """Stream do PDF traduzido de ``Traducao/<label>`` (status.saida)."""
+        if _store is None:
+            self._json(503, {"error": "store not ready"})
+            return
+        t = _store.get("Traducao", label) if label else None
+        if t is None:
+            self._json(404, {"error": f"Traducao/{label} not found"})
+            return
+        saida = (t.status or {}).get("saida")
+        if not saida:
+            self._json(409, {"error": "tradução ainda não concluída (sem saída)"})
+            return
+        alvo = Path(saida)
+        if not alvo.is_file():
+            self._json(404, {"error": f"arquivo de saída ausente: {saida}"})
+            return
+        data = alvo.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/pdf")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Disposition", f'attachment; filename="{alvo.name}"')
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
@@ -367,6 +394,14 @@ class _Handler(BaseHTTPRequestHandler):
         # /_estimar?label=<Traducao> | ?origem=<pdf>&motor=<claude|ollama>
         # Prévia grátis (sem IA, P1) de páginas/blocos/tokens/custo antes de rodar
         # (ADR-0030 §Estimativa; ADR-0005 orçamento reativo).
+        # /_download?label=<Traducao> → baixa o PDF traduzido (status.saida)
+        if path == _API_PREFIX + "/_download":
+            from urllib.parse import parse_qs, urlparse
+
+            label = parse_qs(urlparse(self.path).query).get("label", [""])[0].strip()
+            self._download_traducao(label)
+            return
+
         if path == _API_PREFIX + "/_estimar":
             from urllib.parse import parse_qs, urlparse
 
@@ -403,7 +438,20 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = self.path.split("?")[0].rstrip("/")
         length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
+        raw = self.rfile.read(length) if length else b""
+
+        # Upload de PDF (corpo binário, não-JSON): salvo aqui antes do parse.
+        if path == _API_PREFIX + "/_upload":
+            if not self._auth():
+                self._json(401, {"error": "unauthorized"})
+                return
+            from urllib.parse import parse_qs, urlparse
+
+            qs = parse_qs(urlparse(self.path).query)
+            self._json(*_salvar_upload(qs.get("name", [""])[0], qs.get("label", [""])[0], raw))
+            return
+
+        body = json.loads(raw) if raw else {}
 
         # Endpoints públicos de login (pré-auth): não se pode estar logado p/ logar.
         if path.startswith(_API_PREFIX + "/_auth/"):
@@ -747,6 +795,41 @@ def _estimar_payload(
     except Exception as exc:  # noqa: BLE001 — PDF inválido não derruba a API
         return 500, {"error": f"falha ao estimar: {exc}"}
     return 200, est.to_dict()
+
+
+def _pdf_dir() -> Path:
+    """Diretório onde uploads de PDF são gravados (ADR-0030). Configurável por env."""
+    d = os.environ.get("ATLAS_PDF_DIR") or str(Path(_PROJECT_DIR) / "data" / "pdfs")
+    p = Path(d)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _safe_pdf_name(name: str) -> str:
+    """Basename saneado terminando em .pdf (evita path traversal)."""
+    base = os.path.basename((name or "").strip()) or "upload.pdf"
+    base = re.sub(r"[^A-Za-z0-9._-]", "_", base)
+    if not base.lower().endswith(".pdf"):
+        base += ".pdf"
+    return base
+
+
+def _salvar_upload(name: str, label: str, data: bytes) -> tuple[int, dict]:
+    """Grava um PDF enviado em ``data/pdfs/`` (ADR-0030). Devolve ``(código, corpo)``.
+
+    Se ``label`` aponta um ``Traducao`` existente, atualiza ``spec.origem`` para o
+    arquivo salvo — o upload já deixa o recurso pronto para estimar/traduzir.
+    """
+    if not data:
+        return 400, {"error": "corpo vazio (envie o PDF como bytes)"}
+    if data[:5] != b"%PDF-":
+        return 400, {"error": "arquivo não é um PDF (%PDF- ausente)"}
+    destino = _pdf_dir() / _safe_pdf_name(name)
+    destino.write_bytes(data)
+    caminho = str(destino)
+    if label and _store is not None and _store.get("Traducao", label) is not None:
+        _store.patch("Traducao", label, {"origem": caminho}, datetime.now())
+    return 200, {"ok": True, "path": caminho, "name": destino.name}
 
 
 def _iniciar_traducao(label: str) -> tuple[int, dict]:

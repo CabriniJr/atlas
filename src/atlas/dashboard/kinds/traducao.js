@@ -29,16 +29,18 @@ function _trShell(r) {
     <div style="color:var(--muted);font-size:13px;margin-bottom:12px;word-break:break-all">
       ${origem ? '📄 ' + esc(origem) : '<span style="color:var(--red)">sem PDF de origem (edite o spec)</span>'}
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <input type="file" id="tr-file" accept="application/pdf" style="display:none">
+      <button class="btn" id="tr-upload">⬆️ Enviar PDF</button>
       <button class="btn" id="tr-estimar" ${origem ? '' : 'disabled'}>💵 Estimar</button>
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
     </div>
     <div id="tr-estimativa"></div>
-    <div id="tr-progresso">${_trProgresso(st)}</div>
+    <div id="tr-progresso">${_trProgresso(st, r.name)}</div>
   </div>`;
 }
 
-function _trProgresso(st) {
+function _trProgresso(st, name) {
   const fase = st.fase;
   if (!fase) return '';
   if (fase === 'erro') {
@@ -47,7 +49,8 @@ function _trProgresso(st) {
   if (fase === 'pronto') {
     const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
     return `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)</div>
-      ${st.saida ? `<div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}`;
+      ${st.saida ? `<div style="margin-top:8px"><button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar tradução</button></div>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}`;
   }
   // traduzindo
   const pct = st.progresso_pct != null ? st.progresso_pct : 0;
@@ -64,6 +67,26 @@ function _trWire(name, container) {
   const trBtn = container.querySelector('#tr-traduzir');
   const estBox = container.querySelector('#tr-estimativa');
   const progBox = container.querySelector('#tr-progresso');
+  const upBtn = container.querySelector('#tr-upload');
+  const fileInput = container.querySelector('#tr-file');
+
+  if (upBtn && fileInput) {
+    upBtn.onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (!f) return;
+      upBtn.disabled = true; upBtn.textContent = '⬆️ enviando…';
+      try {
+        const buf = await f.arrayBuffer();
+        await apiFetch(API + '/_upload?name=' + encodeURIComponent(f.name) + '&label=' + encodeURIComponent(name),
+          { method: 'POST', body: buf, headers: { 'Content-Type': 'application/pdf' } });
+        await loadAndRender('Traducao', name);  // recarrega com a origem já preenchida
+      } catch (err) {
+        upBtn.disabled = false; upBtn.textContent = '⬆️ Enviar PDF';
+        estBox.innerHTML = `<div style="color:var(--red);font-size:13px">upload falhou: ${esc(err.message)}</div>`;
+      }
+    };
+  }
 
   if (estBtn) estBtn.onclick = async () => {
     estBtn.disabled = true; estBox.innerHTML = '<div style="color:var(--muted);font-size:13px">estimando…</div>';
@@ -85,7 +108,7 @@ function _trWire(name, container) {
     try {
       const r = await apiFetch(API + '/Traducao/' + encodeURIComponent(name));
       const st = r.status || {};
-      progBox.innerHTML = _trProgresso(st);
+      progBox.innerHTML = _trProgresso(st, name);
       if (st.fase !== 'traduzindo') {
         clearInterval(polling); polling = null;
         if (trBtn) trBtn.disabled = false;
@@ -95,7 +118,7 @@ function _trWire(name, container) {
 
   if (trBtn) trBtn.onclick = async () => {
     trBtn.disabled = true;
-    progBox.innerHTML = _trProgresso({ fase: 'traduzindo', progresso_pct: 0, paginas_total: 0, paginas_prontas: 0 });
+    progBox.innerHTML = _trProgresso({ fase: 'traduzindo', progresso_pct: 0, paginas_total: 0, paginas_prontas: 0 }, name);
     try {
       await apiFetch(API + '/_traduzir', { method: 'POST', body: JSON.stringify({ label: name }) });
       if (!polling) polling = setInterval(poll, 2000);
@@ -110,5 +133,24 @@ function _trWire(name, container) {
   if (cur.includes('traduzindo')) {
     if (trBtn) trBtn.disabled = true;
     polling = setInterval(poll, 2000);
+  }
+}
+
+// Baixa o PDF traduzido (blob + auth); global p/ o onclick do botão de progresso.
+async function trDownload(name) {
+  try {
+    const h = {}; if (typeof TOKEN !== 'undefined' && TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+    const r = await fetch(API + '/_download?label=' + encodeURIComponent(name),
+      { credentials: 'same-origin', headers: h });
+    if (!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('download falhou: ' + err.message);
   }
 }
