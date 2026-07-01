@@ -21,7 +21,58 @@ let _homeBuilderWired = false;
 
 async function loadHome() {
   _wireHomeBuilder();
+  _wireHomeTraducao();
   await Promise.all([_loadHomeTracking(), _loadHomeWhiteboard()]);
+}
+
+// ── Atalho: Traduzir um PDF (cria Traducao + upload + abre a view) ──────────────
+let _homeTrWired = false;
+function _wireHomeTraducao() {
+  if (_homeTrWired) return;
+  const inp = document.getElementById('home-tr-file');
+  if (!inp) return;
+  _homeTrWired = true;
+  inp.addEventListener('change', () => {
+    const f = inp.files && inp.files[0];
+    inp.value = '';  // permite reenviar o mesmo arquivo depois
+    if (f) _homeTrUpload(f);
+  });
+}
+
+// Botão do hero: abre o seletor de arquivo.
+function homeTraduzirPDF() {
+  const inp = document.getElementById('home-tr-file');
+  if (inp) inp.click();
+}
+
+async function _homeTrUpload(file) {
+  const log = document.getElementById('home-tr-log');
+  const btn = document.getElementById('home-tr-btn');
+  const base = file.name.replace(/\.pdf$/i, '');
+  let name = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'traducao';
+  if (log) log.innerHTML = '<span style="color:var(--muted)">criando tradução e enviando o PDF…</span>';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Enviando…'; }
+  try {
+    // nome único: se já existe, sufixa com um curto timestamp
+    const existe = await apiFetch(`${API}/Traducao/${encodeURIComponent(name)}`).then(() => true).catch(() => false);
+    if (existe) name = `${name}-${Date.now().toString(36).slice(-4)}`;
+
+    await apiFetch(`${API}/Traducao/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ labels: {}, spec: { idioma_origem: 'en', idioma_destino: 'pt-BR', motor: 'claude' }, status: {} }),
+    });
+    const buf = await file.arrayBuffer();
+    await apiFetch(`${API}/_upload?name=${encodeURIComponent(file.name)}&label=${encodeURIComponent(name)}`, {
+      method: 'POST', body: buf, headers: { 'Content-Type': 'application/pdf' },
+    });
+    if (log) log.innerHTML = `<span style="color:var(--green)">✓ ${esc(name)} criado — abrindo…</span>`;
+    if (typeof setView === 'function') setView('explorer');
+    if (typeof openResource === 'function') await openResource('Traducao', name);
+  } catch (e) {
+    if (log) log.innerHTML = `<span style="color:var(--red)">erro: ${esc(e.message)}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📄 Enviar PDF para traduzir'; }
+  }
 }
 
 // ── Zona 1: Construir com IA ───────────────────────────────────────────────────
@@ -131,7 +182,7 @@ async function _loadHomeWhiteboard() {
   if (!el) return;
   // Kinds que têm render especializada (quadro branco)
   const kinds = (typeof RENDER_REGISTRY !== 'undefined') ? Object.keys(RENDER_REGISTRY) : ['Repo', 'RepoGroup', 'Agente'];
-  const icons = {Repo: '📦', RepoGroup: '🗂', Agente: '🤖', Job: '🧩', LLMProvider: '🔌'};
+  const icons = {Repo: '📦', RepoGroup: '🗂', Agente: '🤖', Job: '🧩', LLMProvider: '🔌', Traducao: '📖'};
 
   const groups = await Promise.all(kinds.map(async k => {
     const items = await apiFetch(`${API}/${k}`).catch(() => []);
@@ -178,6 +229,14 @@ function _wbSubtitle(kind, r) {
   }
   if (kind === 'LLMProvider') {
     return `${esc(s.motor || '')} · ${esc(s.modelo || '')}`;
+  }
+  if (kind === 'Traducao') {
+    const fase = st.fase;
+    const origem = s.origem ? String(s.origem).split('/').pop() : 'sem PDF';
+    if (fase === 'pronto') return '✓ pronto · ' + esc(origem);
+    if (fase === 'traduzindo') return `⏳ ${st.progresso_pct || 0}% · ${esc(origem)}`;
+    if (fase === 'erro') return '⚠️ erro · ' + esc(origem);
+    return esc(origem);
   }
   return esc(s.description || '');
 }
