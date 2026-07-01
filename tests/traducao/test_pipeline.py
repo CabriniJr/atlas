@@ -15,6 +15,10 @@ def _fake_invocar_factory(contador):
     return fake
 
 
+def _fake_bruto(textos, cfg):  # MT offline p/ testes: prefixa BRUTO (sem rede)
+    return [f"BRUTO {t}" for t in textos]
+
+
 def test_traduz_pdf_gera_saida_e_reporta_progresso(tmp_path):
     src = tmp_path / "src.pdf"
     doc = fitz.open()
@@ -33,6 +37,7 @@ def test_traduz_pdf_gera_saida_e_reporta_progresso(tmp_path):
         cfg,
         invocar_fn=_fake_invocar_factory(contador),
         on_progress=lambda p: progresso.append(p.paginas_prontas),
+        bruto_fn=_fake_bruto,
     )
     assert isinstance(res, ProgressoTraducao)
     assert res.paginas_total == 2

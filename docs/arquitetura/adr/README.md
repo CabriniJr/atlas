@@ -28,6 +28,7 @@ atualizado-em: 2026-06-23
 | 1.12   | 2026-06-26 | Tech Lead | ADR-0027 (Multiusuário, auth e credenciais cifradas) — **aceito**; épico implementado (Fases 1–5 + UI) | PO/PM |
 | 1.13   | 2026-06-26 | Tech Lead | ADR-0028 (Endurecimento do Agente modo `code` — workspace restrito, allow/deny de tools, concorrência, gate) — proposto | — |
 | 1.14   | 2026-07-01 | Tech Lead | ADR-0030 (Kind `Traducao` — tradutor de PDFs de alta fidelidade via PyMuPDF) — **aceito** | PO/PM |
+| 1.15   | 2026-07-01 | Tech Lead | ADR-0031 (Tradução em 2 estágios — MT bruta + refino por LLM, modular e resumível) — **aceito** | PO/PM |
 
 ---
 
@@ -79,6 +80,7 @@ atualizado-em: 2026-06-23
 | [0028](ADR-0028-endurecimento-agente-code.md) | **Endurecimento do Agente modo `code`** (workspace restrito, allow/deny de tools, limite de concorrência, gate de curadoria, runs persistentes) | proposto | Hardening Tema 1 (fecha §Pendências do ADR-0025) |
 | [0029](ADR-0029-web-shell-da-api.md) | **`web/` como shell gráfico principal da API** (Electron/Tauri-ready, design system DesignSync) | aceito | Pedido do PO (overhaul do front) |
 | [0030](ADR-0030-kind-traducao-pdf.md) | **Kind `Traducao`** (tradutor de PDFs de alta fidelidade; in-place redaction+reinsert via PyMuPDF) | **aceito** | Pedido do PO ("traduzir PDFs preservando design") |
+| [0031](ADR-0031-traducao-mt-mais-refino.md) | **Tradução em 2 estágios** (MT bruta via deep-translator + refino por LLM; modular, Haiku default, resumível) | **aceito** | Pedido do PO (timeout/tokens; refino sobre bruto) |
 
 ## Lastro
 

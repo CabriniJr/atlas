@@ -3,11 +3,18 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import fitz
+import pytest
 
 import atlas.rotinas.traduzir_pdf as mod
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.rotinas import obter
+
+
+@pytest.fixture(autouse=True)
+def _mt_offline(monkeypatch):
+    """Evita rede: MT bruta vira identidade nos testes do collect (ADR-0031)."""
+    monkeypatch.setattr("atlas.traducao.pipeline.traduzir_bruto", lambda textos, cfg: list(textos))
 
 
 def test_collect_registrado():

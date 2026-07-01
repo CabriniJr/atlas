@@ -29,6 +29,9 @@ class ConfigTraducao:
     glossario_auto: bool = False
     motor: str = "claude"
     modelo: str | None = None
+    refino: bool = True  # ADR-0031: LLM refina o bruto (False = tradução puramente MT)
+    timeout: int = 60  # timeout por chamada de refino
+    lote_refino: int = 20  # blocos por chamada de refino (limita gasto/timeout, dá resume)
 
 
 class CacheTraducao:
@@ -154,3 +157,82 @@ def traduzir_blocos(
             cache.put(b.texto, cfg, t)
             resultado[b.id] = t
     return resultado
+
+
+def montar_prompt_refino(
+    pares: list[tuple[int, str, str]], cfg: ConfigTraducao
+) -> str:
+    """Prompt de refino (ADR-0031): melhora a tradução BRUTA comparando com a origem.
+
+    ``pares`` = lista de ``(id, origem, bruto)``. O LLM não traduz do zero: corrige o
+    bruto para ficar fiel à origem, sem perder informação, respeitando o glossário.
+    """
+    glossario = ", ".join(cfg.glossario) if cfg.glossario else "(nenhum)"
+    corpo = "\n\n".join(
+        f"[[{i}]]\nORIGEM: {origem}\nBRUTO: {bruto}" for i, origem, bruto in pares
+    )
+    return (
+        f"Você revisa a tradução de {cfg.idioma_origem} para {cfg.idioma_destino} de um "
+        f"livro técnico sobre: {cfg.assunto or 'tecnologia'}.\n"
+        f"Para cada bloco há a ORIGEM e uma tradução BRUTA (automática). Corrija o BRUTO "
+        f"para ficar FIEL à origem e natural, SEM PERDER informação, mantendo o tom "
+        f"técnico. NÃO traduza termos técnicos, nomes de APIs, comandos ou código; "
+        f"mantenha em inglês os termos do glossário: {glossario}.\n"
+        f"Responda cada bloco no MESMO formato numerado, só a versão final, sem "
+        f"comentários:\n[[N]] <tradução final>\n\n{corpo}"
+    )
+
+
+def refinar_blocos(
+    blocos: list[BlocoTraducao],
+    brutos: dict[int, str],
+    cfg: ConfigTraducao,
+    cache: CacheTraducao,
+    invocar_fn=_invocar_padrao,
+) -> tuple[dict[int, str], bool]:
+    """Refina os blocos em lotes (ADR-0031). Devolve ``(traduções, esgotou)``.
+
+    - Bloco já no cache ⇒ usa o refinado salvo (resume barato).
+    - Lote refinado com sucesso ⇒ cacheia (persiste o progresso).
+    - Falha do LLM (timeout/tokens) ⇒ ``esgotou=True``, para de chamar o LLM; os
+      pendentes caem para o BRUTO (tradução completa, sem perda) e **não** são
+      cacheados, para serem refinados num próximo run.
+    """
+    resultado: dict[int, str] = {}
+    pendentes: list[BlocoTraducao] = []
+    for b in blocos:
+        cached = cache.get(b.texto, cfg)
+        if cached is not None:
+            resultado[b.id] = cached
+        else:
+            pendentes.append(b)
+
+    esgotou = False
+    i = 0
+    while i < len(pendentes):
+        lote = pendentes[i : i + max(1, cfg.lote_refino)]
+        pares = [(b.id, b.texto, brutos.get(b.id, b.texto)) for b in lote]
+        prompt = montar_prompt_refino(pares, cfg)
+        try:
+            resposta = invocar_fn(
+                prompt,
+                modelo=cfg.modelo or _MODELO_PADRAO,
+                timeout=cfg.timeout,
+                motor=cfg.motor,
+            )
+        except Exception:  # noqa: BLE001 — tokens/timeout: pausa e mantém resumível
+            esgotou = True
+            break
+        refinados = parsear_resposta(resposta, [b.id for b in lote])
+        for b in lote:
+            t = refinados.get(b.id)
+            if t:
+                cache.put(b.texto, cfg, t)  # progresso persistido
+                resultado[b.id] = t
+            else:
+                resultado[b.id] = brutos.get(b.id, b.texto)  # sem cache ⇒ retry depois
+        i += len(lote)
+
+    for b in pendentes[i:]:  # pendentes após esgotar ⇒ bruto (sem perda), sem cache
+        resultado[b.id] = brutos.get(b.id, b.texto)
+    return resultado, esgotou

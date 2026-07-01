@@ -93,7 +93,10 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         glossario=list(t.spec.get("glossario", []) or []),
         glossario_auto=_verdade(t.spec.get("glossario_auto", False)),
         motor=t.spec.get("motor", "claude"),
-        modelo=t.spec.get("modelo"),
+        modelo=t.spec.get("modelo") or None,
+        refino=_verdade(t.spec.get("refino", True)),
+        timeout=int(t.spec.get("timeout") or 60),
+        lote_refino=int(t.spec.get("lote_refino") or 20),
     )
 
     iniciado = ctx.agora.isoformat()
@@ -147,7 +150,13 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
 
     try:
         prog = traduzir_pdf(
-            origem, saida, cfg, invocar_fn=invocar, on_progress=on_progress, cache=cache
+            origem,
+            saida,
+            cfg,
+            invocar_fn=invocar,
+            on_progress=on_progress,
+            cache=cache,
+            cache_path=cache_path,
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)
@@ -155,29 +164,40 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         _erro(store, t, ctx, str(exc))
         return CollectResult(data={"_saida": f"⚠️ traduzir-pdf/{label} falhou: {exc}"})
 
-    cache.salvar(cache_path)  # persiste o cache p/ reruns baratos (ADR-0030)
+    cache.salvar(cache_path)  # persiste o cache p/ reruns baratos (ADR-0030/0031)
     log = list((store.get("Traducao", t.name).status or {}).get("log") or [])
-    log.append(_evento(f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"))
+    if prog.parcial:
+        # tokens acabaram no meio: PDF saiu completo com o bruto; re-disparar refina o resto
+        msg = f"⏸ parcial — {prog.paginas_prontas} páginas (tokens acabaram; re-disparar refina o restante)"
+        fase = "parcial"
+        atividade = "parcial: refino incompleto — re-disparar continua de onde parou"
+    else:
+        msg = f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"
+        fase = "pronto"
+        atividade = "tradução concluída"
+    log.append(_evento(msg))
     _status(
         store,
         t,
         ctx,
         {
-            "fase": "pronto",
+            "fase": fase,
             "saida": saida,
             "paginas_total": prog.paginas_total,
             "paginas_prontas": prog.paginas_prontas,
             "blocos_traduzidos": prog.blocos_traduzidos,
             "progresso_pct": 100,
+            "parcial": prog.parcial,
             "glossario_auto": prog.glossario_auto,
-            "atividade": "tradução concluída",
+            "atividade": atividade,
             "eta_seg": 0,
             "log": log[-40:],
             "erro": None,
         },
     )
+    marca = "⏸" if prog.parcial else "✓"
     return CollectResult(
-        data={"_saida": f"✓ traduzir-pdf/{label}: {prog.paginas_prontas} páginas → {saida}"}
+        data={"_saida": f"{marca} traduzir-pdf/{label}: {prog.paginas_prontas} páginas → {saida}"}
     )
 
 

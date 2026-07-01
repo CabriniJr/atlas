@@ -25,7 +25,9 @@ def test_livro_multibloco_preserva_design_e_glossario(tmp_path):
 
     out = tmp_path / "out.pdf"
     cfg = ConfigTraducao(assunto="Kubernetes", glossario=["pod"])
-    traduzir_pdf(str(src), str(out), cfg, invocar_fn=fake_invocar)
+    traduzir_pdf(
+        str(src), str(out), cfg, invocar_fn=fake_invocar, bruto_fn=lambda ts, c: list(ts)
+    )
 
     r = fitz.open(out)[0]
     texto = r.get_text()

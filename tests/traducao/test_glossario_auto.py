@@ -70,15 +70,17 @@ def test_pipeline_glossario_auto_injeta_termos(tmp_path):
 
     capturado = {}
 
-    def fake(prompt, modelo=None, motor=None):
-        if "permanecer em inglês" in prompt or "permanecer em" in prompt:
+    def fake(prompt, modelo=None, motor=None, timeout=60):
+        if "permanecer em inglês" in prompt:
             return "kubectl, pods"  # detecção
-        capturado["prompt"] = prompt  # tradução
+        capturado["prompt"] = prompt  # refino
         return "[[0]] O comando kubectl escala pods."
 
     cfg = ConfigTraducao(assunto="Kubernetes", glossario_auto=True)
-    prog = traduzir_pdf(str(src), str(tmp_path / "out.pdf"), cfg, invocar_fn=fake)
+    prog = traduzir_pdf(
+        str(src), str(tmp_path / "out.pdf"), cfg, invocar_fn=fake, bruto_fn=lambda ts, c: ts
+    )
 
     assert "kubectl" in prog.glossario_auto
     assert "kubectl" in cfg.glossario  # mesclado
-    assert "kubectl" in capturado["prompt"]  # entrou no prompt de tradução
+    assert "kubectl" in capturado["prompt"]  # entrou no prompt de refino

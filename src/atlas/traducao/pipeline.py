@@ -1,7 +1,9 @@
-"""Orquestra os 4 estágios da tradução de PDF (ADR-0030).
+"""Orquestra a tradução de PDF (ADR-0030 + ADR-0031).
 
-Por página: extrair → traduzir (IA, com cache) → remontar → salvar (checkpoint).
-Resumível: o cache cobre blocos já traduzidos, então reprocessar é barato.
+Por página: extrair → **MT bruta** (estágio 1) → **refino por LLM** (estágio 2) →
+remontar → checkpoint do cache. Resumível: o cache guarda o refinado por bloco e é
+salvo a cada página; se os tokens acabam, o run conclui com o bruto (fase
+``parcial``) e um novo run refina o restante.
 """
 
 from __future__ import annotations
@@ -13,11 +15,12 @@ import fitz
 from atlas.ia import invocar as _invocar_padrao
 from atlas.traducao.extracao import extrair_pagina
 from atlas.traducao.remontagem import remontar_pagina
+from atlas.traducao.tradutor_bruto import traduzir_bruto
 from atlas.traducao.traducao_ia import (
     CacheTraducao,
     ConfigTraducao,
     detectar_glossario,
-    traduzir_blocos,
+    refinar_blocos,
 )
 
 
@@ -28,6 +31,7 @@ class ProgressoTraducao:
     blocos_traduzidos: int
     glossario_auto: list[str] = field(default_factory=list)
     fase: str = "traduzindo"  # "preparando" | "glossario" | "traduzindo"
+    parcial: bool = False  # ADR-0031: tokens acabaram; restante ficou no bruto (resumível)
 
 
 def _mesclar_glossario(base: list[str], extra: list[str]) -> list[str]:
@@ -51,6 +55,30 @@ def _amostra_para_glossario(doc, cfg, invocar_fn, max_paginas: int = 5, limite: 
     return detectar_glossario(amostra, cfg, invocar_fn=invocar_fn, limite=limite)
 
 
+def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn):
+    """Traduz os blocos de uma página: MT bruta (uncached) + refino. Devolve (traduções, esgotou)."""
+    pend = [b for b in traduziveis if cache.get(b.texto, cfg) is None]
+    brutos: dict[int, str] = {}
+    if pend:
+        for b, bt in zip(pend, bruto_fn([b.texto for b in pend], cfg)):
+            brutos[b.id] = bt
+
+    # Sem refino (config) ou tokens já esgotados ⇒ usa o bruto direto.
+    if not cfg.refino or esgotado:
+        traducoes: dict[int, str] = {}
+        for b in traduziveis:
+            cached = cache.get(b.texto, cfg)
+            if cached is not None:
+                traducoes[b.id] = cached
+            else:
+                traducoes[b.id] = brutos.get(b.id, b.texto)
+                if not cfg.refino:  # modo MT puro: cacheia o bruto como final
+                    cache.put(b.texto, cfg, traducoes[b.id])
+        return traducoes, False
+
+    return refinar_blocos(traduziveis, brutos, cfg, cache, invocar_fn=invocar_fn)
+
+
 def traduzir_pdf(
     origem: str,
     destino: str,
@@ -58,7 +86,10 @@ def traduzir_pdf(
     invocar_fn=_invocar_padrao,
     on_progress=None,
     cache: CacheTraducao | None = None,
+    cache_path: str | None = None,
+    bruto_fn=None,
 ) -> ProgressoTraducao:
+    bruto_fn = bruto_fn or traduzir_bruto
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
     total = doc.page_count
@@ -73,16 +104,26 @@ def traduzir_pdf(
             cfg.glossario = _mesclar_glossario(cfg.glossario, detectados)
 
     blocos_traduzidos = 0
+    esgotado = False
     for i in range(total):
         page = doc[i]
         blocos = extrair_pagina(page, i)
         traduziveis = [b for b in blocos if not b.skip]
-        traducoes = traduzir_blocos(traduziveis, cfg, cache, invocar_fn=invocar_fn)
+        traducoes, esg = _traduzir_pagina(
+            traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn
+        )
+        esgotado = esgotado or esg
         blocos_traduzidos += len(traducoes)
         remontar_pagina(page, blocos, traducoes)
-        prog = ProgressoTraducao(total, i + 1, blocos_traduzidos, detectados, fase="traduzindo")
+        if cache_path:
+            cache.salvar(cache_path)  # checkpoint por página ⇒ resume real (ADR-0031)
+        prog = ProgressoTraducao(
+            total, i + 1, blocos_traduzidos, detectados, fase="traduzindo", parcial=esgotado
+        )
         if on_progress:
             on_progress(prog)
     doc.save(destino, garbage=4, deflate=True)
     doc.close()
-    return ProgressoTraducao(total, total, blocos_traduzidos, detectados)
+    return ProgressoTraducao(
+        total, total, blocos_traduzidos, detectados, parcial=esgotado
+    )

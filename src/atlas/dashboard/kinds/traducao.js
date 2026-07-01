@@ -66,15 +66,22 @@ function _trProgresso(st, name) {
   if (fase === 'erro') {
     return `<div style="color:var(--red);font-size:13px">⚠️ ${esc(st.erro || 'falhou')}</div>${_trLog(st)}`;
   }
-  if (fase === 'pronto') {
+  if (fase === 'pronto' || fase === 'parcial') {
+    const parcial = fase === 'parcial';
     const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
     const bl = st.blocos_traduzidos != null ? ` · ${st.blocos_traduzidos} blocos` : '';
     const dur = st.iniciado_em ? _trDur((Date.now() - new Date(st.iniciado_em)) / 1000) : '';
     const ga = (st.glossario_auto && st.glossario_auto.length)
       ? `<div style="color:var(--muted);font-size:12px;margin-top:6px">🔤 glossário auto: ${st.glossario_auto.map(esc).join(', ')}</div>`
       : '';
-    return `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)${bl}${dur ? ' · ' + dur : ''}</div>
-      ${st.saida ? `<div style="margin-top:8px"><button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar tradução</button></div>
+    const cabec = parcial
+      ? `<div style="color:var(--yellow,#d9a441);font-size:13px">⏸ parcial — ${pp} pág${bl}${dur ? ' · ' + dur : ''}<br><span style="font-size:12px;color:var(--muted)">tokens acabaram no meio; o PDF saiu completo com a tradução bruta. Continue para refinar o restante.</span></div>`
+      : `<div style="color:var(--green);font-size:13px">✓ pronto — ${pp} página(s)${bl}${dur ? ' · ' + dur : ''}</div>`;
+    const btnContinuar = parcial
+      ? `<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="document.getElementById('tr-traduzir').click()">▶ Continuar refino</button>`
+      : '';
+    return `${cabec}
+      ${st.saida ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${btnContinuar}<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar ${parcial ? '(bruto)' : 'tradução'}</button></div>
       <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trLog(st)}`;
   }
   // preparando (ex.: detectando glossário) ou traduzindo
