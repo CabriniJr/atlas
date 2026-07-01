@@ -190,6 +190,24 @@ atualizado-em: 2026-06-23
 | E4-06 | Ativar release automation (release-please) + versão inicial | proposto | [ADR-0011](../arquitetura/adr/ADR-0011-ci-cd-versionamento.md) |
 | E4-07 | Configurar `pyproject.toml` (ruff, pytest, deps) p/ a CI sair do no-op | **feito** — pyproject.toml + ci.yml ativos; ruff+pytest rodando | [ci.yml](../../.github/workflows/ci.yml) |
 
+## ⭐ Épico E9 — Tradutor editorial (AI-augmented + render PDF ipsis-litteris) {#épico-tradutor-editorial}
+
+> Norte do PO: **democratizar acesso a artigos acadêmicos** com tradução **nível
+> editorial** — PDF ipsis-litteris (só o texto traduzido; imagens/charts/fontes/
+> ordem/termos técnicos preservados), integridade do aprendizado, resumível.
+> Decomposto em sub-projetos, cada um com spec + ADR. Base entregue: Kind `Traducao`
+> ([ADR-0030](../arquitetura/adr/ADR-0030-kind-traducao-pdf.md)), pipeline resumível
+> ([ADR-0031](../arquitetura/adr/ADR-0031-traducao-mt-mais-refino.md)), export
+> `.md`/`.epub` ([ADR-0032](../arquitetura/adr/ADR-0032-export-traducao-md-epub.md)).
+
+| ID | Item | Estado | Ref |
+|---|---|---|---|
+| E9-00 | Base: store thread-safe + resume real (cache da MT bruta) | **feito** | commits `1c34a0a`, `1a8e0bf` |
+| E9-01 | **Sub-projeto A** — render editorial híbrido (reflow prosa + página extra; encaixados fit; imagens intactas; notas de rodapé) | spec **em-revisão** | [ADR-0033](../arquitetura/adr/ADR-0033-render-editorial-hibrido.md) · [spec](../specs/traducao-render-editorial.md) |
+| E9-02 | **Sub-projeto B** — qualidade AI-augmented: refino em lotes maiores + comparador opt-in (`spec.comparador`) | decidido; a implementar | (ADR a criar) |
+| E9-03 | Agente **Editor** especializado (Kind `Agente`) + **LLM-as-judge** opcional (crítica→revisão) | proposto | (ADR a criar) |
+| E9-04 | Configs **modulares de qualidade** (quanto/qual IA revisa por estágio; níveis rascunho/padrão/editorial) | proposto | (ADR a criar) |
+
 ## Dívida de documentação
 | ID | Item | Estado |
 |---|---|---|
