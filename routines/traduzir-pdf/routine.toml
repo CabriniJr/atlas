@@ -1,0 +1,7 @@
+nome = "traduzir-pdf"
+descricao = "Traduz um Kind Traducao/<label> preservando o design do PDF."
+label = "exemplo"          # nome do Traducao a processar
+coletar = "traduzir-pdf"
+modelo = "none"            # a IA roda DENTRO do collect, não pelo executor
+saida = "telegram"
+ativa = false              # on-demand: dispara via /run, não por agenda
