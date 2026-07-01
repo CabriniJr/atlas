@@ -15,13 +15,13 @@ import fitz
 from atlas.ia import invocar as _invocar_padrao
 from atlas.traducao.extracao import extrair_pagina
 from atlas.traducao.remontagem import remontar_pagina
-from atlas.traducao.tradutor_bruto import traduzir_bruto
 from atlas.traducao.traducao_ia import (
     CacheTraducao,
     ConfigTraducao,
     detectar_glossario,
     refinar_blocos,
 )
+from atlas.traducao.tradutor_bruto import traduzir_bruto
 
 
 @dataclass
@@ -56,12 +56,20 @@ def _amostra_para_glossario(doc, cfg, invocar_fn, max_paginas: int = 5, limite: 
 
 
 def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn):
-    """Traduz os blocos de uma página: MT bruta (uncached) + refino. Devolve (traduções, esgotou)."""
+    """Traduz os blocos de uma página: MT bruta (uncached) + refino. Devolve (traduções, esgotou)."""  # noqa: E501
     pend = [b for b in traduziveis if cache.get(b.texto, cfg) is None]
     brutos: dict[int, str] = {}
     if pend:
-        for b, bt in zip(pend, bruto_fn([b.texto for b in pend], cfg)):
-            brutos[b.id] = bt
+        # MT bruta também é cacheada (namespace "raw:"): num resume, só rodamos a
+        # rede para blocos cujo bruto ainda não foi feito — o resto reusa do cache.
+        # Sem isso, cada "Continuar" re-traduzia o bruto do doc todo (lento, ADR-0031).
+        faltam_bruto = [b for b in pend if cache.get_bruto(b.texto, cfg) is None]
+        if faltam_bruto:
+            novos = bruto_fn([b.texto for b in faltam_bruto], cfg)
+            for b, bt in zip(faltam_bruto, novos, strict=False):
+                cache.put_bruto(b.texto, cfg, bt)
+        for b in pend:
+            brutos[b.id] = cache.get_bruto(b.texto, cfg) or b.texto
 
     # Sem refino (config) ou tokens já esgotados ⇒ usa o bruto direto.
     if not cfg.refino or esgotado:

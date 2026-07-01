@@ -45,11 +45,24 @@ class CacheTraducao:
         base = f"{cfg.idioma_origem}>{cfg.idioma_destino}:{texto.strip()}"
         return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _chave_bruto(texto: str, cfg: ConfigTraducao) -> str:
+        # Namespace separado ("raw:") para a MT bruta: assim o resume pula tanto o
+        # refino (LLM) quanto a MT bruta (rede) já feitos (ADR-0031 §resumível).
+        base = f"raw:{cfg.idioma_origem}>{cfg.idioma_destino}:{texto.strip()}"
+        return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
     def get(self, texto: str, cfg: ConfigTraducao) -> str | None:
         return self._d.get(self._chave(texto, cfg))
 
     def put(self, texto: str, cfg: ConfigTraducao, traducao: str) -> None:
         self._d[self._chave(texto, cfg)] = traducao
+
+    def get_bruto(self, texto: str, cfg: ConfigTraducao) -> str | None:
+        return self._d.get(self._chave_bruto(texto, cfg))
+
+    def put_bruto(self, texto: str, cfg: ConfigTraducao, bruto: str) -> None:
+        self._d[self._chave_bruto(texto, cfg)] = bruto
 
     def to_dict(self) -> dict[str, str]:
         return dict(self._d)
