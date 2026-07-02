@@ -8,6 +8,7 @@ próprio ``status.fase`` no recurso (E9-10).
 
 from __future__ import annotations
 
+import os
 import threading
 
 
@@ -79,3 +80,11 @@ class TraducaoPool:
             self._rodando.add(prox)
             return prox
         return None
+
+
+# Instância compartilhada (ADR-0038/0039): a API usa pra distribuir jobs entre
+# réplicas; a rotina traduzir-pdf lê ``max_concorrente`` do mesmo objeto pra
+# saber com quantos workers paralelizar as páginas de UM job — "réplicas" é um
+# dial só, vale pros dois eixos.
+_max_default = int(os.environ.get("ATLAS_TRADUCAO_MAX_CONCURRENT", "2"))
+pool_global = TraducaoPool(max_concorrente=_max_default)

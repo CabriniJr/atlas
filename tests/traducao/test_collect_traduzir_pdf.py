@@ -165,6 +165,105 @@ def test_collect_parcial_pausa_e_agenda_retomada(tmp_path, monkeypatch):
     assert "pausado" in res.data["_saida"] or "⏸" in res.data["_saida"]
 
 
+def test_collect_timeout_faz_retry_curto_persistido(tmp_path, monkeypatch):
+    """ADR-0039: timeout (não erro de cota explícito) pausa CURTO (5min default)
+    e incrementa tentativas_timeout — persistido, não um sleep in-process."""
+    from datetime import datetime as _dt
+
+    src = tmp_path / "p.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(
+        Resource(kind="Traducao", name="p", spec={"origem": str(src)}), agora
+    )
+
+    def timeout_fn(prompt, **k):
+        raise RuntimeError("timeout após 60s invocando IA")
+
+    monkeypatch.setattr(mod, "invocar", timeout_fn)
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="p"), store=store, agora=agora
+    )
+    mod.collect(ctx)
+
+    st = store.get("Traducao", "p").status
+    assert st["fase"] == "pausado"
+    assert st["tentativas_timeout"] == 1
+    delta = (_dt.fromisoformat(st["retoma_em"]) - agora).total_seconds()
+    assert 290 < delta <= 300  # janela curta (default 5min), não as 5h de escassez
+    assert "timeout 1/5" in st["atividade"]
+
+
+def test_collect_timeout_apos_max_tentativas_vira_escassez_longa(tmp_path, monkeypatch):
+    """Depois de max_tentativas_timeout retries curtos, o próximo timeout vira
+    escassez confirmada: pausa longa e zera o contador (ADR-0039)."""
+    from datetime import datetime as _dt
+
+    src = tmp_path / "p.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(
+        Resource(
+            kind="Traducao", name="p",
+            spec={"origem": str(src), "janela_retomada_seg": 3600},
+        ),
+        agora,
+    )
+    store.set_status("Traducao", "p", {"tentativas_timeout": 5}, agora)  # já esgotou os 5
+
+    def timeout_fn(prompt, **k):
+        raise RuntimeError("timeout após 60s invocando IA")
+
+    monkeypatch.setattr(mod, "invocar", timeout_fn)
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="p"), store=store, agora=agora
+    )
+    mod.collect(ctx)
+
+    st = store.get("Traducao", "p").status
+    assert st["fase"] == "pausado"
+    assert st["tentativas_timeout"] == 0  # zera pro próximo ciclo
+    delta = (_dt.fromisoformat(st["retoma_em"]) - agora).total_seconds()
+    assert 3500 < delta <= 3600  # janela longa de escassez, não mais a curta
+
+
+def test_collect_sucesso_reseta_tentativas_timeout(tmp_path, monkeypatch):
+    src = tmp_path / "p.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(Resource(kind="Traducao", name="p", spec={"origem": str(src)}), agora)
+    store.set_status("Traducao", "p", {"tentativas_timeout": 3}, agora)
+
+    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude"):
+        ids = re.findall(r"\[\[(\d+)\]\]", prompt)
+        return "\n".join(f"[[{i}]] O pod reinicia." for i in ids)
+
+    monkeypatch.setattr(mod, "invocar", fake_invocar)
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="p"), store=store, agora=agora
+    )
+    mod.collect(ctx)
+
+    st = store.get("Traducao", "p").status
+    assert st["fase"] == "pronto"
+    assert st["tentativas_timeout"] == 0
+
+
 def test_collect_log_fino_de_ia_no_refino(tmp_path, monkeypatch):
     """Cada chamada de IA no refino vira uma linha em status.log_ia (visibilidade)."""
     src = tmp_path / "f.pdf"

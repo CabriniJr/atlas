@@ -34,7 +34,7 @@ from typing import Any
 from atlas import credentials, curadoria, github_auth, scoping, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
-from atlas.traducao.pool import TraducaoPool
+from atlas.traducao.pool import pool_global as _traducao_pool
 
 _log = logging.getLogger("atlas.api")
 
@@ -65,10 +65,8 @@ _PROJECT_DIR = str(
 # Store injetado no boot — partilhado com o bot Telegram
 _store: ResourceStore | None = None
 
-# Pool de execução de traduções (ADR-0038): teto escalável em runtime + fila FIFO.
-_traducao_pool = TraducaoPool(
-    max_concorrente=int(os.environ.get("ATLAS_TRADUCAO_MAX_CONCURRENT", "2"))
-)
+# Pool de execução de traduções (ADR-0038/0039): teto escalável em runtime + fila
+# FIFO — instância compartilhada com rotinas/traduzir_pdf.py (paralelismo de páginas).
 
 
 _DASHBOARD_DIR = Path(__file__).parent / "dashboard"

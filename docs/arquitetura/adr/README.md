@@ -33,6 +33,7 @@ atualizado-em: 2026-06-23
 | 1.17   | 2026-07-01 | Tech Lead | ADR-0033 (Render editorial ipsis-litteris — híbrido por papel de bloco) — **aceito** | PO/PM |
 | 1.18   | 2026-07-01 | Tech Lead | ADR-0034 (Refino em lotes maiores + comparador de consistência opt-in) — **aceito** | PO/PM |
 | 1.19   | 2026-07-02 | Tech Lead | ADR-0038 (Pool de execução de traduções — concorrência, fila e escalonamento) — **aceito** | PO/PM |
+| 1.20   | 2026-07-02 | Tech Lead | ADR-0039 (Paralelismo de páginas entre réplicas + retry curto persistido antes de escassez) — **aceito** | PO/PM |
 
 ---
 
@@ -90,6 +91,7 @@ atualizado-em: 2026-06-23
 | [0034](ADR-0034-refino-lotes-e-comparador.md) | **Refino em lotes maiores + comparador de consistência opt-in**: `lote_refino` 20→60; mapa de unificação de termos/nomes aplicado antes do render | **aceito** | PO: lotes maiores + comparador geral p/ consistência do documento inteiro |
 | [0035](ADR-0035-job-pausavel-reagendavel.md) | **Job pausável/reagendável por escassez** (mid-run): pausa+checkpoint e retoma sozinho após a janela de quota; capacidade genérica do núcleo | **aceito** | PO: "parar por escassez e terminar sozinho daqui X horas" |
 | [0038](ADR-0038-pool-execucao-traducao.md) | **Pool de execução de traduções**: teto de concorrência escalável em runtime + fila FIFO + visibilidade agregada (API/UI) | **aceito** | PO: rodar vários lotes ao mesmo tempo, com controle/ciclo de vida/escalonamento/visibilidade |
+| [0039](ADR-0039-paralelismo-paginas-e-retry-timeout.md) | **Paralelismo de páginas entre réplicas** (mesmo dial do pool) + **retry curto persistido** (timeout: até 5x/5min antes de declarar escassez confirmada) | **aceito** | PO: distribuir páginas restantes entre réplicas; timeout ≠ escassez — só 5 falhas seguidas garante limite |
 | [0036](ADR-0036-render-editorial-modelo-semantico.md) | **Render editorial por modelo semântico + WeasyPrint** (default): fluxo HTML/CSS justificado, estilos/imagens/código preservados; in-place (0033) vira fallback | **aceito** | PO: qualidade editorial usável — "substituir o texto respeitando estilo/elementos/normas" |
 
 ## Lastro

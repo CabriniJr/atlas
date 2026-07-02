@@ -50,6 +50,8 @@ class ConfigTraducao:
     comparador: bool = False  # ADR-0034: passe final de consistência (Opus), opt-in
     modelo_comparador: str | None = None  # modelo do comparador (None → modelo/padrão)
     render_motor: str = "html"  # ADR-0036: "html" (editorial WeasyPrint) | "pymupdf" (in-place)
+    max_tentativas_timeout: int = 5  # ADR-0039: retries curtos antes de declarar escassez
+    janela_retry_timeout_seg: int = 300  # ADR-0039: 5min entre retries curtos (timeout)
 
 
 class CacheTraducao:
@@ -273,6 +275,12 @@ def montar_prompt_refino(
     )
 
 
+def _classificar_erro(exc: Exception) -> str:
+    """``"timeout"`` (transitório, elegível a retry curto — ADR-0039) ou ``"erro"``
+    (outra falha — ex.: rate-limit explícito do CLI — vai direto pra escassez)."""
+    return "timeout" if "timeout" in str(exc).lower() else "erro"
+
+
 def refinar_blocos(
     blocos: list[BlocoTraducao],
     brutos: dict[int, str],
@@ -280,14 +288,15 @@ def refinar_blocos(
     cache: CacheTraducao,
     invocar_fn=_invocar_padrao,
     on_evento=None,
-) -> tuple[dict[int, str], bool]:
-    """Refina os blocos em lotes (ADR-0031). Devolve ``(traduções, esgotou)``.
+) -> tuple[dict[int, str], bool, str | None]:
+    """Refina os blocos em lotes (ADR-0031). Devolve ``(traduções, esgotou, motivo)``.
 
     - Bloco já no cache ⇒ usa o refinado salvo (resume barato).
     - Lote refinado com sucesso ⇒ cacheia (persiste o progresso).
     - Falha do LLM (timeout/tokens) ⇒ ``esgotou=True``, para de chamar o LLM; os
       pendentes caem para o BRUTO (tradução completa, sem perda) e **não** são
-      cacheados, para serem refinados num próximo run.
+      cacheados, para serem refinados num próximo run. ``motivo`` classifica a
+      falha (``"timeout"`` | ``"erro"`` | ``None`` se não esgotou — ADR-0039).
     """
     resultado: dict[int, str] = {}
     pendentes: list[BlocoTraducao] = []
@@ -299,6 +308,7 @@ def refinar_blocos(
             pendentes.append(b)
 
     esgotou = False
+    motivo: str | None = None
     i = 0
     n_lotes = (len(pendentes) + max(1, cfg.lote_refino) - 1) // max(1, cfg.lote_refino)
     lote_idx = 0
@@ -319,6 +329,7 @@ def refinar_blocos(
                 "erro": str(exc)[:200],
             })
             esgotou = True
+            motivo = _classificar_erro(exc)
             break
         _emitir(on_evento, {
             "tipo": "refino_lote", "lote": lote_idx, "lotes": n_lotes,
@@ -337,4 +348,4 @@ def refinar_blocos(
 
     for b in pendentes[i:]:  # pendentes após esgotar ⇒ bruto (sem perda), sem cache
         resultado[b.id] = brutos.get(b.id, b.texto)
-    return resultado, esgotou
+    return resultado, esgotou, motivo

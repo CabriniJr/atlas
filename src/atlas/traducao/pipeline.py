@@ -8,6 +8,8 @@ salvo a cada página; se os tokens acabam, o run conclui com o bruto (fase
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import fitz
@@ -35,6 +37,7 @@ class ProgressoTraducao:
     glossario_auto: list[str] = field(default_factory=list)
     fase: str = "traduzindo"  # "preparando" | "glossario" | "traduzindo"
     parcial: bool = False  # ADR-0031: tokens acabaram; restante ficou no bruto (resumível)
+    motivo_pausa: str | None = None  # ADR-0039: "timeout" (retry curto) | "erro" (escassez)
 
 
 def _mesclar_glossario(base: list[str], extra: list[str]) -> list[str]:
@@ -59,7 +62,10 @@ def _amostra_para_glossario(doc, cfg, invocar_fn, max_paginas: int = 5, limite: 
 
 
 def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on_evento=None):
-    """Traduz os blocos de uma página: MT bruta (uncached) + refino. Devolve (traduções, esgotou)."""  # noqa: E501
+    """Traduz os blocos de uma página: MT bruta (uncached) + refino.
+
+    Devolve ``(traduções, esgotou, motivo)`` — ``motivo`` classifica a falha que
+    esgotou (``"timeout"`` | ``"erro"`` | ``None``, ADR-0039)."""
     pend = [b for b in traduziveis if cache.get(b.texto, cfg) is None]
     brutos: dict[int, str] = {}
     if pend:
@@ -85,7 +91,7 @@ def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on
                 traducoes[b.id] = brutos.get(b.id, b.texto)
                 if not cfg.refino:  # modo MT puro: cacheia o bruto como final
                     cache.put(b.texto, cfg, traducoes[b.id])
-        return traducoes, False
+        return traducoes, False, None
 
     return refinar_blocos(
         traduziveis, brutos, cfg, cache, invocar_fn=invocar_fn, on_evento=on_evento
@@ -131,6 +137,86 @@ def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoT
     return ProgressoTraducao(total, total, blocos_traduzidos)
 
 
+def _processar_paginas_sequencial(
+    doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento, detectados
+):
+    """Loop original (paralelismo=1): página a página, na ordem. Devolve
+    ``(render_paginas, blocos_traduzidos, esgotado, motivo_pausa)``."""
+    blocos_traduzidos = 0
+    esgotado = False
+    motivo_pausa: str | None = None
+    render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
+    for i in range(total):
+        page = doc[i]
+        blocos = extrair_pagina(page, i)
+        traduziveis = [b for b in blocos if not b.skip]
+        ev_pag = (lambda ev, _p=i + 1: on_evento({**ev, "pagina": _p})) if on_evento else None
+        traducoes, esg, motivo = _traduzir_pagina(
+            traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on_evento=ev_pag
+        )
+        if esg and not esgotado:
+            motivo_pausa = motivo
+        esgotado = esgotado or esg
+        blocos_traduzidos += len(traducoes)
+        render_paginas[i] = (blocos, traducoes)  # render editorial acontece no fim
+        if cache_path:
+            cache.salvar(cache_path)  # checkpoint por página ⇒ resume real (ADR-0031)
+        if on_progress:
+            on_progress(ProgressoTraducao(
+                total, i + 1, blocos_traduzidos, detectados, fase="traduzindo", parcial=esgotado
+            ))
+    return render_paginas, blocos_traduzidos, esgotado, motivo_pausa
+
+
+def _processar_paginas_paralelo(
+    doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento,
+    detectados, paralelismo,
+):
+    """Distribui as páginas entre até ``paralelismo`` workers (ADR-0039) — o
+    mesmo dial de "réplicas" do pool entre jobs (ADR-0038) vale pra páginas de
+    UM job. Cada página é independente; um lock serializa só a contabilidade
+    compartilhada (checkpoint do cache em disco + progresso), não a tradução
+    em si (a chamada de IA, cara, roda fora do lock)."""
+    lock = threading.Lock()
+    esgotado_evt = threading.Event()
+    estado = {"blocos_traduzidos": 0, "paginas_prontas": 0, "motivo_pausa": None}
+    render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
+
+    def processar(i: int) -> None:
+        page = doc[i]
+        blocos = extrair_pagina(page, i)
+        traduziveis = [b for b in blocos if not b.skip]
+        ev_pag = (lambda ev, _p=i + 1: on_evento({**ev, "pagina": _p})) if on_evento else None
+        # lê o esgotamento fora do lock (leitura de Event é segura); pode haver
+        # algumas páginas em voo que ainda não "viram" um esgotamento recente —
+        # aceitável (ADR-0039): dá mais sinal antes de declarar escassez.
+        traducoes, esg, motivo = _traduzir_pagina(
+            traduziveis, cfg, cache, invocar_fn, esgotado_evt.is_set(), bruto_fn, on_evento=ev_pag
+        )
+        with lock:
+            if esg:
+                if not esgotado_evt.is_set():
+                    estado["motivo_pausa"] = motivo
+                esgotado_evt.set()
+            render_paginas[i] = (blocos, traducoes)
+            estado["blocos_traduzidos"] += len(traducoes)
+            estado["paginas_prontas"] += 1
+            if cache_path:
+                cache.salvar(cache_path)
+            if on_progress:
+                on_progress(ProgressoTraducao(
+                    total, estado["paginas_prontas"], estado["blocos_traduzidos"], detectados,
+                    fase="traduzindo", parcial=esgotado_evt.is_set(),
+                ))
+
+    with ThreadPoolExecutor(max_workers=max(1, paralelismo)) as ex:
+        list(ex.map(processar, range(total)))
+
+    return (
+        render_paginas, estado["blocos_traduzidos"], esgotado_evt.is_set(), estado["motivo_pausa"]
+    )
+
+
 def traduzir_pdf(
     origem: str,
     destino: str,
@@ -142,10 +228,14 @@ def traduzir_pdf(
     bruto_fn=None,
     somente_render: bool = False,
     on_evento=None,
+    paralelismo: int = 1,
 ) -> ProgressoTraducao:
     """Traduz um PDF (ADR-0030/0031) ou, com ``somente_render=True``, apenas
     **re-renderiza** a partir do cache já pago — zero IA (E9-05). É o que permite
-    iterar o layout (``spec.render``) sem repagar a tradução (``spec.traducao``)."""
+    iterar o layout (``spec.render``) sem repagar a tradução (``spec.traducao``).
+
+    ``paralelismo`` > 1 distribui as páginas restantes entre workers concorrentes
+    (ADR-0039) — default 1 preserva o loop sequencial original."""
     bruto_fn = bruto_fn or traduzir_bruto
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
@@ -163,27 +253,14 @@ def traduzir_pdf(
         if detectados:
             cfg.glossario = _mesclar_glossario(cfg.glossario, detectados)
 
-    blocos_traduzidos = 0
-    esgotado = False
-    render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
-    for i in range(total):
-        page = doc[i]
-        blocos = extrair_pagina(page, i)
-        traduziveis = [b for b in blocos if not b.skip]
-        ev_pag = (lambda ev, _p=i + 1: on_evento({**ev, "pagina": _p})) if on_evento else None
-        traducoes, esg = _traduzir_pagina(
-            traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on_evento=ev_pag
-        )
-        esgotado = esgotado or esg
-        blocos_traduzidos += len(traducoes)
-        render_paginas[i] = (blocos, traducoes)  # render editorial acontece no fim
-        if cache_path:
-            cache.salvar(cache_path)  # checkpoint por página ⇒ resume real (ADR-0031)
-        prog = ProgressoTraducao(
-            total, i + 1, blocos_traduzidos, detectados, fase="traduzindo", parcial=esgotado
-        )
-        if on_progress:
-            on_progress(prog)
+    processar = _processar_paginas_paralelo if paralelismo > 1 else _processar_paginas_sequencial
+    args = (
+        doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento, detectados
+    )
+    if paralelismo > 1:
+        args = (*args, paralelismo)
+    render_paginas, blocos_traduzidos, esgotado, motivo_pausa = processar(*args)
+
     # Comparador de consistência (ADR-0034): opt-in e só quando concluiu. Unifica
     # termos/nomes divergentes via mapa determinístico aplicado antes do render.
     if cfg.comparador and not esgotado:
@@ -197,5 +274,5 @@ def traduzir_pdf(
     # Render ao fim: motor editorial (WeasyPrint, ADR-0036) ou pymupdf in-place.
     _render_final(doc, render_paginas, destino, cfg)
     return ProgressoTraducao(
-        total, total, blocos_traduzidos, detectados, parcial=esgotado
+        total, total, blocos_traduzidos, detectados, parcial=esgotado, motivo_pausa=motivo_pausa
     )

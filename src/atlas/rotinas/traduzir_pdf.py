@@ -17,6 +17,7 @@ from atlas.ia import invocar
 from atlas.retomada import campos_pausa
 from atlas.rotinas import registrar
 from atlas.traducao.pipeline import traduzir_pdf
+from atlas.traducao.pool import pool_global
 from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao
 
 _log = logging.getLogger(__name__)
@@ -109,7 +110,11 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         comparador=_verdade(t.spec.get("comparador", False)),
         modelo_comparador=t.spec.get("modelo_comparador") or None,
         render_motor=(t.spec.get("render_motor") or "html"),
+        max_tentativas_timeout=int(t.spec.get("max_tentativas_timeout") or 5),
+        janela_retry_timeout_seg=int(t.spec.get("janela_retry_timeout_seg") or 300),
     )
+    # tentativas curtas por timeout até aqui (ADR-0039) — persistido, sobrevive a restart.
+    tentativas_timeout = int((t.status or {}).get("tentativas_timeout") or 0)
 
     iniciado = ctx.agora.isoformat()
     _status(
@@ -186,6 +191,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             cache_path=cache_path,
             somente_render=_verdade(t.spec.get("somente_render", False)),
             on_evento=on_evento,
+            paralelismo=pool_global.max_concorrente,  # ADR-0039: réplicas também dentro do job
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)
@@ -196,17 +202,38 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     cache.salvar(cache_path)  # persiste o cache p/ reruns baratos (ADR-0030/0031)
     log = list((store.get("Traducao", t.name).status or {}).get("log") or [])
     pausa: dict = {}
+    nova_tentativa = 0  # reseta por padrão (sucesso ou escassez confirmada — ADR-0039)
     if prog.parcial:
-        # tokens acabaram no meio: PDF saiu com o bruto; pausa e agenda a retomada
-        # autônoma (ADR-0035) para quando a janela de quota resetar.
-        janela = int(t.spec.get("janela_retomada_seg") or 18000)  # default 5 h
-        pausa = campos_pausa(ctx.agora, janela, "traduzir-pdf")
-        quando = datetime.fromisoformat(pausa["retoma_em"]).strftime("%H:%M")
-        msg = (
-            f"⏸ pausado por escassez — {prog.paginas_prontas} páginas; "
-            f"retoma sozinho às {quando} (continua de onde parou)"
+        retry_curto = (
+            prog.motivo_pausa == "timeout"
+            and tentativas_timeout + 1 <= cfg.max_tentativas_timeout
         )
-        atividade = f"pausado (tokens acabaram) — retomada automática às {quando}"
+        if retry_curto:
+            # timeout pontual: retry curto persistido (ADR-0039) — até
+            # max_tentativas_timeout vezes antes de declarar escassez de verdade.
+            nova_tentativa = tentativas_timeout + 1
+            janela = cfg.janela_retry_timeout_seg
+            pausa = campos_pausa(ctx.agora, janela, "traduzir-pdf")
+            quando = datetime.fromisoformat(pausa["retoma_em"]).strftime("%H:%M")
+            msg = (
+                f"⏱ timeout — tentativa {nova_tentativa}/{cfg.max_tentativas_timeout}; "
+                f"retry sozinho às {quando} ({janela // 60}min, continua de onde parou)"
+            )
+            atividade = (
+                f"pausado (timeout {nova_tentativa}/{cfg.max_tentativas_timeout}) "
+                f"— retry às {quando}"
+            )
+        else:
+            # escassez confirmada: erro não-timeout, ou as tentativas curtas
+            # já se esgotaram — aí sim é garantido que é limite de cota.
+            janela = int(t.spec.get("janela_retomada_seg") or 18000)  # default 5 h
+            pausa = campos_pausa(ctx.agora, janela, "traduzir-pdf")
+            quando = datetime.fromisoformat(pausa["retoma_em"]).strftime("%H:%M")
+            msg = (
+                f"⏸ pausado por escassez — {prog.paginas_prontas} páginas; "
+                f"retoma sozinho às {quando} (continua de onde parou)"
+            )
+            atividade = f"pausado (tokens acabaram) — retomada automática às {quando}"
     else:
         msg = f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"
         atividade = "tradução concluída"
@@ -228,6 +255,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             "eta_seg": 0,
             "log": log[-40:],
             "erro": None,
+            "tentativas_timeout": nova_tentativa,  # ADR-0039: persistido p/ sobreviver a restart
             **pausa,  # ADR-0035: fase="pausado" + retoma_em + retoma_collect (só se parcial)
         },
     )
