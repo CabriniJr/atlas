@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 _FLAG_MONOSPACE = 8  # bit 3 do flags do fitz
+_FLAG_ITALIC = 1 << 1
+_FLAG_BOLD = 1 << 4
 
 
 @dataclass
@@ -34,6 +36,39 @@ class BlocoTraducao:
 
 def _tem_letra(texto: str) -> bool:
     return any(c.isalpha() for c in texto)
+
+
+def _bold_span(s: Span) -> bool:
+    return bool(s.flags & _FLAG_BOLD) or "bold" in s.font.lower() or "black" in s.font.lower()
+
+
+def _italic_span(s: Span) -> bool:
+    return bool(s.flags & _FLAG_ITALIC) or "italic" in s.font.lower() or "oblique" in s.font.lower()
+
+
+def _marcar_enfase(spans: list[Span]) -> str:
+    """Monta o texto do bloco marcando trechos que divergem do estilo dominante
+    (negrito/itálico) com marcadores leves (``**b**``/``_i_``) — a tradução é
+    instruída a preservá-los (ADR-0041); o render os converte em ``<b>``/``<i>``
+    só no trecho, sem perder a ênfase de uma palavra isolada no meio do parágrafo.
+    """
+    partes_validas = [s for s in spans if s.text.strip()]
+    if not partes_validas:
+        return ""
+    total = sum(max(1, len(s.text)) for s in partes_validas)
+    peso_bold = sum(len(s.text) for s in partes_validas if _bold_span(s))
+    peso_ital = sum(len(s.text) for s in partes_validas if _italic_span(s))
+    dom_bold = peso_bold > total / 2
+    dom_ital = peso_ital > total / 2
+    saida: list[str] = []
+    for s in partes_validas:
+        texto = s.text.strip()
+        if _bold_span(s) and not dom_bold:
+            texto = f"**{texto}**"
+        if _italic_span(s) and not dom_ital:
+            texto = f"_{texto}_"
+        saida.append(texto)
+    return " ".join(saida)
 
 
 def classificar_papel(bloco: dict, largura_pagina: float) -> str:
@@ -62,7 +97,6 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
         if "lines" not in bloco:  # bloco de imagem — ignora
             continue
         spans: list[Span] = []
-        partes: list[str] = []
         mono = False
         for linha in bloco["lines"]:
             for s in linha.get("spans", []):
@@ -76,13 +110,13 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                         flags=s.get("flags", 0),
                     )
                 )
-                partes.append(s["text"])
                 if s.get("flags", 0) & _FLAG_MONOSPACE:
                     mono = True
         if not spans:
             continue
-        texto = " ".join(p.strip() for p in partes if p.strip())
-        skip = mono or not _tem_letra(texto)
+        texto_plano = " ".join(s.text.strip() for s in spans if s.text.strip())
+        skip = mono or not _tem_letra(texto_plano)
+        texto = texto_plano if skip else _marcar_enfase(spans)
         papel = classificar_papel(
             {"texto": texto, "bbox": tuple(bloco["bbox"]),
              "n_linhas": len(bloco["lines"]), "mono": mono},
