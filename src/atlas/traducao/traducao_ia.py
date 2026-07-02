@@ -32,6 +32,8 @@ class ConfigTraducao:
     refino: bool = True  # ADR-0031: LLM refina o bruto (False = tradução puramente MT)
     timeout: int = 60  # timeout por chamada de refino
     lote_refino: int = 20  # blocos por chamada de refino (limita gasto/timeout, dá resume)
+    min_fonte_pct: int = 90  # piso de legibilidade no fit-in-place (ADR-0033)
+    notas_rodape: bool = False  # termos mantidos no idioma de origem viram nota de rodapé
 
 
 class CacheTraducao:

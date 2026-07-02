@@ -97,6 +97,8 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         refino=_verdade(t.spec.get("refino", True)),
         timeout=int(t.spec.get("timeout") or 60),
         lote_refino=int(t.spec.get("lote_refino") or 20),
+        min_fonte_pct=int(t.spec.get("min_fonte_pct") or 90),
+        notas_rodape=_verdade(t.spec.get("notas_rodape", False)),
     )
 
     iniciado = ctx.agora.isoformat()
