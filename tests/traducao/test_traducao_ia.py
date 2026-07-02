@@ -125,3 +125,12 @@ def test_resolver_agente_refino_agente_inexistente_devolve_none():
     store = ResourceStore(":memory:")
     t = Resource(kind="Traducao", name="x", spec={"agente_refino": "nao-existe"})
     assert resolver_agente_refino(t, store) == (None, None, None)
+
+
+def test_prompt_refino_instrui_preservar_enfase_inline():
+    from atlas.traducao.traducao_ia import ConfigTraducao, montar_prompt_refino
+
+    pares = [(1, "This is **very** important.", "Isto é **muito** importante.")]
+    prompt = montar_prompt_refino(pares, ConfigTraducao())
+    assert "**" in prompt and "_" in prompt
+    assert "marcador" in prompt.lower()

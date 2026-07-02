@@ -278,6 +278,10 @@ def montar_prompt_refino(
         f"{instrucao}\n"
         f"NÃO traduza termos técnicos, nomes de APIs, comandos ou código; mantenha em "
         f"inglês os termos do glossário: {glossario}.\n"
+        f"O texto pode conter marcador de ênfase (**negrito** ou _itálico_) ao redor de "
+        f"uma palavra/trecho — preserve esse marcador na MESMA posição relativa da "
+        f"tradução (ao redor da palavra/trecho equivalente), sem adicionar nem remover "
+        f"marcadores que não estejam na origem.\n"
         f"Responda cada bloco no MESMO formato numerado, só a versão final, sem "
         f"comentários:\n[[N]] <tradução final>\n\n{corpo}"
     )
