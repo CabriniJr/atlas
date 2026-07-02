@@ -17,36 +17,65 @@ atualizado-em: 2026-06-26
 | 1.1    | 2026-06-26 | Tech Lead | Épico multiusuário (ADR-0027) concluído e mergeado em `main` (Fases 1–5 + UI); estado/branches/testes atualizados | — |
 | 1.2    | 2026-06-26 | Tech Lead | E7-28 em curso (ADR-0028): workspace restrito + allow/deny de tools + teto de concorrência + flag de gate | — |
 | 1.3    | 2026-07-01 | Tech Lead | Épico E9 (tradutor editorial): fixes de store/resume + export md/epub; ADR-0033 + spec + plano do render editorial; E9-01 tarefas 1–4 feitas | — |
+| 1.4    | 2026-07-02 | Tech Lead | E9-01..E9-12 concluídos (render editorial HTML/WeasyPrint, TOC/hyperlinks/folio, fallback claude↔ollama). Nova frente **E9-13** (ADR-0041, fidelidade tipográfica + paginação adaptativa) iniciada — 2/12 tarefas feitas | — |
+| 1.5    | 2026-07-02 | Tech Lead | **Agente modo `code` via Ollama nativo** (ADR-0042/E7-45, pedido do PO, prioridade máxima) e **recuperação de órfãos no boot + serialização de chamadas Ollama** (ADR-0043/E9-14) — ambos commitados em `main`; não fazem parte do E9-13 | — |
 
 ---
 
-## ⭐ Estado atual (2026-07-01) — Épico E9: tradutor editorial
+## ⭐ Estado atual (2026-07-02) — E9-13: fidelidade tipográfica + paginação adaptativa
 
-**Contexto:** norte do produto = tradução **nível editorial** de artigos/PDFs
-(ver [[atlas-project-vision]] na memória do agente). Backlog em
-[`roadmap/backlog.md` §E9](../roadmap/backlog.md#épico-tradutor-editorial).
+**Contexto:** o PO revisou o render editorial (motor `render_motor=html`,
+ADR-0036) e apontou perda de informação real: fonte genérica (não a do PDF),
+ênfase inline (negrito/itálico no meio do parágrafo) descartada, cor de link
+forçada em azul, listas numeradas perdidas, notas de rodapé nativas do original
+em risco de serem descartadas junto com o fólio, numeração de página inventada
+(não a do original) e quebra de página sem relação com o padrão do documento
+original. Decisão registrada em [ADR-0041](../arquitetura/adr/ADR-0041-fidelidade-tipografica-e-paginacao-adaptativa.md)
++ seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
+Backlog: [`roadmap/backlog.md` §E9-13](../roadmap/backlog.md#épico-tradutor-editorial).
 
-**Feito e commitado em `main` (com testes):**
-- `1c34a0a` fix store thread-safe (RLock+WAL) — causa raiz de "travou nas 7 páginas".
-- `18c81b2` apagar tradução em 1 clique + limpa artefatos.
-- `74d60a9` export `.md`/`.epub` via pandoc (ADR-0032).
-- `1a8e0bf` **resume real** — MT bruta cacheada (fim do "Continuar recomeça").
-- `a60d9cb` ADR-0033 + spec do render editorial; `0b44778` plano de implementação.
-- `ad81e6e` E9-01 Task 1 (classificação de papel); `a6c88a1` Tasks 2–4 (`layout.py`).
+**E9-01..E9-12 — feito e commitado em `main`** (motor editorial HTML/WeasyPrint
+default, TOC+hyperlinks+folio fiéis, pool de execução, paralelismo de páginas,
+fallback claude↔ollama). Ver linhas E9-01..E9-12 no backlog pra detalhe de cada.
 
-**Em andamento — E9-01 (render editorial), 4/9 tarefas:**
-- ✅ Task 1 classificação; ✅ Tasks 2–4 `layout.py` (medição/fit/paginação, testes verdes).
-- ⏳ Task 5 config `min_fonte_pct`/`notas_rodape`; ⏳ Task 6 `remontar_documento`
-  (fit-in-place + reflow + página de continuação) — **núcleo**; ⏳ Task 7 ligar no
-  pipeline; ⏳ Task 8 notas de rodapé; ⏳ Task 9 regressão de fidelidade.
+**Em andamento — E9-13, 2/12 tarefas do [plano](../superpowers/plans/2026-07-02-fidelidade-editorial-avancada.md):**
+- ✅ Task 1 `extracao.py` marca ênfase inline (`**bold**`/`_italic_`) no texto do
+  bloco (commit `8c93880`).
+- ✅ Task 2 `traducao_ia.montar_prompt_refino` instrui a IA a preservar os
+  marcadores de ênfase (commit `ce0ebc3`).
+- ⏳ Task 3 `tipografia.py` (**novo módulo**) — `converter_enfase` (marcador →
+  `<b>`/`<i>`); ⏳ Task 4 clustering de heading (`clusters_titulo`/`nivel_titulo`)
+  + `taxa_abre_pagina`; ⏳ Task 5 `extrair_fontes`/`gerar_font_faces` (fonte real
+  embutida via PyMuPDF).
+- ⏳ Task 6 `editorial_html.py` liga fonte real + ênfase inline no `_elemento`;
+  ⏳ Task 7 listas numeradas (`<ol>`) + zero bloco descartado sem tradução;
+  ⏳ Task 8 nota de rodapé nativa (distinta do fólio); ⏳ Task 9 **fólio
+  dinâmico** via `string-set` (número igual ao original, escala sozinho no
+  reflow); ⏳ Task 10 quebra de página por nível **extraída do PDF** (não regra
+  fixa); ⏳ Task 11 `@font-face` real no CSS + link herda cor (remove azul
+  fixo); ⏳ Task 12 regressão de fidelidade end-to-end + re-render do PDF de
+  controle (observability).
 
-**Como retomar (spec-driven):**
-1. Ler [ADR-0033](../arquitetura/adr/ADR-0033-render-editorial-hibrido.md) +
-   [spec](../specs/traducao-render-editorial.md).
-2. Abrir o [plano](../superpowers/plans/2026-07-01-render-editorial.md) e continuar
-   nas tarefas com `[ ]` (TDD; commit por tarefa).
-3. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
+**Como retomar (spec-driven, subagent-driven-development):**
+1. Ler [ADR-0041](../arquitetura/adr/ADR-0041-fidelidade-tipografica-e-paginacao-adaptativa.md)
+   + seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
+2. Abrir o [plano](../superpowers/plans/2026-07-02-fidelidade-editorial-avancada.md)
+   e continuar nas tarefas com `[ ]` (cada task já tem o código completo — TDD,
+   um commit por task). Tasks 3-12 têm dependência sequencial (mesmos arquivos
+   editados cumulativamente) — não paralelizar.
+3. Trabalho é **direto em `main`**, sem worktree/branch (convenção deste repo,
+   CLAUDE.md §0) — mesmo em subagent-driven-development.
+4. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
    mecânico mais recente (commits, testes, checkboxes).
+
+**Trabalho concorrente já resolvido:** o WIP paralelo de 2026-07-02
+(`agente_ollama.py`, `ADR-0042`, dispatch por motor em `api.py`/`app.py`,
+serialização Ollama em `ia.py`, recuperação de órfãos em `retomada.py`) foi
+commitado separado do E9-13 — ver [ADR-0042](../arquitetura/adr/ADR-0042-agente-code-via-ollama.md)
+(E7-45) e [ADR-0043](../arquitetura/adr/ADR-0043-recuperacao-orfaos-boot-e-serializacao-ollama.md)
+(E9-14). Ao retomar o E9-13, ainda vale rodar `git status` antes de tocar em
+`README.md`/`backlog.md`/qualquer arquivo compartilhado — outros processos
+concorrentes podem surgir de novo.
 
 **Ambiente:** local via `python -m atlas` (env `ATLAS_DB_PATH=data/atlas.sqlite`,
 `ATLAS_API_PORT=8080`) → `http://atlas.local:8080`. Já reiniciado no código novo.
@@ -70,6 +99,7 @@ Trabalho recente (épico E7 — IDE/agente integrado + produção) e o épico
 | Entregue | O quê | ADR |
 |---|---|---|
 | Agente modo `code` | Claude Code agêntico dentro do app; `POST /_agent_run` + SSE `/_agent_run/{id}/stream`; `ThreadingHTTPServer`; runs em background (multitarefa) | ADR-0025 |
+| Agente modo `code` via Ollama | Segundo motor 2b: loop de tool-calling nativo (`agente_ollama.py`) contra `POST /api/chat`; `_run_agent_bg` despacha por motor resolvido, fallback pro claude se o endpoint cair antes do 1º turno; erro de tool vira `warning` não-fatal; custo 0 | ADR-0042 |
 | Agente segue a API | system-prompt injeta o schema vivo + seção de relações (P11); o agente cria recursos **pela API** | ADR-0025 |
 | LLMProvider | Kind de config de IA; `Agente.provider` dita o modelo; `_resolve_engine` | ADR-0026 |
 | Análise de repo por Agente | `Repo.spec.analyze_agente` (default `repo-analyzer`); insight manual + automático no sync | ADR-0024 §2 |
