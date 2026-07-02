@@ -7,6 +7,7 @@ foca no registro rápido e em /status.
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +31,7 @@ from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
+from atlas.retomada import retomar_pausados
 from atlas.rotinas import obter as obter_collect
 from atlas.routines import Rotina, carregar_rotinas
 from atlas.scheduler import catch_up, tick
@@ -101,6 +103,28 @@ def montar_disparo(
     return disparar
 
 
+def montar_disparo_retomada(store: ResourceStore) -> Callable[[str, str, str], object]:
+    """Disparador de retomada (ADR-0035): roda o ``collect`` do job pausado numa
+    thread daemon (não bloqueia o loop). Reconstrói uma ``Rotina`` mínima com o
+    ``label`` = nome do recurso, como faz o disparo de tradução da API."""
+
+    def disparar(kind: str, name: str, collect_nome: str) -> object:
+        rot = Rotina(nome=name, descricao="", label=name, coletar=collect_nome)
+        collect = obter_collect(collect_nome)
+
+        def _run() -> None:
+            ctx = ContextoExecucao(agora=datetime.now(), rotina=rot, origem="retomada", store=store)
+            try:
+                collect(ctx)
+            except Exception:  # noqa: BLE001 — status já é marcado pelo collect (ADR-0006)
+                _log.exception("retomada %s/%s falhou", kind, name)
+
+        threading.Thread(target=_run, daemon=True, name=f"retomar-{name}").start()
+        return name
+
+    return disparar
+
+
 def run(config: Config | None = None) -> None:
     """Inicia o loop de operação do bot (bloqueante)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -134,6 +158,7 @@ def run(config: Config | None = None) -> None:
         _log.exception("Falha ao migrar recursos sem dono; seguindo.")
 
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
+    disparar_retomada = montar_disparo_retomada(store)  # ADR-0035: retoma jobs pausados
 
     # API HTTP + dashboard web (E0-02 / E0-05) — thread daemon.
     # Sobe ANTES do Telegram para não ficar refém da conectividade dele (ADR-0006):
@@ -171,12 +196,13 @@ def run(config: Config | None = None) -> None:
                 upd = _normalizar(update_cru)
                 if upd is not None:
                     processar_update(upd, config, db, adapter, store=store)
-            # Após cada janela de long-poll, verifica agenda e alarmes.
+            # Após cada janela de long-poll, verifica agenda, alarmes e retomadas.
             agora = datetime.now()
             tick(agora, carga.rotinas, db, disparar)
             tick_alarmes(
                 agora, db, lambda msg: adapter.enviar(config.allowed_user_id, msg), store=store
             )
+            retomar_pausados(store, agora, disparar_retomada)  # ADR-0035
         except KeyboardInterrupt:  # noqa: PERF203
             _log.info("Encerrando.")
             break

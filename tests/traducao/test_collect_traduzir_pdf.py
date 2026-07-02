@@ -128,6 +128,43 @@ def test_collect_glossario_auto_loga_deteccao(tmp_path, monkeypatch):
     assert any("glossário" in e["msg"] for e in st["log"])
 
 
+def test_collect_parcial_pausa_e_agenda_retomada(tmp_path, monkeypatch):
+    """Escassez de token (IA falha) → run parcial → status pausado + retoma_em (ADR-0035)."""
+    from datetime import datetime as _dt
+
+    src = tmp_path / "p.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(
+        Resource(kind="Traducao", name="p",
+                 spec={"origem": str(src), "janela_retomada_seg": 3600}),
+        agora,
+    )
+
+    def ia_esgotada(prompt, **k):
+        raise RuntimeError("rate limit / tokens acabaram")
+
+    monkeypatch.setattr(mod, "invocar", ia_esgotada)
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="p"), store=store, agora=agora
+    )
+    res = mod.collect(ctx)
+
+    st = store.get("Traducao", "p").status
+    assert st["parcial"] is True
+    assert st["fase"] == "pausado"
+    assert st["retoma_collect"] == "traduzir-pdf"
+    # retomada agendada ~1h à frente (janela configurada)
+    delta = (_dt.fromisoformat(st["retoma_em"]) - agora).total_seconds()
+    assert 3500 < delta <= 3600
+    assert "pausado" in res.data["_saida"] or "⏸" in res.data["_saida"]
+
+
 def test_collect_traducao_inexistente(tmp_path):
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)

@@ -9,10 +9,12 @@ barra de progresso do web shell (ADR-0029).
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from atlas.executor import CollectResult, ContextoExecucao
 from atlas.ia import invocar
+from atlas.retomada import campos_pausa
 from atlas.rotinas import registrar
 from atlas.traducao.pipeline import traduzir_pdf
 from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao
@@ -171,14 +173,20 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
 
     cache.salvar(cache_path)  # persiste o cache p/ reruns baratos (ADR-0030/0031)
     log = list((store.get("Traducao", t.name).status or {}).get("log") or [])
+    pausa: dict = {}
     if prog.parcial:
-        # tokens acabaram no meio: PDF saiu completo com o bruto; re-disparar refina o resto
-        msg = f"⏸ parcial — {prog.paginas_prontas} páginas (tokens acabaram; re-disparar refina o restante)"
-        fase = "parcial"
-        atividade = "parcial: refino incompleto — re-disparar continua de onde parou"
+        # tokens acabaram no meio: PDF saiu com o bruto; pausa e agenda a retomada
+        # autônoma (ADR-0035) para quando a janela de quota resetar.
+        janela = int(t.spec.get("janela_retomada_seg") or 18000)  # default 5 h
+        pausa = campos_pausa(ctx.agora, janela, "traduzir-pdf")
+        quando = datetime.fromisoformat(pausa["retoma_em"]).strftime("%H:%M")
+        msg = (
+            f"⏸ pausado por escassez — {prog.paginas_prontas} páginas; "
+            f"retoma sozinho às {quando} (continua de onde parou)"
+        )
+        atividade = f"pausado (tokens acabaram) — retomada automática às {quando}"
     else:
         msg = f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"
-        fase = "pronto"
         atividade = "tradução concluída"
     log.append(_evento(msg))
     _status(
@@ -186,7 +194,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         t,
         ctx,
         {
-            "fase": fase,
+            "fase": "pronto",
             "saida": saida,
             "paginas_total": prog.paginas_total,
             "paginas_prontas": prog.paginas_prontas,
@@ -198,6 +206,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             "eta_seg": 0,
             "log": log[-40:],
             "erro": None,
+            **pausa,  # ADR-0035: fase="pausado" + retoma_em + retoma_collect (só se parcial)
         },
     )
     marca = "⏸" if prog.parcial else "✓"
@@ -218,5 +227,6 @@ def _erro(store, t, ctx, msg: str) -> None:
         store,
         t,
         ctx,
-        {"fase": "erro", "progresso_pct": 0, "erro": msg, "atividade": f"erro: {msg}", "log": log[-40:]},
+        {"fase": "erro", "progresso_pct": 0, "erro": msg,
+         "atividade": f"erro: {msg}", "log": log[-40:]},
     )
