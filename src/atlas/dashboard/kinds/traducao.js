@@ -42,9 +42,41 @@ function _trShell(r) {
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
     </div>
     <div id="tr-config" style="display:none">${_trConfig(s)}</div>
+    <div id="tr-pool">${_trPoolPanel()}</div>
     <div id="tr-estimativa"></div>
     <div id="tr-progresso">${_trProgresso(st, r.name)}</div>
   </div>`;
+}
+
+// Pool de execução de traduções (ADR-0038): visibilidade agregada (quem roda/na
+// fila) + escalonamento em runtime ("réplicas"). Aparece em qualquer Traducao
+// aberta — é estado global da instância, não deste recurso.
+function _trPoolPanel() {
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+    <div style="color:var(--muted)">🧵 carregando pool de tradução…</div>
+  </div>`;
+}
+
+function _trPoolHtml(p) {
+  const chip = (label, cor) => `<span class="ag-badge" style="cursor:pointer;border-color:${cor};color:${cor}"
+    title="abrir ${esc(label)}" onclick="loadAndRender('Traducao','${escJs(label)}')">${esc(label)}</span>`;
+  const rodando = (p.rodando || []).map(l => chip(l, 'var(--green)')).join(' ')
+    || '<span style="color:var(--muted)">—</span>';
+  const fila = (p.fila || []).map(l => chip(l, 'var(--yellow,#d9a441)')).join(' ')
+    || '<span style="color:var(--muted)">—</span>';
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">🧵 Pool de tradução</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="color:var(--muted);font-size:11px">réplicas (concorrência)</span>
+        <input id="tr-pool-max" type="number" min="1" value="${esc(String(p.max_concorrente))}" style="width:48px">
+        <button class="btn" id="tr-pool-escalar" style="font-size:11px;padding:2px 8px">⇕ escalar</button>
+        <span id="tr-pool-msg" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div>▶ rodando (${(p.rodando || []).length}/${p.max_concorrente}): ${rodando}</div>
+      <div>⏳ fila (${(p.fila || []).length}): ${fila}</div>
+    </div>`;
 }
 
 // Painel de controle da criação (ADR-0034/0035 + E9): modelo por estágio e params.
@@ -308,6 +340,31 @@ function _trWire(name, container) {
       setTimeout(() => { pvBtn.disabled = false; }, 1500);
     }
   };
+
+  // Pool de tradução (ADR-0038): 1 timer global (evita empilhar ao trocar de aba).
+  const poolBox = container.querySelector('#tr-pool');
+  async function _pollPool() {
+    if (!poolBox || !poolBox.isConnected) { clearInterval(window._trPoolTimer); return; }
+    try {
+      const p = await apiFetch(API + '/_traducao_pool');
+      poolBox.innerHTML = _trPoolHtml(p);
+      const escBtn = poolBox.querySelector('#tr-pool-escalar');
+      const msg = poolBox.querySelector('#tr-pool-msg');
+      if (escBtn) escBtn.onclick = async () => {
+        const n = parseInt(poolBox.querySelector('#tr-pool-max').value, 10);
+        if (!n || n < 1) return;
+        escBtn.disabled = true;
+        try {
+          await apiFetch(API + '/_traducao_pool/escalar', { method: 'POST', body: JSON.stringify({ max_concorrente: n }) });
+          await _pollPool();
+        } catch (err) { if (msg) msg.textContent = '⚠️ ' + err.message; }
+        finally { escBtn.disabled = false; }
+      };
+    } catch (e) { /* mantém tentando */ }
+  }
+  if (window._trPoolTimer) clearInterval(window._trPoolTimer);
+  _pollPool();
+  window._trPoolTimer = setInterval(_pollPool, 3000);
 
   // Se já estava em andamento ao abrir, retoma o polling.
   const cur = container.querySelector('#tr-progresso').textContent || '';

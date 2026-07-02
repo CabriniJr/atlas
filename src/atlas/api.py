@@ -34,6 +34,7 @@ from typing import Any
 from atlas import credentials, curadoria, github_auth, scoping, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
+from atlas.traducao.pool import TraducaoPool
 
 _log = logging.getLogger("atlas.api")
 
@@ -63,6 +64,11 @@ _PROJECT_DIR = str(
 
 # Store injetado no boot — partilhado com o bot Telegram
 _store: ResourceStore | None = None
+
+# Pool de execução de traduções (ADR-0038): teto escalável em runtime + fila FIFO.
+_traducao_pool = TraducaoPool(
+    max_concorrente=int(os.environ.get("ATLAS_TRADUCAO_MAX_CONCURRENT", "2"))
+)
 
 
 _DASHBOARD_DIR = Path(__file__).parent / "dashboard"
@@ -465,6 +471,12 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(code, payload)
             return
 
+        # GET /_traducao_pool → visibilidade agregada (ADR-0038): quem roda/na fila.
+        if path == _API_PREFIX + "/_traducao_pool":
+            code, payload = _traducao_pool_estado()
+            self._json(code, payload)
+            return
+
         rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
 
@@ -562,6 +574,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "label obrigatório"})
                 return
             self._json(*_iniciar_previa(label))
+            return
+
+        # POST /_traducao_pool/escalar {max_concorrente} → muda o teto em runtime
+        # (ADR-0038: escalonamento tipo "réplicas"; drena a fila se subiu).
+        if path == _API_PREFIX + "/_traducao_pool/escalar":
+            self._json(*_traducao_pool_escalar(body))
             return
 
         # Insight por IA (sob demanda) — sistema ou repositório.
@@ -698,6 +716,12 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0].rstrip("/")
         rest = path[len(_API_PREFIX) :].strip("/")
         parts = rest.split("/") if rest else []
+
+        # DELETE /_traducao_pool/fila/<label> → cancela da fila (ADR-0038).
+        if len(parts) == 3 and parts[0] == "_traducao_pool" and parts[1] == "fila":
+            self._json(*_traducao_pool_cancelar_fila(parts[2]))
+            return
+
         if len(parts) != 2:
             self._json(400, {"error": "DELETE requires /apis/atlas/v1/<kind>/<name>"})
             return
@@ -896,42 +920,100 @@ def _salvar_upload(name: str, label: str, data: bytes) -> tuple[int, dict]:
 
 
 def _iniciar_traducao(label: str) -> tuple[int, dict]:
-    """Dispara a tradução de ``Traducao/<label>`` em background (ADR-0030).
+    """Dispara a tradução de ``Traducao/<label>`` em background (ADR-0030),
+    passando pelo pool de execução (ADR-0038: teto escalável + fila FIFO).
 
-    Roda o collect ``traduzir-pdf`` numa thread daemon; o progresso é gravado no
-    ``status`` do recurso (a view faz polling em ``GET /Traducao/<label>``).
-    Devolve ``(código_http, corpo)``.
+    Se há slot livre, roda agora (thread daemon); acima do teto, enfileira
+    (``status.fase = "fila"``) e é despachada automaticamente quando um slot
+    libera. Devolve ``(código_http, corpo)``.
     """
-    from atlas.executor import ContextoExecucao
     from atlas.rotinas import obter as _obter
-    from atlas.routines import Rotina
 
     if _store is None:
         return 503, {"error": "store not ready"}
     t = _store.get("Traducao", label)
     if t is None:
         return 404, {"error": f"Traducao/{label} not found"}
-    if (t.status or {}).get("fase") == "traduzindo":
-        return 409, {"ok": False, "error": f"Traducao/{label} já está traduzindo"}
+    fase_atual = (t.status or {}).get("fase")
+    if fase_atual in ("traduzindo", "fila"):
+        return 409, {"ok": False, "error": f"Traducao/{label} já está {fase_atual}"}
     origem = (t.spec.get("origem") or "").strip()
     if not origem or not Path(origem).exists():
         return 400, {"error": f"origem inválida: {origem!r}"}
     try:
-        collect = _obter("traduzir-pdf")
+        _obter("traduzir-pdf")  # valida antes de reservar slot no pool
     except Exception as exc:  # noqa: BLE001
         return 500, {"error": f"collect traduzir-pdf não registrado: {exc}"}
+
+    if _traducao_pool.tentar_iniciar(label):
+        _disparar_traducao_thread(label)
+        return 200, {"ok": True, "label": label, "fase": "traduzindo"}
+
+    _store.set_status("Traducao", label, {**(t.status or {}), "fase": "fila"}, datetime.now())
+    return 200, {"ok": True, "label": label, "fase": "fila"}
+
+
+def _disparar_traducao_thread(label: str) -> None:
+    """Roda o collect ``traduzir-pdf`` de ``label`` numa thread daemon.
+
+    Ao terminar (sucesso, erro ou pausa), libera o slot no pool e despacha o
+    próximo da fila, se houver (ADR-0038) — encadeando até a fila esvaziar.
+    """
+    from atlas.executor import ContextoExecucao
+    from atlas.rotinas import obter as _obter
+    from atlas.routines import Rotina
 
     rot = Rotina(nome=label, descricao="", label=label, coletar="traduzir-pdf")
 
     def _run() -> None:
-        ctx = ContextoExecucao(agora=datetime.now(), rotina=rot, origem="web", store=_store)
         try:
+            collect = _obter("traduzir-pdf")
+            ctx = ContextoExecucao(agora=datetime.now(), rotina=rot, origem="web", store=_store)
             collect(ctx)
         except Exception:  # noqa: BLE001 — status já é marcado como erro pelo collect
             _log.exception("traducao %s falhou", label)
+        finally:
+            proximo = _traducao_pool.liberar(label)
+            if proximo:
+                _disparar_traducao_thread(proximo)
 
     threading.Thread(target=_run, daemon=True, name=f"traduzir-{label}").start()
-    return 200, {"ok": True, "label": label, "fase": "traduzindo"}
+
+
+def _traducao_pool_estado() -> tuple[int, dict]:
+    """``GET /_traducao_pool`` (ADR-0038): visibilidade agregada do pool."""
+    return 200, _traducao_pool.estado()
+
+
+def _traducao_pool_escalar(body: dict) -> tuple[int, dict]:
+    """``POST /_traducao_pool/escalar`` (ADR-0038): muda o teto em runtime.
+
+    Se o novo teto é maior, despacha imediatamente quem estava na fila.
+    """
+    try:
+        novo_max = int(body.get("max_concorrente"))
+    except (TypeError, ValueError):
+        return 400, {"error": "max_concorrente deve ser um inteiro"}
+    if novo_max < 1:
+        return 400, {"error": "max_concorrente deve ser >= 1"}
+    despachados = _traducao_pool.escalar(novo_max)
+    for label in despachados:
+        _disparar_traducao_thread(label)
+    return 200, _traducao_pool.estado()
+
+
+def _traducao_pool_cancelar_fila(label: str) -> tuple[int, dict]:
+    """``DELETE /_traducao_pool/fila/<label>`` (ADR-0038): tira da fila antes
+    de rodar (sem custo de IA). 404 se o label não está na fila."""
+    if not _traducao_pool.cancelar_da_fila(label):
+        return 404, {"error": f"{label!r} não está na fila"}
+    if _store is not None:
+        t = _store.get("Traducao", label)
+        if t is not None and (t.status or {}).get("fase") == "fila":
+            _store.set_status(
+                "Traducao", label, {**(t.status or {}), "fase": "cancelado"}, datetime.now()
+            )
+    return 200, {"ok": True, "label": label}
 
 
 def _iniciar_previa(label: str) -> tuple[int, dict]:
