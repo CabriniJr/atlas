@@ -49,6 +49,7 @@ class ConfigTraducao:
     notas_rodape: bool = False  # termos mantidos no idioma de origem viram nota de rodapé
     comparador: bool = False  # ADR-0034: passe final de consistência (Opus), opt-in
     modelo_comparador: str | None = None  # modelo do comparador (None → modelo/padrão)
+    render_motor: str = "html"  # ADR-0036: "html" (editorial WeasyPrint) | "pymupdf" (in-place)
 
 
 class CacheTraducao:

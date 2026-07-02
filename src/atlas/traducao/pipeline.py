@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import fitz
 
 from atlas.ia import invocar as _invocar_padrao
+from atlas.traducao.editorial_html import remontar_editorial_html
 from atlas.traducao.extracao import extrair_pagina
 from atlas.traducao.remontagem import remontar_documento
 from atlas.traducao.traducao_ia import (
@@ -91,6 +92,22 @@ def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on
     )
 
 
+def _render_final(doc, paginas, destino, cfg) -> None:
+    """Renderiza o PDF pelo motor escolhido (ADR-0036). ``html`` = editorial
+    (WeasyPrint); cai para ``pymupdf`` in-place se o WeasyPrint faltar/falhar."""
+    if getattr(cfg, "render_motor", "html") == "html":
+        try:
+            remontar_editorial_html(doc, paginas, destino, cfg)
+            doc.close()
+            return
+        except Exception:  # noqa: BLE001 — fallback resiliente (ADR-0006)
+            import logging
+            logging.getLogger(__name__).exception("render editorial falhou; caindo p/ pymupdf")
+    remontar_documento(doc, paginas, min_fonte_pct=cfg.min_fonte_pct)
+    doc.save(destino, garbage=4, deflate=True)
+    doc.close()
+
+
 def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoTraducao:
     """Re-renderiza o PDF usando só o que já está no cache (E9-05). Sem chamadas de IA:
     blocos sem tradução cacheada caem no texto original (nunca perde conteúdo)."""
@@ -110,9 +127,7 @@ def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoT
         render_paginas[i] = (blocos, traducoes)
         if on_progress:
             on_progress(ProgressoTraducao(total, i + 1, blocos_traduzidos, fase="traduzindo"))
-    remontar_documento(doc, render_paginas, min_fonte_pct=cfg.min_fonte_pct)
-    doc.save(destino, garbage=4, deflate=True)
-    doc.close()
+    _render_final(doc, render_paginas, destino, cfg)
     return ProgressoTraducao(total, total, blocos_traduzidos)
 
 
@@ -179,11 +194,8 @@ def traduzir_pdf(
                 for bid in trs:
                     trs[bid] = aplicar_unificacao(trs[bid], mapa)
 
-    # Render editorial ao fim (determinístico): reflow de prosa + páginas de
-    # continuação sem embaralhar os índices durante a tradução (ADR-0033).
-    remontar_documento(doc, render_paginas, min_fonte_pct=cfg.min_fonte_pct)
-    doc.save(destino, garbage=4, deflate=True)
-    doc.close()
+    # Render ao fim: motor editorial (WeasyPrint, ADR-0036) ou pymupdf in-place.
+    _render_final(doc, render_paginas, destino, cfg)
     return ProgressoTraducao(
         total, total, blocos_traduzidos, detectados, parcial=esgotado
     )

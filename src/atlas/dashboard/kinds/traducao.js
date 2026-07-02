@@ -64,6 +64,7 @@ function _trConfig(s) {
     ${row('Comparador de consistência', chk('cfg-comparador', bool('comparador', false)))}
     ${row('Modelo do comparador', inp('cfg-modelo-comp', v('modelo_comparador',''), 'default (Opus)'))}
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Render (não gasta IA — grátis iterar)</div>
+    ${row('Motor de render', `<select id="cfg-motor-render" style="width:150px"><option value="html" ${v('render_motor','html')==='html'?'selected':''}>editorial (HTML)</option><option value="pymupdf" ${v('render_motor')==='pymupdf'?'selected':''}>in-place (pymupdf)</option></select>`)}
     ${row('Fonte mínima (% legibilidade)', inp('cfg-minfonte', v('min_fonte_pct', 90), '', 80))}
     ${row('Notas de rodapé (termos mantidos)', chk('cfg-notas', bool('notas_rodape', false)))}
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Automação (ADR-0035)</div>
@@ -264,6 +265,7 @@ function _trWire(name, container) {
       lote_refino: num('#cfg-lote', 60),
       comparador: container.querySelector('#cfg-comparador').checked,
       modelo_comparador: container.querySelector('#cfg-modelo-comp').value.trim(),
+      render_motor: container.querySelector('#cfg-motor-render').value,
       min_fonte_pct: num('#cfg-minfonte', 90),
       notas_rodape: container.querySelector('#cfg-notas').checked,
       janela_retomada_seg: num('#cfg-janela', 18000),

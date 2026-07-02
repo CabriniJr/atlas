@@ -3,7 +3,7 @@ name = "atlas"
 version = "0.0.0"
 description = "Atlas — motor de rotinas pessoais"
 requires-python = ">=3.12"
-dependencies = ["pyyaml>=6", "cryptography>=42", "pymupdf>=1.24", "deep-translator>=1.11"]
+dependencies = ["pyyaml>=6", "cryptography>=42", "pymupdf>=1.24", "deep-translator>=1.11", "weasyprint>=60"]
 
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-cov"]

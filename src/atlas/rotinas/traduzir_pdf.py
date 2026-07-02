@@ -108,6 +108,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         notas_rodape=_verdade(t.spec.get("notas_rodape", False)),
         comparador=_verdade(t.spec.get("comparador", False)),
         modelo_comparador=t.spec.get("modelo_comparador") or None,
+        render_motor=(t.spec.get("render_motor") or "html"),
     )
 
     iniciado = ctx.agora.isoformat()
@@ -260,6 +261,7 @@ def render_previa(store, label: str, agora: datetime) -> None:
         idioma_destino=idioma_destino,
         min_fonte_pct=int(t.spec.get("min_fonte_pct") or 90),
         notas_rodape=_verdade(t.spec.get("notas_rodape", False)),
+        render_motor=(t.spec.get("render_motor") or "html"),
     )
     _merge_status(store, label, agora, {"previa_gerando": True, "previa_erro": None})
 
