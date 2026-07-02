@@ -19,9 +19,14 @@ from __future__ import annotations
 
 import base64
 import html as _html
+import re
 import statistics
 
 import fitz
+
+# fim de linha de sumário: leaders (pontos) + número de página do original (que a
+# repaginação invalida — o CSS regenera via target-counter).
+_RE_TOC_FIM = re.compile(r"[\s.·•…\-–—]*\d+\s*$")
 
 try:  # WeasyPrint é opcional em import-time (o motor pymupdf continua disponível)
     import weasyprint
@@ -111,13 +116,22 @@ def _imagens(doc, page) -> list[tuple]:
 
 
 _CSS = """
+/* folio do original: régua fina no rodapé + "página | capítulo" (nº na borda
+   externa, alternando recto/verso) — o "chartzinho" com capítulo + página. */
 @page {{ size: {pw:.0f}pt {ph:.0f}pt;
          margin: {top:.0f}pt {right:.0f}pt {bottom:.0f}pt {left:.0f}pt;
-         /* elementos de margem preservados: cabeça de capítulo + número de página */
-         @top-center {{ content: string(cap); font: italic 9pt 'Liberation Serif', serif;
-                        color: #666; }}
-         @bottom-center {{ content: counter(page); font: 9pt 'Liberation Serif', serif;
-                           color: #666; }} }}
+         @bottom-left {{ border-top: 0.6pt solid #000; padding-top: 4pt; vertical-align: top;
+                         font: 600 8.5pt 'Liberation Sans Narrow','Liberation Sans',sans-serif;
+                         color: #222; }}
+         @bottom-center {{ content: ""; border-top: 0.6pt solid #000; }}
+         @bottom-right {{ border-top: 0.6pt solid #000; padding-top: 4pt; vertical-align: top;
+                          font: 600 8.5pt 'Liberation Sans Narrow','Liberation Sans',sans-serif;
+                          color: #222; }} }}
+/* verso (par): nº à esquerda, capítulo à direita. recto (ímpar): o inverso. */
+@page :left  {{ @bottom-left  {{ content: counter(page); }}
+                @bottom-right {{ content: string(cap); }} }}
+@page :right {{ @bottom-left  {{ content: string(cap); }}
+                @bottom-right {{ content: counter(page); }} }}
 html {{ font-family: 'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif; }}
 body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
 /* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra */
@@ -134,6 +148,13 @@ pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space:
 figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
+a {{ color: #0645ad; text-decoration: none; }}
+h1 a, h2 a, h3 a {{ color: inherit; }}
+/* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
+p.toc {{ text-align: left; margin: .12em 0; }}
+p.toc a {{ color: #000; }}
+p.toc a::after {{ content: leader('.') ' ' target-counter(attr(href url), page); color: #000; }}
+.tocnum::before {{ content: leader('.') ' '; }}
 """
 
 def _e_folio(b, ph: float) -> bool:
@@ -156,28 +177,129 @@ def _e_lista(texto: str) -> bool:
     return t[:1] in _BULLETS and len(t) > 2 and t[1:2] in (" ", "\t")
 
 
-def _elemento(b, texto: str, est: dict, body_sz: float) -> str:
-    """HTML de um bloco de texto conforme seu papel/estilo (código não é traduzido)."""
+def _anchor(pi: int, bid: int) -> str:
+    return f"u{pi}_{bid}"
+
+
+def _links_pagina(page) -> list[tuple]:
+    """(rect_origem, tipo, alvo) dos hyperlinks da página. tipo: 'uri' | 'goto'."""
+    out = []
+    try:
+        for lk in page.get_links():
+            r = lk.get("from")
+            if r is None:
+                continue
+            if lk.get("kind") == fitz.LINK_URI and lk.get("uri"):
+                out.append((r, "uri", lk["uri"]))
+            # GOTO e NAMED (destino nomeado, ex.: sumário) — ambos já trazem page+to.
+            elif lk.get("kind") in (fitz.LINK_GOTO, fitz.LINK_NAMED) and lk.get("page", -1) >= 0:
+                out.append((r, "goto", (lk.get("page", -1), lk.get("to"))))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _alvo_goto(paginas: dict, pageidx: int, pt) -> str | None:
+    """Âncora do bloco mais próximo do destino de um link interno (na repaginação)."""
+    entry = paginas.get(pageidx)
+    if not entry:
+        return None
+    blocos = [b for b in entry[0] if b.bbox and (not b.skip or _estilo(b)["mono"])]
+    if not blocos:
+        return None
+    y = getattr(pt, "y", None)
+    alvo = blocos[0] if y is None else min(blocos, key=lambda b: abs(b.bbox[1] - y))
+    return _anchor(pageidx, alvo.id)
+
+
+def _goto_anchors(b, links: list[tuple], paginas: dict) -> list:
+    """Âncoras dos links internos que cobrem o bloco, em ordem de leitura (p/ TOC)."""
+    if not b.bbox:
+        return []
+    bx = fitz.Rect(b.bbox)
+    gl = []
+    for r, tipo, alvo in links:
+        if tipo != "goto":
+            continue
+        inter = bx & r
+        if not inter.is_empty and inter.width * inter.height > 0:
+            gl.append((r.y0, alvo))
+    gl.sort(key=lambda x: x[0])
+    return [_alvo_goto(paginas, pg, pt) for _y, (pg, pt) in gl]
+
+
+def _entradas_toc(texto: str) -> list[tuple]:
+    """Quebra 'Título 12 Outro Título 34 …' em [(título, nº|None), …]."""
+    ent, buf = [], []
+    for tok in texto.split():
+        if tok.isdigit() and buf:
+            ent.append((" ".join(buf), tok))
+            buf = []
+        else:
+            buf.append(tok)
+    if buf:
+        ent.append((" ".join(buf), None))
+    return ent
+
+
+def _elemento_toc(texto: str, anchors: list) -> str:
+    """Um bloco de sumário mesclado → uma linha por entrada, com link + página
+    recalculada (target-counter). Fallback: mostra o número original (E9-09)."""
+    linhas = []
+    for i, (titulo, num) in enumerate(_entradas_toc(texto)):
+        alvo = anchors[i] if i < len(anchors) else None
+        if alvo:
+            linhas.append(f'<p class="toc"><a href="#{alvo}">{_e(titulo)}</a></p>')
+        else:
+            n = f' <span class="tocnum">{_e(num)}</span>' if num else ""
+            linhas.append(f'<p class="toc">{_e(titulo)}{n}</p>')
+    return "\n".join(linhas)
+
+
+def _link_do_bloco(b, links: list[tuple]):
+    """Link cujo retângulo mais cobre o bloco (ou None)."""
+    if not b.bbox or not links:
+        return None
+    bx = fitz.Rect(b.bbox)
+    melhor, area = None, 0.0
+    for r, tipo, alvo in links:
+        inter = bx & r
+        a = 0.0 if inter.is_empty else inter.width * inter.height
+        if a > area:
+            area, melhor = a, (tipo, alvo)
+    return melhor if area > 0 else None
+
+
+def _elemento(b, texto: str, est: dict, body_sz: float, anchor: str = "", link=None) -> str:
+    """HTML de um bloco conforme papel/estilo, com âncora e hyperlink (E9-09)."""
     cor = _cor_hex(est["color"])
     cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
+    ida = f' id="{anchor}"' if anchor else ""
     if est["mono"]:
-        return f'<pre>{_e(b.texto)}</pre>'  # código: original, verbatim
+        return f'<pre{ida}>{_e(b.texto)}</pre>'  # código: original, verbatim
+    # sumário: link interno + linha terminando em nº de página → regenera a página.
+    if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
+        rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
+        return f'<p class="toc"{ida}><a href="#{link[1]}">{rotulo}</a></p>'
     conteudo = _e(texto)
     if est["bold"]:
         conteudo = f'<span class="bd">{conteudo}</span>'
     if est["italic"]:
         conteudo = f'<span class="it">{conteudo}</span>'
+    if link:  # hyperlink normal: URI externa ou goto interno
+        href = link[1] if link[0] == "uri" else (f"#{link[1]}" if link[1] else "")
+        if href:
+            conteudo = f'<a href="{_e(href)}">{conteudo}</a>'
     sz = est["size"]
-    # título: fonte notavelmente maior que o corpo e poucas palavras
     if sz >= body_sz * 1.18 and len(texto.split()) <= 14:
         nivel = "h1" if sz >= body_sz * 1.6 else "h2"
-        return f'<{nivel} style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</{nivel}>'
+        return f'<{nivel}{ida} style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</{nivel}>'
     if _e_lista(b.texto):
         item = _e(texto.lstrip()[1:].lstrip())
         if est["italic"]:
             item = f'<span class="it">{item}</span>'
-        return f'<li style="font-size:{sz:.1f}pt;{cor_css}">{item}</li>'
-    return f'<p style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</p>'
+        return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}">{item}</li>'
+    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</p>'
 
 
 def montar_html(doc, paginas: dict, geo: dict) -> str:
@@ -203,6 +325,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     for idx in sorted(paginas):
         blocos, traducoes = paginas[idx]
         page = doc[idx]
+        links = _links_pagina(page)
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
         itens: list[tuple] = [
             (b.bbox[1] if b.bbox else 0.0, "b", b)
@@ -227,7 +350,19 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             texto = traducoes.get(b.id) if not est["mono"] else b.texto
             if texto is None:
                 continue
-            el = _elemento(b, texto, est, body_sz)
+            # sumário mesclado (bloco com ≥2 links internos): uma linha por entrada.
+            if not est["mono"]:
+                ganchors = _goto_anchors(b, links, paginas)
+                if len(ganchors) >= 2:
+                    fecha_ul()
+                    partes.append(_elemento_toc(texto, ganchors))
+                    continue
+            link = _link_do_bloco(b, links)
+            if link and link[0] == "goto":  # resolve destino → âncora na repaginação
+                destpage, pt = link[1]
+                alvo = _alvo_goto(paginas, destpage, pt)
+                link = ("goto", alvo) if alvo else None
+            el = _elemento(b, texto, est, body_sz, anchor=_anchor(idx, b.id), link=link)
             if el.startswith("<li"):
                 if not aberto_ul:
                     partes.append("<ul>")
