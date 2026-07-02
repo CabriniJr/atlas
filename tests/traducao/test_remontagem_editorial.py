@@ -52,3 +52,29 @@ def test_figura_permanece_intacta(tmp_path):
     remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90)
     assert doc[0].get_drawings(), "desenhos (figura) não podem sumir"
     doc.close()
+
+
+def test_fidelidade_ordem_e_figuras(tmp_path):
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 80), "Alpha.", fontsize=11)
+    page.draw_rect(fitz.Rect(72, 120, 300, 260), fill=(1, 0, 0))  # figura
+    page.insert_text((72, 300), "Beta.", fontsize=11)
+    src = tmp_path / "s.pdf"
+    doc.save(str(src))
+    doc.close()
+
+    doc = fitz.open(str(src))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {
+        b.id: ("Alfa." if "Alpha" in b.texto else "Beta.")
+        for b in blocos
+        if not b.skip
+    }
+    n_draw_antes = len(doc[0].get_drawings())
+    remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90)
+    assert len(doc[0].get_drawings()) >= n_draw_antes  # figura preservada
+    t = doc[0].get_text()
+    assert "Alfa" in t and "Beta" in t
+    assert t.index("Alfa") < t.index("Beta")  # ordem de leitura preservada
+    doc.close()
