@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from atlas.ia import InvocarErro, invocar, invocar_ollama
+from atlas.ia import InvocarErro, _chamar_claude, invocar, invocar_ollama, modelo_padrao
 
 # ---------------------------------------------------------------------------
 # Modo análise (2a) — resposta de texto
@@ -59,22 +59,25 @@ def test_invocar_modelo_override(monkeypatch):
 
 
 def test_invocar_erro_returncode_levanta_excecao(monkeypatch):
+    """Mecânica pura do adapter claude (sem fallback) — ver invocar() para o dispatch."""
     monkeypatch.setattr(
         subprocess,
         "run",
         lambda *a, **kw: MagicMock(returncode=1, stdout="", stderr="auth error"),
     )
     with pytest.raises(InvocarErro, match="auth error"):
-        invocar("X")
+        _chamar_claude("X", None, 60)
 
 
 def test_invocar_timeout_levanta_excecao(monkeypatch):
+    """Mecânica pura do adapter claude (sem fallback) — ver invocar() para o dispatch."""
+
     def mock_run(*a, **kw):
         raise subprocess.TimeoutExpired(cmd="claude", timeout=30)
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     with pytest.raises(InvocarErro, match="timeout"):
-        invocar("X")
+        _chamar_claude("X", None, 60)
 
 
 def test_invocar_timeout_configuravel(monkeypatch):
@@ -167,3 +170,92 @@ def test_invocar_motor_claude_default_nao_usa_ollama(monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: mock)
     resultado = invocar("X")  # motor default = "claude"
     assert resultado == "resposta claude"
+
+
+def test_modelo_padrao_por_motor():
+    assert modelo_padrao("ollama") == "gemma4"
+    assert modelo_padrao("claude") == "claude-haiku-4-5-20251001"
+
+
+def test_invocar_motor_ollama_sem_modelo_usa_default_do_ollama_nao_do_claude(monkeypatch):
+    """Sem override, motor='ollama' nunca deve pedir um modelo 'claude-*' ao Ollama."""
+    chamadas = []
+
+    def fake_invocar_ollama(prompt, modelo, endpoint, timeout=60):
+        chamadas.append(modelo)
+        return "ok"
+
+    monkeypatch.setattr("atlas.ia.invocar_ollama", fake_invocar_ollama)
+    invocar("teste", motor="ollama")
+    assert chamadas[0] == "gemma4"
+
+
+def test_invocar_motor_ollama_indisponivel_cai_para_claude(monkeypatch):
+    """Rede de segurança (plug-and-play): ollama fora do ar não trava o chamador."""
+
+    def fake_invocar_ollama(prompt, modelo, endpoint, timeout=60):
+        raise InvocarErro("ollama: connection refused")
+
+    monkeypatch.setattr("atlas.ia.invocar_ollama", fake_invocar_ollama)
+    chamadas_claude = []
+
+    def mock_run(args, **kwargs):
+        chamadas_claude.append(args)
+        return MagicMock(returncode=0, stdout="resposta claude", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    resultado = invocar("teste", motor="ollama")
+    assert resultado == "resposta claude"
+    # nunca deve pedir ao claude o modelo do ollama (ex.: "gemma4")
+    assert "gemma4" not in str(chamadas_claude[0]).lower()
+
+
+def test_invocar_motor_ollama_falha_do_claude_no_fallback_propaga(monkeypatch):
+    """Se o fallback (claude) também falhar, o erro real do claude deve propagar."""
+
+    def fake_invocar_ollama(prompt, modelo, endpoint, timeout=60):
+        raise InvocarErro("ollama: connection refused")
+
+    monkeypatch.setattr("atlas.ia.invocar_ollama", fake_invocar_ollama)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: MagicMock(returncode=1, stdout="", stderr="auth error"),
+    )
+    with pytest.raises(InvocarErro, match="auth error"):
+        invocar("teste", motor="ollama")
+
+
+def test_invocar_motor_claude_bate_limite_cai_para_ollama(monkeypatch):
+    """Fallback no sentido oposto: claude bateu limite/sessão ⇒ tenta ollama."""
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: MagicMock(
+            returncode=1, stdout="", stderr="You've hit your session limit"
+        ),
+    )
+    chamadas = []
+
+    def fake_invocar_ollama(prompt, modelo, endpoint, timeout=60):
+        chamadas.append(modelo)
+        return "resposta do ollama"
+
+    monkeypatch.setattr("atlas.ia.invocar_ollama", fake_invocar_ollama)
+    resultado = invocar("teste")  # motor default = claude
+    assert resultado == "resposta do ollama"
+    assert chamadas[0] == "gemma4"  # nunca herda o modelo claude no fallback
+
+
+def test_invocar_motor_claude_falha_e_ollama_tambem_falha_propaga_erro_do_ollama(monkeypatch):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: MagicMock(returncode=1, stdout="", stderr="session limit"),
+    )
+    monkeypatch.setattr(
+        "atlas.ia.invocar_ollama",
+        MagicMock(side_effect=InvocarErro("ollama: connection refused")),
+    )
+    with pytest.raises(InvocarErro, match="connection refused"):
+        invocar("teste")

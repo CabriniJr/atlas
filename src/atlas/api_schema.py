@@ -355,7 +355,7 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "endpoint",
                 "type": "text",
                 "label": "Endpoint",
-                "hint": "Só p/ ollama/custom: http://192.168.86.22:11434",
+                "hint": "Só p/ ollama/custom: http://192.168.86.38:11434",
             },
             {
                 "k": "token_env",
@@ -416,7 +416,7 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "endpoint",
                 "type": "text",
                 "label": "Endpoint Ollama",
-                "hint": "Ex: http://192.168.86.22:11434 (só para motor=ollama)",
+                "hint": "Ex: http://192.168.86.38:11434 (só para motor=ollama)",
             },
             {
                 "k": "timeout",
@@ -497,11 +497,19 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "hint": "true = MT bruta + IA refina (ADR-0031); false = tradução puramente MT (grátis)",
             },
             {
+                "k": "agente_refino",
+                "type": "text",
+                "label": "Agente de refino",
+                "hint": "Nome de um Agente (opcional, ADR-0040) — dita motor/modelo/persona do "
+                "refino; sobrepõe motor/modelo abaixo. Vazio = usa os campos abaixo",
+            },
+            {
                 "k": "motor",
                 "type": "select",
                 "label": "Motor do refino",
                 "opts": ["claude", "ollama"],
-                "hint": "claude = assinatura; ollama = local (grátis)",
+                "hint": "claude = assinatura; ollama = local (grátis). Cai automaticamente para "
+                "o outro se o escolhido falhar (fallback bidirecional, ADR-0040)",
             },
             {
                 "k": "modelo",

@@ -93,6 +93,7 @@ atualizado-em: 2026-06-23
 | [0038](ADR-0038-pool-execucao-traducao.md) | **Pool de execução de traduções**: teto de concorrência escalável em runtime + fila FIFO + visibilidade agregada (API/UI) | **aceito** | PO: rodar vários lotes ao mesmo tempo, com controle/ciclo de vida/escalonamento/visibilidade |
 | [0039](ADR-0039-paralelismo-paginas-e-retry-timeout.md) | **Paralelismo de páginas entre réplicas** (mesmo dial do pool) + **retry curto persistido** (timeout: até 5x/5min antes de declarar escassez confirmada) | **aceito** | PO: distribuir páginas restantes entre réplicas; timeout ≠ escassez — só 5 falhas seguidas garante limite |
 | [0036](ADR-0036-render-editorial-modelo-semantico.md) | **Render editorial por modelo semântico + WeasyPrint** (default): fluxo HTML/CSS justificado, estilos/imagens/código preservados; in-place (0033) vira fallback | **aceito** | PO: qualidade editorial usável — "substituir o texto respeitando estilo/elementos/normas" |
+| [0040](ADR-0040-fallback-motor-ia-e-agente-refino.md) | **Fallback bidirecional claude↔ollama** em `ia.invocar` (modelo correto por motor, sem herdar do outro) + **`Traducao.spec.agente_refino`** (Agente/LLMProvider configurável, mesmo padrão do `Repo.analyze_agente`) | **aceito** | PO: tokens do Claude esgotados mid-tradução; usar o Ollama da LAN como motor de dev com fallback nos dois sentidos |
 
 ## Lastro
 

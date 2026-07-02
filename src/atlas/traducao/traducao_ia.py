@@ -15,8 +15,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from atlas.ia import _MODELO_PADRAO
 from atlas.ia import invocar as _invocar_padrao
+from atlas.ia import modelo_padrao
 from atlas.traducao.extracao import BlocoTraducao
 
 _RE_BLOCO = re.compile(r"\[\[(\d+)\]\]\s*(.*?)(?=\n\[\[\d+\]\]|\Z)", re.DOTALL)
@@ -52,6 +52,7 @@ class ConfigTraducao:
     render_motor: str = "html"  # ADR-0036: "html" (editorial WeasyPrint) | "pymupdf" (in-place)
     max_tentativas_timeout: int = 5  # ADR-0039: retries curtos antes de declarar escassez
     janela_retry_timeout_seg: int = 300  # ADR-0039: 5min entre retries curtos (timeout)
+    instrucao_refino: str = ""  # ADR-0040: persona do Agente de refino; vazio = instrução padrão
 
 
 class CacheTraducao:
@@ -135,7 +136,7 @@ def detectar_glossario(
         f"vírgula, sem explicações.\n\n{corpus}"
     )
     try:
-        resposta = invocar_fn(prompt, modelo=cfg.modelo or _MODELO_PADRAO, motor=cfg.motor)
+        resposta = invocar_fn(prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor)
     except Exception:  # noqa: BLE001 — detecção é best-effort; falha não derruba a tradução
         return []
 
@@ -173,7 +174,7 @@ def unificar_termos(
     try:
         resposta = invocar_fn(
             prompt,
-            modelo=cfg.modelo_comparador or cfg.modelo or _MODELO_PADRAO,
+            modelo=cfg.modelo_comparador or cfg.modelo or modelo_padrao(cfg.motor),
             timeout=cfg.timeout,
             motor=cfg.motor,
         )
@@ -242,7 +243,7 @@ def traduzir_blocos(
     if pendentes:
         prompt = montar_prompt(pendentes, cfg)
         # cfg.modelo pode ser None → usa o padrão do motor (invocar não aceita None).
-        resposta = invocar_fn(prompt, modelo=cfg.modelo or _MODELO_PADRAO, motor=cfg.motor)
+        resposta = invocar_fn(prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor)
         traducoes = parsear_resposta(resposta, [b.id for b in pendentes])
         for b in pendentes:
             t = traducoes.get(b.id, b.texto)  # fallback: mantém original se IA falhou
@@ -258,21 +259,58 @@ def montar_prompt_refino(
 
     ``pares`` = lista de ``(id, origem, bruto)``. O LLM não traduz do zero: corrige o
     bruto para ficar fiel à origem, sem perder informação, respeitando o glossário.
+    ``cfg.instrucao_refino`` (ADR-0040), quando setado por um Agente referenciado
+    (``Traducao.spec.agente_refino``), substitui só o parágrafo de persona/ênfase —
+    o contrato de glossário e de formato de resposta é sempre mantido, pois o
+    parser (``parsear_resposta``) depende dele.
     """
     glossario = ", ".join(cfg.glossario) if cfg.glossario else "(nenhum)"
     corpo = "\n\n".join(
         f"[[{i}]]\nORIGEM: {origem}\nBRUTO: {bruto}" for i, origem, bruto in pares
     )
-    return (
+    instrucao = cfg.instrucao_refino.strip() or (
         f"Você revisa a tradução de {cfg.idioma_origem} para {cfg.idioma_destino} de um "
         f"livro técnico sobre: {cfg.assunto or 'tecnologia'}.\n"
         f"Para cada bloco há a ORIGEM e uma tradução BRUTA (automática). Corrija o BRUTO "
-        f"para ficar FIEL à origem e natural, SEM PERDER informação, mantendo o tom "
-        f"técnico. NÃO traduza termos técnicos, nomes de APIs, comandos ou código; "
-        f"mantenha em inglês os termos do glossário: {glossario}.\n"
+        f"para ficar FIEL à origem e natural, SEM PERDER informação, mantendo o tom técnico."
+    )
+    return (
+        f"{instrucao}\n"
+        f"NÃO traduza termos técnicos, nomes de APIs, comandos ou código; mantenha em "
+        f"inglês os termos do glossário: {glossario}.\n"
         f"Responda cada bloco no MESMO formato numerado, só a versão final, sem "
         f"comentários:\n[[N]] <tradução final>\n\n{corpo}"
     )
+
+
+def resolver_agente_refino(traducao_res, store) -> tuple[str | None, str | None, str | None]:
+    """Resolve ``(motor, modelo, instrucao)`` do Agente de refino (ADR-0040).
+
+    Espelha ``_resolver_agente_analise`` do repo-sync: lê
+    ``Traducao.spec.agente_refino``; do ``Agente`` tira o ``prompt`` (persona) e,
+    via ``provider`` (``LLMProvider``) ou campos próprios, motor/modelo. Devolve
+    ``(None, None, None)`` se não houver Agente — o chamador cai nos campos
+    próprios do ``Traducao`` (retrocompatível).
+    """
+    if store is None:
+        return None, None, None
+    nome = ((traducao_res.spec or {}).get("agente_refino") or "").strip()
+    if not nome:
+        return None, None, None
+    agente = store.get("Agente", nome)
+    if agente is None:
+        return None, None, None
+    aspec = agente.spec or {}
+    prov_spec: dict = {}
+    prov_nome = (aspec.get("provider") or "").strip()
+    if prov_nome:
+        prov = store.get("LLMProvider", prov_nome)
+        if prov is not None:
+            prov_spec = prov.spec or {}
+    motor = (prov_spec.get("motor") or aspec.get("motor") or "").strip() or None
+    modelo = (aspec.get("modelo") or prov_spec.get("modelo") or "").strip() or None
+    instrucao = (aspec.get("prompt") or "").strip() or None
+    return motor, modelo, instrucao
 
 
 def _classificar_erro(exc: Exception) -> str:
@@ -317,7 +355,7 @@ def refinar_blocos(
         lote_idx += 1
         pares = [(b.id, b.texto, brutos.get(b.id, b.texto)) for b in lote]
         prompt = montar_prompt_refino(pares, cfg)
-        modelo = cfg.modelo or _MODELO_PADRAO
+        modelo = cfg.modelo or modelo_padrao(cfg.motor)
         t0 = time.monotonic()
         try:
             resposta = invocar_fn(prompt, modelo=modelo, timeout=cfg.timeout, motor=cfg.motor)

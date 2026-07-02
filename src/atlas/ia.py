@@ -12,15 +12,23 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import shutil
 import subprocess
 import urllib.request
 
+_log = logging.getLogger(__name__)
+
 _MODELO_PADRAO = "claude-haiku-4-5-20251001"
 _MODELO_OLLAMA_PADRAO = "gemma4"
 _TIMEOUT_PADRAO = 60
-_OLLAMA_ENDPOINT_PADRAO = "http://192.168.86.22:11434"
+_OLLAMA_ENDPOINT_PADRAO = "http://192.168.86.38:11434"
+
+
+def modelo_padrao(motor: str) -> str:
+    """Modelo default de *motor* (``claude`` ou ``ollama``) quando nenhum é pedido."""
+    return _MODELO_OLLAMA_PADRAO if motor == "ollama" else _MODELO_PADRAO
 
 _claude_bin: str | None = None
 
@@ -99,25 +107,9 @@ def invocar_ollama(
         raise InvocarErro(f"ollama: {exc}") from exc
 
 
-def invocar(
-    prompt: str,
-    modelo: str = _MODELO_PADRAO,
-    timeout: int = _TIMEOUT_PADRAO,
-    motor: str = "claude",
-) -> str:
-    """Envia *prompt* ao motor selecionado e devolve a resposta.
-
-    Args:
-        motor: ``"claude"`` (default, via CLI) ou ``"ollama"`` (local).
-
-    Raises:
-        InvocarErro: falha do motor selecionado.
-    """
-    if motor == "ollama":
-        endpoint = os.environ.get("ATLAS_OLLAMA_ENDPOINT", _OLLAMA_ENDPOINT_PADRAO)
-        return invocar_ollama(prompt, modelo=modelo, endpoint=endpoint, timeout=timeout)
-
-    args = [_resolver_claude(), "-p", "--model", modelo]
+def _chamar_claude(prompt: str, modelo: str | None, timeout: int) -> str:
+    """Chama ``claude -p`` via subprocess. ``modelo`` vazio ⇒ default claude."""
+    args = [_resolver_claude(), "-p", "--model", modelo or _MODELO_PADRAO]
     try:
         proc = subprocess.run(
             args,
@@ -136,3 +128,46 @@ def invocar(
         raise InvocarErro(detalhe)
 
     return proc.stdout.strip()
+
+
+def _chamar_ollama(prompt: str, modelo: str | None, timeout: int) -> str:
+    """Chama o endpoint Ollama. ``modelo`` vazio ⇒ default ollama (nunca um nome
+    ``claude-*``, que não existe nesse servidor)."""
+    endpoint = os.environ.get("ATLAS_OLLAMA_ENDPOINT", _OLLAMA_ENDPOINT_PADRAO)
+    return invocar_ollama(
+        prompt, modelo=modelo or _MODELO_OLLAMA_PADRAO, endpoint=endpoint, timeout=timeout
+    )
+
+
+def invocar(
+    prompt: str,
+    modelo: str | None = None,
+    timeout: int = _TIMEOUT_PADRAO,
+    motor: str = "claude",
+) -> str:
+    """Envia *prompt* ao motor selecionado e devolve a resposta.
+
+    Args:
+        motor: ``"claude"`` (default, via CLI) ou ``"ollama"`` (local).
+        modelo: vazio ⇒ default do *motor* pedido (``modelo_padrao``) — nunca
+            mistura o default de um motor com o adapter do outro (nem no
+            pedido original, nem no fallback).
+
+    Fallback bidirecional (plug-and-play — rede de segurança nos dois sentidos):
+        - ``motor="ollama"`` e o endpoint está fora do ar ⇒ tenta ``claude``.
+        - ``motor="claude"`` e bate limite/erro (ex.: sessão esgotada) ⇒ tenta
+          ``ollama``.
+        Se o motor pedido funciona, o fallback nunca é tentado. Se os dois
+        falham, propaga o erro do **fallback** (é a última tentativa real).
+
+    Raises:
+        InvocarErro: falha do motor pedido e do fallback.
+    """
+    primario, fallback = (
+        (_chamar_ollama, _chamar_claude) if motor == "ollama" else (_chamar_claude, _chamar_ollama)
+    )
+    try:
+        return primario(prompt, modelo, timeout)
+    except InvocarErro as exc:
+        _log.warning("motor=%s indisponível (%s); caindo para o outro motor", motor, exc)
+        return fallback(prompt, None, timeout)

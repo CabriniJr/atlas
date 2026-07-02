@@ -288,6 +288,61 @@ def test_collect_log_fino_de_ia_no_refino(tmp_path, monkeypatch):
     assert all("ok" in e for e in log_ia)
 
 
+def test_collect_usa_agente_refino_quando_configurado(tmp_path, monkeypatch):
+    """ADR-0040: Traducao.spec.agente_refino dita motor/persona do refino."""
+    src = tmp_path / "livro.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(
+        Resource(
+            kind="LLMProvider",
+            name="ollama-dev",
+            spec={"motor": "ollama", "modelo": "qwen3.6"},
+        ),
+        agora,
+    )
+    store.apply(
+        Resource(
+            kind="Agente",
+            name="tradutor-fidelidade",
+            spec={"provider": "ollama-dev", "prompt": "Máxima fidelidade ao original."},
+        ),
+        agora,
+    )
+    store.apply(
+        Resource(
+            kind="Traducao",
+            name="livro",
+            spec={"origem": str(src), "agente_refino": "tradutor-fidelidade"},
+        ),
+        agora,
+    )
+
+    vistos = []
+
+    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude"):
+        vistos.append((motor, modelo, prompt))
+        ids = re.findall(r"\[\[(\d+)\]\]", prompt)
+        return "\n".join(f"[[{i}]] O contêiner reinicia." for i in ids)
+
+    monkeypatch.setattr(mod, "invocar", fake_invocar)
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="livro"), store=store, agora=agora
+    )
+    mod.collect(ctx)
+
+    assert store.get("Traducao", "livro").status["fase"] == "pronto"
+    motor_refino, modelo_refino, prompt_refino = vistos[-1]  # refino é a última chamada
+    assert motor_refino == "ollama"
+    assert modelo_refino == "qwen3.6"
+    assert "Máxima fidelidade ao original." in prompt_refino
+
+
 def test_collect_traducao_inexistente(tmp_path):
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)

@@ -18,7 +18,7 @@ from atlas.retomada import campos_pausa
 from atlas.rotinas import registrar
 from atlas.traducao.pipeline import traduzir_pdf
 from atlas.traducao.pool import pool_global
-from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao
+from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao, resolver_agente_refino
 
 _log = logging.getLogger(__name__)
 
@@ -113,6 +113,16 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         max_tentativas_timeout=int(t.spec.get("max_tentativas_timeout") or 5),
         janela_retry_timeout_seg=int(t.spec.get("janela_retry_timeout_seg") or 300),
     )
+    # Agente de refino (ADR-0040, opt-in via spec.agente_refino): dita
+    # motor/modelo/persona do refino, sobrepondo os campos próprios acima —
+    # mesmo padrão do Repo.spec.analyze_agente (ADR-0024 regra 2).
+    motor_ag, modelo_ag, instrucao_ag = resolver_agente_refino(t, store)
+    if motor_ag:
+        cfg.motor = motor_ag
+    if modelo_ag:
+        cfg.modelo = modelo_ag
+    if instrucao_ag:
+        cfg.instrucao_refino = instrucao_ag
     # tentativas curtas por timeout até aqui (ADR-0039) — persistido, sobrevive a restart.
     tentativas_timeout = int((t.status or {}).get("tentativas_timeout") or 0)
 

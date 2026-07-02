@@ -1,9 +1,15 @@
+from datetime import datetime
+
+from atlas.core.resource import Resource
+from atlas.core.store import ResourceStore
 from atlas.traducao.extracao import BlocoTraducao
 from atlas.traducao.traducao_ia import (
     CacheTraducao,
     ConfigTraducao,
     montar_prompt,
+    montar_prompt_refino,
     parsear_resposta,
+    resolver_agente_refino,
     traduzir_blocos,
 )
 
@@ -40,3 +46,82 @@ def test_traduz_usa_cache_e_nao_repaga(monkeypatch):
     r2 = traduzir_blocos(b, cfg, cache, invocar_fn=fake_invocar)  # 2a vez: cache hit
     assert r1[1] == "O pod reinicia." and r2[1] == "O pod reinicia."
     assert len(chamadas) == 1  # só chamou a IA uma vez
+
+
+# ---------------------------------------------------------------------------
+# ADR-0040 — Agente de refino (persona/motor pluggable via Traducao.spec.agente_refino)
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_refino_usa_instrucao_customizada_mas_mantem_contrato():
+    cfg = ConfigTraducao(
+        glossario=["pod"],
+        instrucao_refino="Você é um revisor obcecado por fidelidade máxima ao original.",
+    )
+    prompt = montar_prompt_refino([(1, "The pod scales.", "O pod escala.")], cfg)
+    assert "fidelidade máxima" in prompt
+    assert "pod" in prompt  # glossário sempre presente
+    assert "[[N]] <tradução final>" in prompt  # contrato de formato sempre presente
+    assert "ORIGEM: The pod scales." in prompt and "BRUTO: O pod escala." in prompt
+
+
+def test_prompt_refino_sem_instrucao_usa_padrao():
+    cfg = ConfigTraducao()
+    prompt = montar_prompt_refino([(1, "A.", "a")], cfg)
+    assert "revisa a tradução" in prompt
+
+
+def test_resolver_agente_refino_sem_agente_devolve_none():
+    store = ResourceStore(":memory:")
+    t = Resource(kind="Traducao", name="x", spec={"origem": "a.pdf"})
+    assert resolver_agente_refino(t, store) == (None, None, None)
+
+
+def test_resolver_agente_refino_via_provider():
+    store = ResourceStore(":memory:")
+    agora = datetime.now()
+    store.apply(
+        Resource(
+            kind="LLMProvider",
+            name="ollama-dev",
+            spec={"motor": "ollama", "modelo": "qwen3.6", "endpoint": "http://192.168.86.38:11434"},
+        ),
+        agora,
+    )
+    store.apply(
+        Resource(
+            kind="Agente",
+            name="tradutor-fidelidade",
+            spec={"provider": "ollama-dev", "prompt": "Máxima fidelidade ao original."},
+        ),
+        agora,
+    )
+    t = Resource(kind="Traducao", name="x", spec={"agente_refino": "tradutor-fidelidade"})
+    motor, modelo, instrucao = resolver_agente_refino(t, store)
+    assert motor == "ollama"
+    assert modelo == "qwen3.6"
+    assert instrucao == "Máxima fidelidade ao original."
+
+
+def test_resolver_agente_refino_modelo_do_agente_sobrepoe_provider():
+    store = ResourceStore(":memory:")
+    agora = datetime.now()
+    store.apply(
+        Resource(kind="LLMProvider", name="p", spec={"motor": "ollama", "modelo": "gemma4"}), agora
+    )
+    store.apply(
+        Resource(
+            kind="Agente", name="a", spec={"provider": "p", "modelo": "qwen3.6", "prompt": "x"}
+        ),
+        agora,
+    )
+    t = Resource(kind="Traducao", name="x", spec={"agente_refino": "a"})
+    motor, modelo, _ = resolver_agente_refino(t, store)
+    assert motor == "ollama"
+    assert modelo == "qwen3.6"
+
+
+def test_resolver_agente_refino_agente_inexistente_devolve_none():
+    store = ResourceStore(":memory:")
+    t = Resource(kind="Traducao", name="x", spec={"agente_refino": "nao-existe"})
+    assert resolver_agente_refino(t, store) == (None, None, None)
