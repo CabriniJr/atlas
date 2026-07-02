@@ -393,6 +393,10 @@ function _appendCodeEventToEl(ev, sessEl) {
     cls = 'done'; html = '✅ Concluído';
   } else if (type === 'error') {
     cls = 'error'; html = `⚠️ ${esc(ev.message || 'Erro desconhecido')}`;
+  } else if (type === 'warning') {
+    // Aviso não-fatal (ex.: tool falhou, ollama caiu pro fallback claude) — o
+    // run continua rodando (ADR-0042: erro simples não trava o agente).
+    cls = 'warn'; html = `⚠️ ${esc(ev.message || 'aviso')}`;
   } else if (type === 'system') {
     // Apenas mostra o init do claude (lista de ferramentas disponíveis)
     if (ev.subtype === 'init') {
@@ -435,16 +439,32 @@ function _appendCodeEventToEl(ev, sessEl) {
   if (cls && html) _appendCodeLog(sessEl, cls, html);
 }
 
+// Tools nativas do Ollama (agente_ollama.py, ADR-0042) têm nomes/ícones próprios,
+// mas equivalem 1:1 às do Claude Code — mapeadas juntas para o mesmo visual.
+const _TOOL_ICONS = {
+  Read:'📖', Write:'✍️', Edit:'✏️', Bash:'💻', Glob:'🔍', Grep:'🔍',
+  TodoWrite:'📝', Task:'🤖', WebSearch:'🌐',
+  read_file:'📖', write_file:'✍️', edit_file:'✏️', run_command:'💻', list_dir:'🔍',
+};
+
 function _appendCodeToolUse(sessEl, block) {
   const toolName = block.name || '?';
   const input = block.input || {};
   let detail = '';
-  if (toolName === 'Read' || toolName === 'Write') detail = input.file_path || input.path || '';
-  else if (toolName === 'Edit') detail = input.file_path || '';
-  else if (toolName === 'Bash') detail = (input.command || '').slice(0, 80);
-  else if (toolName === 'Glob' || toolName === 'Grep') detail = input.pattern || input.query || '';
-  else if (toolName === 'TodoWrite') detail = (input.todos || []).length + ' itens';
-  const icon = {Read:'📖',Write:'✍️',Edit:'✏️',Bash:'💻',Glob:'🔍',Grep:'🔍',TodoWrite:'📝',Task:'🤖',WebSearch:'🌐'}[toolName] || '🔧';
+  if (['Read', 'Write', 'read_file', 'write_file'].includes(toolName)) {
+    detail = input.file_path || input.path || '';
+  } else if (['Edit', 'edit_file'].includes(toolName)) {
+    detail = input.file_path || input.path || '';
+  } else if (['Bash', 'run_command'].includes(toolName)) {
+    detail = (input.command || '').slice(0, 80);
+  } else if (toolName === 'Glob' || toolName === 'Grep') {
+    detail = input.pattern || input.query || '';
+  } else if (toolName === 'list_dir') {
+    detail = input.path || '.';
+  } else if (toolName === 'TodoWrite') {
+    detail = (input.todos || []).length + ' itens';
+  }
+  const icon = _TOOL_ICONS[toolName] || '🔧';
   _appendCodeLog(sessEl, 'tool',
     `${icon} <strong>${esc(toolName)}</strong>${detail ? ` <span class="ag-tool-detail">— ${esc(detail)}</span>` : ''}`
   );
@@ -638,7 +658,7 @@ function _agenteDefaultFields() {
     {k:'modelo', type:'text', label:'Modelo', hint:'claude-haiku-4-5-20251001 / gemma4'},
     {k:'nivel_contexto', type:'select', label:'Nível de contexto', opts:['none','resumo','completo'], hint:'Quanto contexto do projeto entra no prompt'},
     {k:'prompt', type:'area', label:'Prompt / template', hint:'Use {mensagem} e {agora}'},
-    {k:'endpoint', type:'text', label:'Endpoint Ollama', hint:'http://192.168.86.22:11434'},
+    {k:'endpoint', type:'text', label:'Endpoint Ollama', hint:'http://192.168.86.38:11434'},
     {k:'timeout', type:'number', label:'Timeout (s)', hint:'Default: 60'},
   ];
 }

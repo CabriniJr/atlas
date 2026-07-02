@@ -663,6 +663,7 @@ body[data-view="home"] #home-view{display:flex}
 .ag-code-log.meta{color:var(--muted);font-size:11px}
 .ag-code-log.done{color:var(--green);font-weight:600}
 .ag-code-log.error{color:var(--red)}
+.ag-code-log.warn{color:var(--yellow,#e0a840)}
 .ag-code-log.raw code{font-size:11px;color:var(--muted)}
 
 /* ── Fullscreen / aba destacável ─────────────────────────────────────────── */

@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from atlas import credentials, curadoria, github_auth, scoping, sessions, users
+from atlas import agente_ollama, credentials, curadoria, github_auth, scoping, sessions, users
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.traducao.pool import pool_global as _traducao_pool
@@ -176,7 +176,9 @@ class _Handler(BaseHTTPRequestHandler):
         campo = "previa" if previa else "saida"
         saida = (t.status or {}).get(campo)
         if not saida:
-            falta = "prévia ainda não gerada" if previa else "tradução ainda não concluída (sem saída)"
+            falta = (
+                "prévia ainda não gerada" if previa else "tradução ainda não concluída (sem saída)"
+            )
             self._json(409, {"error": falta})
             return
         alvo = Path(saida)
@@ -1780,9 +1782,13 @@ def _finish_run(run: dict) -> None:
 
 
 def _run_agent_bg(run: dict, store: ResourceStore) -> None:
-    """Thread de background: roda claude CLI e publica eventos no run."""
-    from atlas.ia import _resolver_claude  # noqa: PLC0415
+    """Thread de background do modo=code: despacha pro motor resolvido.
 
+    ``motor=claude`` → CLI ``claude -p`` agêntico (ADR-0025/0028). ``motor=ollama``
+    → loop de tool-calling nativo (``agente_ollama``, ADR-0042); se o endpoint
+    estiver fora do ar, cai pro caminho claude automaticamente (mesmo fallback
+    bidirecional do ADR-0040, agora também no modo code).
+    """
     agente_name = run["agente"]
     mensagem = run["task"]
 
@@ -1801,12 +1807,7 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
 
     spec = agente.spec or {}
     eng = _resolve_engine(spec, store)
-    # modo code roda sempre via claude CLI → exige um modelo claude (default sonnet).
-    modelo = eng["modelo"]
-    if not modelo or not modelo.startswith("claude"):
-        modelo = "claude-sonnet-4-6"
     system_prompt = spec.get("prompt", "")
-    timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
 
     # Workspace restrito (ADR-0028 §1): confina cwd/--add-dir ao subdir permitido.
     try:
@@ -1816,17 +1817,65 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
         _done()
         return
 
+    # Conhecimento operacional do Atlas: schema de objetos + como usar a API.
+    # Garante que o agente CRIE recursos pela API (não editando SQLite/arquivos soltos).
+    api_context = _agent_api_context(store)
+    full_system = (system_prompt + "\n\n" + api_context) if system_prompt else api_context
+
+    # Gate de curadoria (ADR-0028 §4): default true p/ code. Nada gerado aqui é
+    # auto-comitado/ativado — a promoção é a revisão humana do diff (CLAUDE.md §6).
+    gate_raw = spec.get("gate", True)
+    gated = (
+        gate_raw
+        if isinstance(gate_raw, bool)
+        else str(gate_raw).strip().lower() not in ("false", "0", "no", "")
+    )
+    amplo = cwd == str(Path(_PROJECT_DIR).resolve())
+    run["workspace"] = os.path.relpath(cwd, _PROJECT_DIR)  # relativo p/ a curadoria
+    run["gated"] = gated
+
+    endpoint = eng["endpoint"] or os.environ.get("ATLAS_OLLAMA_ENDPOINT", "")
+    if eng["motor"] == "ollama" and agente_ollama.ollama_disponivel(endpoint):
+        _run_agent_bg_ollama(
+            run, store, spec, eng, endpoint, cwd, full_system, mensagem, amplo, gated, _done
+        )
+        return
+
+    if eng["motor"] == "ollama":
+        _emit(
+            run, {"type": "warning", "message": f"ollama ({endpoint}) indisponível — usando claude"}
+        )
+    _run_agent_bg_claude(run, store, spec, eng, cwd, full_system, mensagem, amplo, gated, _done)
+
+
+def _run_agent_bg_claude(
+    run: dict,
+    store: ResourceStore,
+    spec: dict,
+    eng: dict,
+    cwd: str,
+    full_system: str,
+    mensagem: str,
+    amplo: bool,
+    gated: bool,
+    _done,
+) -> None:
+    """Roda o modo=code via ``claude -p`` agêntico (ADR-0025/0028)."""
+    from atlas.ia import _resolver_claude  # noqa: PLC0415
+
+    agente_name = run["agente"]
+    # modo code roda sempre via claude CLI → exige um modelo claude (default sonnet).
+    modelo = eng["modelo"]
+    if not modelo or not modelo.startswith("claude"):
+        modelo = "claude-sonnet-4-6"
+    timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 300)
+
     try:
         claude_bin = _resolver_claude()
     except Exception as exc:  # noqa: BLE001
         _emit(run, {"type": "error", "message": f"claude CLI não encontrado: {exc}"})
         _done()
         return
-
-    # Conhecimento operacional do Atlas: schema de objetos + como usar a API.
-    # Garante que o agente CRIE recursos pela API (não editando SQLite/arquivos soltos).
-    api_context = _agent_api_context(store)
-    full_system = (system_prompt + "\n\n" + api_context) if system_prompt else api_context
 
     # O prompt é argumento posicional — deve vir DEPOIS de todos os flags
     # stream-json exige --verbose (retorna eventos em tempo real)
@@ -1848,23 +1897,6 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     args += build_tool_args(spec.get("allowed_tools"), spec.get("denied_tools"))
     args += [mensagem]
 
-    # Gate de curadoria (ADR-0028 §4): default true p/ code. Nada gerado aqui é
-    # auto-comitado/ativado — a promoção é a revisão humana do diff (CLAUDE.md §6).
-    gate_raw = spec.get("gate", True)
-    gated = (
-        gate_raw
-        if isinstance(gate_raw, bool)
-        else str(gate_raw).strip().lower()
-        not in (
-            "false",
-            "0",
-            "no",
-            "",
-        )
-    )
-    amplo = cwd == str(Path(_PROJECT_DIR).resolve())
-    run["workspace"] = os.path.relpath(cwd, _PROJECT_DIR)  # relativo p/ a curadoria
-    run["gated"] = gated
     _emit(
         run,
         {
@@ -1925,6 +1957,61 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
             except Exception:  # noqa: BLE001
                 pass
         _done(custo)
+
+
+def _run_agent_bg_ollama(
+    run: dict,
+    store: ResourceStore,
+    spec: dict,
+    eng: dict,
+    endpoint: str,
+    cwd: str,
+    full_system: str,
+    mensagem: str,
+    amplo: bool,
+    gated: bool,
+    _done,
+) -> None:
+    """Roda o modo=code via loop de tool-calling nativo do Ollama (ADR-0042).
+
+    Grátis (custo 0) e local. Erro de UMA tool vira evento ``warning`` (não
+    termina o run — pedido do PO: "erro simples não me trava"); só falha do
+    endpoint em si (``OllamaIndisponivel``) termina o run com ``error``.
+    """
+    agente_name = run["agente"]
+    modelo = eng["modelo"] or "llama3.1"
+    timeout = max(int(spec.get("timeout") or 0), eng["timeout"], 90)
+
+    _emit(
+        run,
+        {
+            "type": "init",
+            "agente": agente_name,
+            "modelo": modelo,
+            "cwd": cwd,
+            "workspace_amplo": amplo,
+            "gated": gated,
+        },
+    )
+    try:
+        agente_ollama.rodar_loop(
+            mensagem,
+            system_prompt=full_system,
+            cwd=cwd,
+            modelo=modelo,
+            endpoint=endpoint,
+            timeout=timeout,
+            allowed_tools=spec.get("allowed_tools"),
+            denied_tools=spec.get("denied_tools"),
+            on_evento=lambda ev: _emit(run, ev),
+        )
+        _registrar_gasto_agente(store, agente_name, 0.0, modelo)
+    except agente_ollama.OllamaIndisponivel as exc:
+        _emit(run, {"type": "error", "message": f"ollama ficou indisponível durante o run: {exc}"})
+    except Exception as exc:  # noqa: BLE001 — nunca deixa o loop travar o run (ADR-0006)
+        _emit(run, {"type": "error", "message": str(exc)})
+    finally:
+        _done(0.0)
 
 
 def _registrar_gasto_agente(
