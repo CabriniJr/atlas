@@ -72,7 +72,7 @@ def _geometria(doc, paginas) -> dict:
     pw, ph = doc[0].rect.width, doc[0].rect.height
     lefts, rights, tops, bots = [], [], [], []
     for idx, (blocos, _tr) in paginas.items():  # noqa: B007 — idx documenta o loop
-        uteis = [b for b in blocos if not b.skip and b.bbox]
+        uteis = [b for b in blocos if not b.skip and b.bbox and not _e_folio(b, ph)]
         if not uteis:
             continue
         lefts.append(min(b.bbox[0] for b in uteis))
@@ -112,12 +112,20 @@ def _imagens(doc, page) -> list[tuple]:
 
 _CSS = """
 @page {{ size: {pw:.0f}pt {ph:.0f}pt;
-         margin: {top:.0f}pt {right:.0f}pt {bottom:.0f}pt {left:.0f}pt; }}
+         margin: {top:.0f}pt {right:.0f}pt {bottom:.0f}pt {left:.0f}pt;
+         /* elementos de margem preservados: cabeça de capítulo + número de página */
+         @top-center {{ content: string(cap); font: italic 9pt 'Liberation Serif', serif;
+                        color: #666; }}
+         @bottom-center {{ content: counter(page); font: 9pt 'Liberation Serif', serif;
+                           color: #666; }} }}
 html {{ font-family: 'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif; }}
 body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
-p {{ margin: 0 0 .45em 0; orphans: 2; widows: 2; }}
+/* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra */
+p {{ margin: 0 0 .45em 0; orphans: 3; widows: 3; }}
 h1,h2,h3 {{ text-align: left; font-weight: bold; margin: .7em 0 .28em; line-height: 1.2;
-            page-break-after: avoid; }}
+            page-break-after: avoid; break-after: avoid; }}
+/* o título de capítulo (h1) vira a cabeça de página corrente */
+h1 {{ string-set: cap content(); page-break-before: auto; }}
 ul {{ margin: .3em 0 .55em 1.3em; padding: 0; }}
 li {{ margin: .12em 0; }}
 pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space: pre-wrap;
@@ -127,6 +135,18 @@ figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
 """
+
+def _e_folio(b, ph: float) -> bool:
+    """Bloco de margem (cabeça de página / número de página): linha curta na faixa
+    superior/inferior. Não entra no corpo — vira elemento de margem repetido no CSS."""
+    if not b.bbox or not b.texto:
+        return False
+    y0, y1 = b.bbox[1], b.bbox[3]
+    curto = len(b.texto) < 90
+    uma_linha = (y1 - y0) < 26
+    na_margem = y0 < ph * 0.075 or y1 > ph * 0.925
+    return curto and uma_linha and na_margem
+
 
 _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
 
@@ -163,10 +183,11 @@ def _elemento(b, texto: str, est: dict, body_sz: float) -> str:
 def montar_html(doc, paginas: dict, geo: dict) -> str:
     """Constrói o HTML do documento inteiro em ordem de leitura (texto + imagens)."""
     # tamanho do corpo = mediana dos tamanhos dos blocos de texto longos.
+    ph = geo["ph"]
     sizes = []
     for _idx, (blocos, _tr) in paginas.items():
         for b in blocos:
-            if not b.skip and len(b.texto) > 60:
+            if not b.skip and len(b.texto) > 60 and not _e_folio(b, ph):
                 sizes.append(_estilo(b)["size"])
     body_sz = statistics.median(sizes) if sizes else 11.0
 
@@ -185,7 +206,8 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
         itens: list[tuple] = [
             (b.bbox[1] if b.bbox else 0.0, "b", b)
-            for b in blocos if not b.skip or _estilo(b)["mono"]
+            for b in blocos
+            if (not b.skip or _estilo(b)["mono"]) and not _e_folio(b, ph)
         ]
         for y0, w, h, uri in _imagens(doc, page):
             itens.append((y0, "img", (w, h, uri)))
