@@ -16,6 +16,7 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-07-02 | Tech Lead | Proposta + implementação (pedido do PO — fechar as pendências do ADR-0042) | PO/PM |
+| 1.1    | 2026-07-02 | Tech Lead | Correção de rumo: dispatch do modo code vai no **terminal global existente** (`/code`), não numa aba nova do Kind Agente — ver decisão 6 | PO/PM |
 
 ---
 
@@ -78,6 +79,22 @@ agente não comprovado contra Ollama — mantém-se o loop nativo do ADR-0042.
    resolvido, modelo, teto de turnos, gate de curadoria, workspace confinado,
    tools permitidas/negadas e confirma que as diretrizes do CLAUDE.md estão
    injetadas — sem precisar abrir o Config genérico ou inspecionar a API.
+6. **Dispatch pelo terminal global existente, não numa aba nova** (correção
+   de rumo pedida pelo PO: "a CLI não é tab, a UI da API já tem um terminal, é
+   nele que vai rodar esse builder e a UX precisa ser o mais semelhante
+   possível com o Claude Code CLI"). O terminal (`#cli-bar`/`#cli-output`,
+   `main.js`) ganha um modo: `/code [agente]` (default `atlas-builder`) entra
+   em modo dev — o prompt vira `🤖<agente>$`, e daí em diante **texto livre
+   sem `/`** é enviado direto pro agente via `POST /_agent_run`, com o stream
+   de eventos renderizado inline reusando `_appendCodeEventToEl`/
+   `_appendCodeLog` (mesmas funções/classes CSS da aba Chat do Kind Agente —
+   zero duplicação de lógica de render). `/exit` volta ao modo comando normal.
+   **Fila client-side:** tarefas digitadas com um run já em andamento entram
+   numa fila FIFO (`_cliCode.queue`) em vez de serem recusadas — drena
+   automaticamente a cada run concluído. Concorrência real (várias tarefas
+   *em paralelo*, não só enfileiradas) é responsabilidade do servidor (teto
+   `ATLAS_AGENT_MAX_CONCURRENT`, ADR-0028 §3) — pendência do PO ("vou
+   preparar [o server] para tratar em paralelo").
 
 ## Alternativas consideradas
 
@@ -111,3 +128,8 @@ agente não comprovado contra Ollama — mantém-se o loop nativo do ADR-0042.
   sozinha via `atlas-deploy.timer`); reavaliar se um dia o CD virar API-driven.
 - `search_text`/`find_files` são full-scan (sem índice) — se o repo crescer
   muito, considerar um índice incremental.
+- Fila do `/code` no terminal é FIFO client-side (uma tarefa por vez visível);
+  concorrência real de runs no servidor é trabalho do PO (`ATLAS_AGENT_MAX_CONCURRENT`,
+  ADR-0028 §3) — reavaliar a UX de fila quando o server tratar runs em paralelo.
+- Sem cancelamento/interrupção de um run em andamento a partir do terminal
+  (equivalente a Ctrl+C no Claude Code CLI) — não implementado ainda.

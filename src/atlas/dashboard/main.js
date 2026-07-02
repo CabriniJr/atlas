@@ -1527,6 +1527,76 @@ function cliAppend(text, cls) {
   cliOutput.scrollTop = cliOutput.scrollHeight;
 }
 
+// ── Modo code (ADR-0044): o terminal global também roda o builder, com UX o
+// mais próxima possível do Claude Code CLI — digite a tarefa direto (sem `/`),
+// vê tool calls/streaming inline, `/exit` sai. Reusa _appendCodeEventToEl/
+// _motorEModelo (definidos em kinds/agente.js — mesmo escopo global).
+let _cliCode = null; // {agente, run: {run_id, events, done} | null} | null
+
+function _cliSetPrompt() {
+  const p = document.getElementById('cli-prompt');
+  if (p) p.textContent = _cliCode ? `🤖${_cliCode.agente}$` : '$';
+  cliInput.placeholder = _cliCode ? 'descreva a tarefa… (/exit sai)' : '/ para comandos…';
+}
+
+// Enfileira tarefas em vez de bloquear o input: com o server tratando runs em
+// paralelo (teto de concorrência, ADR-0028 §3), várias tarefas digitadas em
+// sequência não precisam esperar a anterior terminar pra SER ACEITA — só a
+// ordem de execução é FIFO aqui no cliente (uma de cada vez visível no
+// terminal). Se `/exit` limpar `_cliCode`, a fila é descartada (o run que já
+// tinha começado no servidor segue rodando, só paramos de ouvir o stream).
+async function _cliQueueOrRun(text) {
+  if (_cliCode.run && !_cliCode.run.done) {
+    if (!_cliCode.queue) _cliCode.queue = [];
+    _cliCode.queue.push(text);
+    const n = _cliCode.queue.length;
+    cliAppend(`📋 na fila (${n} pendente${n !== 1 ? 's' : ''}) — roda após a atual terminar`, 'cli-sep');
+    return;
+  }
+  await _cliStartRun(text);
+}
+
+function _cliDrainQueue() {
+  if (!_cliCode) return; // saiu do modo code enquanto o run rodava
+  const q = _cliCode.queue;
+  if (!q || q.length === 0) return;
+  const next = q.shift();
+  cliAppend('▶ ' + next, 'cli-cmd');
+  _cliStartRun(next);
+}
+
+async function _cliStartRun(text) {
+  let run;
+  try {
+    const r = await apiFetch(`${API}/_agent_run`, {
+      method: 'POST',
+      body: JSON.stringify({agente: _cliCode.agente, mensagem: text}),
+    });
+    if (r.error) throw new Error(r.error);
+    run = {run_id: r.run_id, events: [], done: false};
+  } catch (e) {
+    cliAppend('erro: ' + e.message, 'cli-err');
+    _cliDrainQueue();
+    return;
+  }
+  _cliCode.run = run;
+
+  const es = new EventSource(`${API}/_agent_run/${run.run_id}/stream`);
+  es.onmessage = e => {
+    let ev; try { ev = JSON.parse(e.data); } catch { return; }
+    run.events.push(ev);
+    _appendCodeEventToEl(ev, cliOutput);
+    cliOutput.scrollTop = cliOutput.scrollHeight;
+    if (ev.type === 'done' || ev.type === 'error') {
+      run.done = true;
+      es.close();
+      cliAppend('─'.repeat(40), 'cli-sep');
+      _cliDrainQueue();
+    }
+  };
+  es.onerror = () => { if (run.done) es.close(); };
+}
+
 async function cliRun(text) {
   text = text.trim();
   if (!text) return;
@@ -1534,6 +1604,37 @@ async function cliRun(text) {
   cliHistory = [text, ...cliHistory.filter(h=>h!==text)].slice(0,80);
   localStorage.setItem('atlas_cli_history', JSON.stringify(cliHistory));
   histIdx = -1;
+
+  if (_cliCode && (text === '/exit' || text === '/quit')) {
+    const pendentes = (_cliCode.queue || []).length + (_cliCode.run && !_cliCode.run.done ? 1 : 0);
+    cliAppend(
+      `saiu do modo code (${_cliCode.agente})` +
+        (pendentes ? ` — ${pendentes} run(s) seguem rodando no servidor sem stream aqui` : ''),
+      'cli-sep',
+    );
+    _cliCode = null;
+    _cliSetPrompt();
+    return;
+  }
+
+  const codeMatch = text.match(/^\/code(?:\s+(\S+))?$/);
+  if (codeMatch) {
+    const agente = codeMatch[1] || 'atlas-builder';
+    let ag;
+    try { ag = await apiFetch(`${API}/Agente/${encodeURIComponent(agente)}`); }
+    catch { cliAppend(`agente '${agente}' não encontrado`, 'cli-err'); return; }
+    const { motor, modelo } = _motorEModelo(ag.spec || {}, ag.status || {});
+    _cliCode = {agente, run: null};
+    _cliSetPrompt();
+    cliAppend(`🤖 modo code — ${agente} (${motor}/${modelo}). Digite a tarefa; /exit sai.`, 'cli-sep');
+    return;
+  }
+
+  if (_cliCode) {
+    await _cliQueueOrRun(text);
+    return;
+  }
+
   try {
     const h = {'Content-Type':'application/json'};
     if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
@@ -1576,6 +1677,7 @@ function hideSugs() { cliSugs.innerHTML = ''; sugList = []; sugIdx = -1; }
 function highlightSug(i) { cliSugs.querySelectorAll('.sug').forEach((el,j)=>el.classList.toggle('active',j===i)); }
 
 cliInput.addEventListener('input', () => {
+  if (_cliCode) return; // sem autocomplete de comandos dentro do modo code
   clearTimeout(sugDebounce);
   const q = cliInput.value;
   sugDebounce = setTimeout(async () => renderSugs(await fetchSuggestions(q), q), 80);
@@ -1583,6 +1685,7 @@ cliInput.addEventListener('input', () => {
 
 cliInput.addEventListener('keydown', async e => {
   if (e.key === 'Tab') {
+    if (_cliCode) return; // Tab não tem completion no modo code
     e.preventDefault();
     if (sugList.length === 1) { cliInput.value = sugList[0]+' '; hideSugs(); }
     else if (sugList.length > 1) { sugIdx=(sugIdx+1)%sugList.length; highlightSug(sugIdx); cliInput.value=sugList[sugIdx]; }
@@ -2579,7 +2682,7 @@ document.getElementById('gv-kind-filter').addEventListener('change', renderGraph
 })();
 
 // ── Boot ──
-cliAppend('Atlas CLI · Tab completa · ↑↓ histórico · Ctrl+K foca · Ctrl+L limpa', 'cli-sep');
+cliAppend('Atlas CLI · Tab completa · ↑↓ histórico · Ctrl+K foca · Ctrl+L limpa · /code [agente] entra em modo dev (ADR-0044)', 'cli-sep');
 cliAppend('─'.repeat(40), 'cli-sep');
 
 if (TOKEN) { init(); } else { showTokenOverlay(); }
