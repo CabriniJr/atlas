@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import subprocess
+import threading
 import urllib.request
 
 _log = logging.getLogger(__name__)
@@ -25,10 +26,21 @@ _MODELO_OLLAMA_PADRAO = "gemma4"
 _TIMEOUT_PADRAO = 60
 _OLLAMA_ENDPOINT_PADRAO = "http://192.168.86.38:11434"
 
+# Um servidor Ollama local processa inferência sequencialmente (não é a nuvem
+# elástica do Claude) — disparar N chamadas HTTP simultâneas (ex.: paralelismo
+# de páginas da tradução, ADR-0039) faz as depois da 1ª ficarem na fila do lado
+# do servidor, estourando o timeout client-side e disparando falso-positivo do
+# fallback pro claude (ADR-0040). Serializa aqui pra bater com a capacidade real
+# do servidor (ADR-0043). Configurável se o servidor suportar mais (env
+# OLLAMA_NUM_PARALLEL do lado dele).
+_OLLAMA_MAX_CONCURRENT = max(1, int(os.environ.get("ATLAS_OLLAMA_MAX_CONCURRENT", "1")))
+_OLLAMA_SEMAFORO = threading.Semaphore(_OLLAMA_MAX_CONCURRENT)
+
 
 def modelo_padrao(motor: str) -> str:
     """Modelo default de *motor* (``claude`` ou ``ollama``) quando nenhum é pedido."""
     return _MODELO_OLLAMA_PADRAO if motor == "ollama" else _MODELO_PADRAO
+
 
 _claude_bin: str | None = None
 
@@ -132,11 +144,15 @@ def _chamar_claude(prompt: str, modelo: str | None, timeout: int) -> str:
 
 def _chamar_ollama(prompt: str, modelo: str | None, timeout: int) -> str:
     """Chama o endpoint Ollama. ``modelo`` vazio ⇒ default ollama (nunca um nome
-    ``claude-*``, que não existe nesse servidor)."""
+    ``claude-*``, que não existe nesse servidor). Serializado por
+    ``_OLLAMA_SEMAFORO`` (ADR-0043) — chamadas concorrentes esperam a vez em vez
+    de estourar timeout contra um servidor local que processa sequencialmente.
+    """
     endpoint = os.environ.get("ATLAS_OLLAMA_ENDPOINT", _OLLAMA_ENDPOINT_PADRAO)
-    return invocar_ollama(
-        prompt, modelo=modelo or _MODELO_OLLAMA_PADRAO, endpoint=endpoint, timeout=timeout
-    )
+    with _OLLAMA_SEMAFORO:
+        return invocar_ollama(
+            prompt, modelo=modelo or _MODELO_OLLAMA_PADRAO, endpoint=endpoint, timeout=timeout
+        )
 
 
 def invocar(

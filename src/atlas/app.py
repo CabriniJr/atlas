@@ -31,7 +31,7 @@ from atlas.core.store import ResourceStore
 from atlas.db import Database
 from atlas.executor import ContextoExecucao, executar
 from atlas.handler import responder
-from atlas.retomada import retomar_pausados
+from atlas.retomada import recuperar_orfaos_no_boot, retomar_pausados
 from atlas.rotinas import obter as obter_collect
 from atlas.routines import Rotina, carregar_rotinas
 from atlas.scheduler import catch_up, tick
@@ -167,6 +167,18 @@ def run(config: Config | None = None) -> None:
     except Exception:  # noqa: BLE001 — migração não pode derrubar o boot (ADR-0006)
         _log.exception("Falha ao migrar recursos sem dono; seguindo.")
 
+    # Recupera jobs assíncronos órfãos (ex.: Traducao presa em "traduzindo" por um
+    # restart anterior) — sem isso, o usuário fica travado sem conseguir retomar
+    # pela UI (ADR-0043). Best-effort — não pode derrubar o boot.
+    try:
+        recuperados = recuperar_orfaos_no_boot(store, datetime.now())
+        if recuperados:
+            _log.warning(
+                "Boot: %d job(s) órfão(s) recuperado(s): %s", len(recuperados), recuperados
+            )
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha ao recuperar jobs órfãos no boot; seguindo.")
+
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
     disparar_retomada = montar_disparo_retomada(store)  # ADR-0035: retoma jobs pausados
 
@@ -217,8 +229,13 @@ def run(config: Config | None = None) -> None:
         # de retomar sozinhos — por isso é um try/except separado do bloco acima.
         try:
             ciclo_scheduler(
-                datetime.now(), carga.rotinas, db, disparar,
-                lambda msg: adapter.enviar(config.allowed_user_id, msg), store, disparar_retomada,
+                datetime.now(),
+                carga.rotinas,
+                db,
+                disparar,
+                lambda msg: adapter.enviar(config.allowed_user_id, msg),
+                store,
+                disparar_retomada,
             )
         except Exception:  # noqa: BLE001 — resiliência: um erro não derruba o loop
             _log.exception("Erro no ciclo do scheduler; seguindo.")
