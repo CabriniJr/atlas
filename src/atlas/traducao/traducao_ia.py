@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,6 +20,17 @@ from atlas.ia import invocar as _invocar_padrao
 from atlas.traducao.extracao import BlocoTraducao
 
 _RE_BLOCO = re.compile(r"\[\[(\d+)\]\]\s*(.*?)(?=\n\[\[\d+\]\]|\Z)", re.DOTALL)
+
+
+def _emitir(on_evento, ev: dict) -> None:
+    """Repassa um evento fino (ex.: chamada de IA no refino) ao callback, se houver.
+    Best-effort: nunca deixa o logging derrubar a tradução (ADR-0006)."""
+    if on_evento is None:
+        return
+    try:
+        on_evento(ev)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dataclass
@@ -31,9 +44,11 @@ class ConfigTraducao:
     modelo: str | None = None
     refino: bool = True  # ADR-0031: LLM refina o bruto (False = tradução puramente MT)
     timeout: int = 60  # timeout por chamada de refino
-    lote_refino: int = 20  # blocos por chamada de refino (limita gasto/timeout, dá resume)
+    lote_refino: int = 60  # blocos por chamada de refino (ADR-0034: lotes maiores)
     min_fonte_pct: int = 90  # piso de legibilidade no fit-in-place (ADR-0033)
     notas_rodape: bool = False  # termos mantidos no idioma de origem viram nota de rodapé
+    comparador: bool = False  # ADR-0034: passe final de consistência (Opus), opt-in
+    modelo_comparador: str | None = None  # modelo do comparador (None → modelo/padrão)
 
 
 class CacheTraducao:
@@ -84,7 +99,10 @@ class CacheTraducao:
         """Persiste o cache em JSON (cria o diretório se preciso)."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(self._d, ensure_ascii=False), encoding="utf-8")
+        # escrita atômica (tmp + replace): a prévia concorrente nunca lê JSON parcial.
+        tmp = p.with_suffix(p.suffix + ".tmp")
+        tmp.write_text(json.dumps(self._d, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, p)
 
 
 _RE_TERMO = re.compile(r"[A-Za-z][A-Za-z0-9._+-]{1,}")
@@ -128,6 +146,62 @@ def detectar_glossario(
             vistos.add(low)
             termos.append(termo)
     return termos
+
+
+def unificar_termos(
+    traducoes: list[str], cfg: ConfigTraducao, invocar_fn=_invocar_padrao
+) -> dict[str, str]:
+    """Comparador de consistência (ADR-0034): mapa ``{variante: canônico}`` de termos.
+
+    Passe final opt-in: um modelo mais potente vê as traduções e devolve um JSON que
+    unifica variantes divergentes de um mesmo termo/nome. Best-effort — falha ⇒ mapa
+    vazio (não derruba a tradução). O mapa é aplicado deterministicamente depois.
+    """
+    corpus = "\n".join(t.strip() for t in traducoes if t and t.strip())
+    if not corpus:
+        return {}
+    prompt = (
+        f"Abaixo, trechos já traduzidos ({cfg.idioma_destino}) de um livro técnico "
+        f"sobre {cfg.assunto or 'tecnologia'}. Encontre termos/nomes traduzidos de "
+        f"formas DIVERGENTES e escolha uma forma canônica para cada. Responda APENAS "
+        f'um objeto JSON {{"variante": "canônico"}} (sem texto extra). Se estiver tudo '
+        f"consistente, responda {{}}.\n\n{corpus}"
+    )
+    try:
+        resposta = invocar_fn(
+            prompt,
+            modelo=cfg.modelo_comparador or cfg.modelo or _MODELO_PADRAO,
+            timeout=cfg.timeout,
+            motor=cfg.motor,
+        )
+    except Exception:  # noqa: BLE001 — comparador é best-effort (ADR-0006)
+        return {}
+    return _parsear_mapa(resposta)
+
+
+def _parsear_mapa(resposta: str) -> dict[str, str]:
+    """Extrai o primeiro objeto JSON da resposta como mapa str→str (variante≠canônico)."""
+    ini, fim = resposta.find("{"), resposta.rfind("}")
+    if ini < 0 or fim <= ini:
+        return {}
+    try:
+        bruto = json.loads(resposta[ini : fim + 1])
+    except ValueError:
+        return {}
+    if not isinstance(bruto, dict):
+        return {}
+    return {
+        str(k): str(v)
+        for k, v in bruto.items()
+        if k and v and str(k) != str(v)
+    }
+
+
+def aplicar_unificacao(texto: str, mapa: dict[str, str]) -> str:
+    """Aplica o mapa de unificação a ``texto`` (substituição por palavra inteira)."""
+    for variante, canonico in mapa.items():
+        texto = re.sub(rf"\b{re.escape(variante)}\b", canonico, texto)
+    return texto
 
 
 def montar_prompt(blocos: list[BlocoTraducao], cfg: ConfigTraducao) -> str:
@@ -204,6 +278,7 @@ def refinar_blocos(
     cfg: ConfigTraducao,
     cache: CacheTraducao,
     invocar_fn=_invocar_padrao,
+    on_evento=None,
 ) -> tuple[dict[int, str], bool]:
     """Refina os blocos em lotes (ADR-0031). Devolve ``(traduções, esgotou)``.
 
@@ -224,20 +299,31 @@ def refinar_blocos(
 
     esgotou = False
     i = 0
+    n_lotes = (len(pendentes) + max(1, cfg.lote_refino) - 1) // max(1, cfg.lote_refino)
+    lote_idx = 0
     while i < len(pendentes):
         lote = pendentes[i : i + max(1, cfg.lote_refino)]
+        lote_idx += 1
         pares = [(b.id, b.texto, brutos.get(b.id, b.texto)) for b in lote]
         prompt = montar_prompt_refino(pares, cfg)
+        modelo = cfg.modelo or _MODELO_PADRAO
+        t0 = time.monotonic()
         try:
-            resposta = invocar_fn(
-                prompt,
-                modelo=cfg.modelo or _MODELO_PADRAO,
-                timeout=cfg.timeout,
-                motor=cfg.motor,
-            )
-        except Exception:  # noqa: BLE001 — tokens/timeout: pausa e mantém resumível
+            resposta = invocar_fn(prompt, modelo=modelo, timeout=cfg.timeout, motor=cfg.motor)
+        except Exception as exc:  # noqa: BLE001 — tokens/timeout: pausa e mantém resumível
+            _emitir(on_evento, {
+                "tipo": "refino_lote", "lote": lote_idx, "lotes": n_lotes,
+                "blocos": len(lote), "ms": int((time.monotonic() - t0) * 1000),
+                "ok": False, "modelo": modelo, "chars": sum(len(p[2]) for p in pares),
+                "erro": str(exc)[:200],
+            })
             esgotou = True
             break
+        _emitir(on_evento, {
+            "tipo": "refino_lote", "lote": lote_idx, "lotes": n_lotes,
+            "blocos": len(lote), "ms": int((time.monotonic() - t0) * 1000),
+            "ok": True, "modelo": modelo, "chars": sum(len(p[2]) for p in pares),
+        })
         refinados = parsear_resposta(resposta, [b.id for b in lote])
         for b in lote:
             t = refinados.get(b.id)

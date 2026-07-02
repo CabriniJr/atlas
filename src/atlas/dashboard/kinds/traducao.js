@@ -38,6 +38,7 @@ function _trShell(r) {
       <button class="btn" id="tr-estimar" ${origem ? '' : 'disabled'}>💵 Estimar</button>
       <button class="btn" id="tr-config-toggle">⚙️ Config</button>
       <button class="btn" id="tr-render" title="Re-renderiza o PDF a partir do cache já pago — não gasta IA" ${origem ? '' : 'disabled'}>🎨 Só re-renderizar (grátis)</button>
+      <button class="btn" id="tr-previa" title="Renderiza uma prévia do que já foi traduzido, mesmo com a tradução rodando" ${origem ? '' : 'disabled'}>📸 Prévia agora</button>
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
     </div>
     <div id="tr-config" style="display:none">${_trConfig(s)}</div>
@@ -94,6 +95,40 @@ function _trLog(st) {
   </div>`;
 }
 
+// Bloco da prévia (snapshot renderizado durante a tradução) + link de download.
+function _trPreviaBox(st, name) {
+  if (st.previa_gerando) {
+    return `<div style="margin-top:8px;font-size:12px;color:var(--blue)">📸 gerando prévia do que já foi traduzido…</div>`;
+  }
+  if (st.previa_erro) {
+    return `<div style="margin-top:8px;font-size:12px;color:var(--red)">📸 prévia falhou: ${esc(st.previa_erro)}</div>`;
+  }
+  if (st.previa) {
+    const q = st.previa_em ? ` (${esc(String(st.previa_em).slice(11, 16))})` : '';
+    return `<div style="margin-top:8px"><button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="trDownloadPrevia('${escJs(name || '')}')">⬇️ Baixar prévia${q}</button></div>`;
+  }
+  return '';
+}
+
+// Log fino das chamadas de IA no refino (visibilidade do gasto): lote, blocos, ms, ✓/✗.
+function _trLogIa(st) {
+  const l = st.log_ia || [];
+  if (!l.length) return '';
+  const linhas = l.slice(-40).map(e => {
+    const t = (e.t || '').slice(11, 19);
+    const cor = e.ok === false ? 'var(--red)' : 'var(--muted)';
+    return `<div style="display:flex;gap:8px"><span style="color:var(--muted);flex:0 0 auto">${esc(t)}</span><span style="color:${cor}">${esc(e.msg || '')}</span></div>`;
+  }).join('');
+  return `<div style="margin-top:12px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">🔬 chamadas de IA (refino)</div>
+    <div id="tr-logia" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;font-family:monospace;max-height:220px;overflow-y:auto;line-height:1.6">${linhas}</div>
+  </div>`;
+}
+
+function _trExtras(st, name) {
+  return _trPreviaBox(st, name) + _trLogIa(st);
+}
+
 function _trProgresso(st, name) {
   const fase = st.fase;
   if (!fase) return '';
@@ -111,7 +146,7 @@ function _trProgresso(st, name) {
       ${retomando ? '' : `<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="document.getElementById('tr-traduzir').click()">▶ Retomar agora</button>`}
       ${st.saida ? `<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar (parcial)</button>` : ''}
     </div>`;
-    return `${cabec}${btns}${_trLog(st)}`;
+    return `${cabec}${btns}${_trExtras(st, name)}${_trLog(st)}`;
   }
   if (fase === 'pronto' || fase === 'parcial') {
     const parcial = fase === 'parcial';
@@ -131,7 +166,7 @@ function _trProgresso(st, name) {
       ${st.saida ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${btnContinuar}<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar ${parcial ? '(bruto)' : 'tradução'}</button>
       <button class="btn" title="Exportar como Markdown" onclick="trExport('${escJs(name || '')}','md')">📝 .md</button>
       <button class="btn" title="Exportar como EPUB (requer pandoc)" onclick="trExport('${escJs(name || '')}','epub')">📚 .epub</button></div>
-      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trLog(st)}`;
+      <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trExtras(st, name)}${_trLog(st)}`;
   }
   // preparando (ex.: detectando glossário) ou traduzindo
   const pct = st.progresso_pct != null ? st.progresso_pct : 0;
@@ -149,7 +184,7 @@ function _trProgresso(st, name) {
       <div style="background:var(--blue);height:100%;width:${pct}%;transition:width .3s"></div>
     </div>
     <div style="text-align:right;color:var(--muted);font-size:11px;margin-top:3px">${pct}%${tot ? ` · ${pr}/${tot} pág` : ''}</div>
-    ${_trLog(st)}`;
+    ${_trExtras(st, name)}${_trLog(st)}`;
 }
 
 function _trWire(name, container) {
@@ -205,7 +240,7 @@ function _trWire(name, container) {
       const st = r.status || {};
       progBox.innerHTML = _trProgresso(st, name);
       _autoScrollLog();
-      if (!ATIVO.has(st.fase)) {
+      if (!ATIVO.has(st.fase) && !st.previa_gerando) {
         clearInterval(polling); polling = null;
         if (trBtn) trBtn.disabled = false;
       }
@@ -257,6 +292,21 @@ function _trWire(name, container) {
   const rBtn = container.querySelector('#tr-render');
   if (rBtn) rBtn.onclick = () => iniciar(true);
 
+  // Prévia agora: renderiza um snapshot do cache atual sem interromper a tradução.
+  const pvBtn = container.querySelector('#tr-previa');
+  if (pvBtn) pvBtn.onclick = async () => {
+    pvBtn.disabled = true;
+    try {
+      await apiFetch(API + '/_previa', { method: 'POST', body: JSON.stringify({ label: name }) });
+      if (!polling) { polling = setInterval(poll, 1500); }
+      poll();
+    } catch (err) {
+      alert('prévia falhou: ' + err.message);
+    } finally {
+      setTimeout(() => { pvBtn.disabled = false; }, 1500);
+    }
+  };
+
   // Se já estava em andamento ao abrir, retoma o polling.
   const cur = container.querySelector('#tr-progresso').textContent || '';
   if (cur.includes('traduzindo') || cur.includes('preparando') || cur.includes('detectando') || cur.includes('retomando')) {
@@ -273,6 +323,24 @@ async function _trPutSpec(name, patch) {
   const labels = r.labels || {};
   await apiFetch(API + '/Traducao/' + encodeURIComponent(name),
     { method: 'PUT', body: JSON.stringify({ labels, spec, status: r.status || {} }) });
+}
+
+// Baixa a prévia (snapshot parcial) renderizada durante a tradução.
+async function trDownloadPrevia(name) {
+  try {
+    const h = {}; if (typeof TOKEN !== 'undefined' && TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+    const r = await fetch(API + '/_download?previa=1&label=' + encodeURIComponent(name),
+      { credentials: 'same-origin', headers: h });
+    if (!r.ok) throw new Error(await r.text());
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name + '.previa.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('download da prévia falhou: ' + err.message);
+  }
 }
 
 // Baixa o PDF traduzido (blob + auth); global p/ o onclick do botão de progresso.

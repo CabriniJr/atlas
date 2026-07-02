@@ -57,7 +57,7 @@ def _amostra_para_glossario(doc, cfg, invocar_fn, max_paginas: int = 5, limite: 
     return detectar_glossario(amostra, cfg, invocar_fn=invocar_fn, limite=limite)
 
 
-def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn):
+def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on_evento=None):
     """Traduz os blocos de uma página: MT bruta (uncached) + refino. Devolve (traduções, esgotou)."""  # noqa: E501
     pend = [b for b in traduziveis if cache.get(b.texto, cfg) is None]
     brutos: dict[int, str] = {}
@@ -86,7 +86,9 @@ def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn):
                     cache.put(b.texto, cfg, traducoes[b.id])
         return traducoes, False
 
-    return refinar_blocos(traduziveis, brutos, cfg, cache, invocar_fn=invocar_fn)
+    return refinar_blocos(
+        traduziveis, brutos, cfg, cache, invocar_fn=invocar_fn, on_evento=on_evento
+    )
 
 
 def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoTraducao:
@@ -124,6 +126,7 @@ def traduzir_pdf(
     cache_path: str | None = None,
     bruto_fn=None,
     somente_render: bool = False,
+    on_evento=None,
 ) -> ProgressoTraducao:
     """Traduz um PDF (ADR-0030/0031) ou, com ``somente_render=True``, apenas
     **re-renderiza** a partir do cache já pago — zero IA (E9-05). É o que permite
@@ -152,8 +155,9 @@ def traduzir_pdf(
         page = doc[i]
         blocos = extrair_pagina(page, i)
         traduziveis = [b for b in blocos if not b.skip]
+        ev_pag = (lambda ev, _p=i + 1: on_evento({**ev, "pagina": _p})) if on_evento else None
         traducoes, esg = _traduzir_pagina(
-            traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn
+            traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn, on_evento=ev_pag
         )
         esgotado = esgotado or esg
         blocos_traduzidos += len(traducoes)

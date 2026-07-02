@@ -159,8 +159,9 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _download_traducao(self, label: str) -> None:
-        """Stream do PDF traduzido de ``Traducao/<label>`` (status.saida)."""
+    def _download_traducao(self, label: str, previa: bool = False) -> None:
+        """Stream do PDF de ``Traducao/<label>`` — a saída final (status.saida) ou,
+        com ``previa=True``, o snapshot renderizado durante a tradução (status.previa)."""
         if _store is None:
             self._json(503, {"error": "store not ready"})
             return
@@ -168,9 +169,11 @@ class _Handler(BaseHTTPRequestHandler):
         if t is None:
             self._json(404, {"error": f"Traducao/{label} not found"})
             return
-        saida = (t.status or {}).get("saida")
+        campo = "previa" if previa else "saida"
+        saida = (t.status or {}).get(campo)
         if not saida:
-            self._json(409, {"error": "tradução ainda não concluída (sem saída)"})
+            falta = "prévia ainda não gerada" if previa else "tradução ainda não concluída (sem saída)"
+            self._json(409, {"error": falta})
             return
         alvo = Path(saida)
         if not alvo.is_file():
@@ -435,8 +438,10 @@ class _Handler(BaseHTTPRequestHandler):
         if path == _API_PREFIX + "/_download":
             from urllib.parse import parse_qs, urlparse
 
-            label = parse_qs(urlparse(self.path).query).get("label", [""])[0].strip()
-            self._download_traducao(label)
+            q = parse_qs(urlparse(self.path).query)
+            label = q.get("label", [""])[0].strip()
+            previa = q.get("previa", ["0"])[0] in ("1", "true", "yes")
+            self._download_traducao(label, previa=previa)
             return
 
         # /_exportar?label=<Traducao>&fmt=md|epub → serializa e baixa (ADR-0032)
@@ -547,6 +552,16 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": "label obrigatório"})
                 return
             self._json(*_iniciar_traducao(label))
+            return
+
+        # Renderiza uma PRÉVIA do cache atual durante a tradução (E9): não bloqueia
+        # o job em curso; gera .previa.pdf em background e grava status.previa.
+        if path == _API_PREFIX + "/_previa":
+            label = body.get("label", "").strip()
+            if not label:
+                self._json(400, {"error": "label obrigatório"})
+                return
+            self._json(*_iniciar_previa(label))
             return
 
         # Insight por IA (sob demanda) — sistema ou repositório.
@@ -917,6 +932,29 @@ def _iniciar_traducao(label: str) -> tuple[int, dict]:
 
     threading.Thread(target=_run, daemon=True, name=f"traduzir-{label}").start()
     return 200, {"ok": True, "label": label, "fase": "traduzindo"}
+
+
+def _iniciar_previa(label: str) -> tuple[int, dict]:
+    """Renderiza uma prévia (snapshot do cache atual) em background — pode rodar
+    concorrente à tradução em curso (E9). Não altera a ``fase`` do job."""
+    from atlas.rotinas.traduzir_pdf import render_previa
+
+    if _store is None:
+        return 503, {"error": "store not ready"}
+    t = _store.get("Traducao", label)
+    if t is None:
+        return 404, {"error": f"Traducao/{label} not found"}
+    if (t.status or {}).get("previa_gerando"):
+        return 409, {"ok": False, "error": "prévia já está sendo gerada"}
+
+    def _run() -> None:
+        try:
+            render_previa(_store, label, datetime.now())
+        except Exception:  # noqa: BLE001 — status já registra o erro (ADR-0006)
+            _log.exception("prévia %s falhou", label)
+
+    threading.Thread(target=_run, daemon=True, name=f"previa-{label}").start()
+    return 200, {"ok": True, "label": label, "previa_gerando": True}
 
 
 def _limpar_artefatos(res) -> None:

@@ -165,6 +165,30 @@ def test_collect_parcial_pausa_e_agenda_retomada(tmp_path, monkeypatch):
     assert "pausado" in res.data["_saida"] or "⏸" in res.data["_saida"]
 
 
+def test_collect_log_fino_de_ia_no_refino(tmp_path, monkeypatch):
+    """Cada chamada de IA no refino vira uma linha em status.log_ia (visibilidade)."""
+    src = tmp_path / "f.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "The pod restarts.", fontname="helv", fontsize=12)
+    doc.save(src)
+    doc.close()
+
+    store = ResourceStore(":memory:")
+    agora = datetime.now(timezone.utc)
+    store.apply(Resource(kind="Traducao", name="f", spec={"origem": str(src)}), agora)
+    monkeypatch.setattr(mod, "invocar", lambda p, **k: "[[0]] O contêiner reinicia.")
+
+    ctx = SimpleNamespace(
+        rotina=SimpleNamespace(nome="traduzir-pdf", label="f"), store=store, agora=agora
+    )
+    mod.collect(ctx)
+
+    log_ia = store.get("Traducao", "f").status.get("log_ia") or []
+    assert log_ia, "deveria registrar ao menos uma chamada de IA no refino"
+    assert any("lote" in e["msg"] and "blocos" in e["msg"] for e in log_ia)
+    assert all("ok" in e for e in log_ia)
+
+
 def test_collect_traducao_inexistente(tmp_path):
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)

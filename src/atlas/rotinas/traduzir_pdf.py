@@ -32,6 +32,11 @@ def _cache_para(origem: str, idioma_destino: str) -> str:
     return str(p.with_suffix(f".{idioma_destino}.cache.json"))
 
 
+def _previa_para(origem: str, idioma_destino: str) -> str:
+    p = Path(origem)
+    return str(p.with_suffix(f".{idioma_destino}.previa.pdf"))
+
+
 def _verdade(v) -> bool:
     """Aceita bool ou string ('true'/'false' do form do web shell) como booleano."""
     if isinstance(v, str):
@@ -154,6 +159,21 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         patch["log"] = log[-40:]  # mantém as últimas 40 linhas
         _status(store, t, ctx, patch)
 
+    def on_evento(ev):
+        """Log fino: uma linha por chamada de IA no refino (visibilidade do gasto)."""
+        if ev.get("tipo") != "refino_lote":
+            return
+        atual = store.get("Traducao", t.name).status or {}
+        linhas = list(atual.get("log_ia") or [])
+        seg = ev.get("ms", 0) / 1000
+        cab = (f"p.{ev.get('pagina', '?')} · lote {ev.get('lote')}/{ev.get('lotes')} · "
+               f"{ev.get('blocos')} blocos · {ev.get('chars', 0)} chars · {seg:.1f}s · "
+               f"{ev.get('modelo', '')}")
+        if not ev.get("ok"):
+            cab += f" · ✗ {ev.get('erro', 'falhou')}"
+        linhas.append({**_evento(cab), "ok": bool(ev.get("ok"))})
+        _status(store, t, ctx, {"log_ia": linhas[-100:]})
+
     try:
         prog = traduzir_pdf(
             origem,
@@ -164,6 +184,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             cache=cache,
             cache_path=cache_path,
             somente_render=_verdade(t.spec.get("somente_render", False)),
+            on_evento=on_evento,
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)
@@ -213,6 +234,49 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     return CollectResult(
         data={"_saida": f"{marca} traduzir-pdf/{label}: {prog.paginas_prontas} páginas → {saida}"}
     )
+
+
+def _merge_status(store, name, agora, patch: dict) -> None:
+    novo = {**(store.get("Traducao", name).status or {}), **patch}
+    store.set_status("Traducao", name, novo, agora)
+
+
+def render_previa(store, label: str, agora: datetime) -> None:
+    """Renderiza uma PRÉVIA do cache atual (parcial) → ``.previa.pdf``, sem tocar na
+    ``fase`` da tradução em curso (E9: renderizar enquanto traduz). Zero IA; roda em
+    thread de background disparada pela API. Best-effort — nunca levanta (ADR-0006)."""
+    t = store.get("Traducao", label)
+    if t is None:
+        return
+    origem = (t.spec.get("origem") or "").strip()
+    idioma_destino = t.spec.get("idioma_destino", "pt-BR")
+    if not origem or not Path(origem).exists():
+        _merge_status(store, label, agora,
+                      {"previa_gerando": False, "previa_erro": "origem inválida"})
+        return
+    previa = _previa_para(origem, idioma_destino)
+    cfg = ConfigTraducao(
+        idioma_origem=t.spec.get("idioma_origem", "en"),
+        idioma_destino=idioma_destino,
+        min_fonte_pct=int(t.spec.get("min_fonte_pct") or 90),
+        notas_rodape=_verdade(t.spec.get("notas_rodape", False)),
+    )
+    _merge_status(store, label, agora, {"previa_gerando": True, "previa_erro": None})
+
+    def _sem_ia(*a, **k):
+        raise RuntimeError("IA não deve ser chamada na prévia (somente_render)")
+
+    try:
+        cache = CacheTraducao.carregar(_cache_para(origem, idioma_destino))
+        traduzir_pdf(origem, previa, cfg, invocar_fn=_sem_ia, cache=cache, somente_render=True)
+        _merge_status(store, label, datetime.now(), {
+            "previa": previa, "previa_gerando": False,
+            "previa_em": datetime.now().isoformat(timespec="seconds"),
+        })
+    except Exception as exc:  # noqa: BLE001
+        _log.exception("prévia de %s falhou", label)
+        _merge_status(store, label, datetime.now(),
+                      {"previa_gerando": False, "previa_erro": str(exc)})
 
 
 def _status(store, t, ctx, patch: dict) -> None:
