@@ -66,7 +66,7 @@ def test_pipeline_usa_render_editorial_gera_continuacao(tmp_path):
 
     def invocar_gigante(prompt, modelo=None, timeout=60, motor="claude"):
         ids = re.findall(r"\[\[(\d+)\]\]", prompt)
-        return "\n".join(f"[[{i}]] " + ("Tradução enorme. " * 120) for i in ids)
+        return "\n".join(f"[[{i}]] " + ("Tradução enorme. " * 300) for i in ids)
 
     out = tmp_path / "out.pdf"
     traduzir_pdf(

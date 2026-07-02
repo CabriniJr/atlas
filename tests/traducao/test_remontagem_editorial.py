@@ -24,8 +24,10 @@ def test_prosa_que_cresce_gera_pagina_de_continuacao(tmp_path):
 
     doc = fitz.open(str(src))
     blocos = extrair_pagina(doc[0], 0)
+    # tradução maior que uma página inteira (o reflow agora usa a altura toda da
+    # página antes de transbordar; só passa disso vira continuação).
     traducoes = {
-        b.id: ("Parágrafo traduzido bem maior que o original. " * 80)
+        b.id: ("Parágrafo traduzido bem maior que o original. " * 200)
         for b in blocos
         if not b.skip
     }
@@ -37,7 +39,50 @@ def test_prosa_que_cresce_gera_pagina_de_continuacao(tmp_path):
     doc.close()
 
 
-def test_figura_permanece_intacta(tmp_path):
+def test_glyphs_unicode_preservados(tmp_path):
+    """Bullet, aspas curvas e travessão devem renderizar (a fonte embutida os tem);
+    a Helvetica builtin virava '?'."""
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_textbox(fitz.Rect(72, 90, 520, 200), "Original paragraph text here. " * 6,
+                        fontname="helv", fontsize=11)
+    src = tmp_path / "g.pdf"
+    doc.save(str(src))
+    doc.close()
+
+    doc = fitz.open(str(src))
+    blocos = extrair_pagina(doc[0], 0)
+    alvo = "Itens: • primeiro — “segundo” – terceiro’s."
+    traducoes = {b.id: alvo for b in blocos if not b.skip}
+    remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90)
+    txt = doc[0].get_text()
+    for ch in ["•", "—", "“", "”", "–", "’"]:
+        assert ch in txt, f"glyph {ch!r} deveria renderizar (sem virar '?')"
+    assert "?" not in txt
+    doc.close()
+
+
+def test_prosa_nao_sobrepoe_vizinhos(tmp_path):
+    """Dois parágrafos empilhados: ao crescer, o de cima empurra o de baixo — sem colisão."""
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_textbox(fitz.Rect(72, 90, 520, 160), "First paragraph. " * 10,
+                        fontname="helv", fontsize=11)
+    page.insert_textbox(fitz.Rect(72, 170, 520, 240), "Second paragraph. " * 10,
+                        fontname="helv", fontsize=11)
+    src = tmp_path / "s2.pdf"
+    doc.save(str(src))
+    doc.close()
+
+    doc = fitz.open(str(src))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: ("Texto traduzido bem mais longo que o original. " * 8)
+                 for b in blocos if not b.skip}
+    remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90)
+    caixas = sorted((b[:4] for b in doc[0].get_text("blocks")), key=lambda r: r[1])
+    for (_, _, _, y1), (_, y0b, _, _) in zip(caixas, caixas[1:]):
+        assert y0b >= y1 - 1.0, "blocos de texto não podem se sobrepor verticalmente"
+    doc.close()
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 100), "Caption near a figure.", fontsize=11)

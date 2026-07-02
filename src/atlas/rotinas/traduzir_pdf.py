@@ -99,6 +99,8 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         lote_refino=int(t.spec.get("lote_refino") or 20),
         min_fonte_pct=int(t.spec.get("min_fonte_pct") or 90),
         notas_rodape=_verdade(t.spec.get("notas_rodape", False)),
+        comparador=_verdade(t.spec.get("comparador", False)),
+        modelo_comparador=t.spec.get("modelo_comparador") or None,
     )
 
     iniciado = ctx.agora.isoformat()
@@ -159,6 +161,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             on_progress=on_progress,
             cache=cache,
             cache_path=cache_path,
+            somente_render=_verdade(t.spec.get("somente_render", False)),
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)

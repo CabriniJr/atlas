@@ -86,7 +86,10 @@ def test_refino_desligado_traducao_puramente_mt(tmp_path):
         invocar_fn=nunca, bruto_fn=lambda ts, c: [t.upper() for t in ts],
     )
     assert not prog.parcial
-    assert "THE POD SCALES." in fitz.open(str(tmp_path / "o.pdf"))[0].get_text()
+    # normaliza espaços: a fonte embutida pode quebrar a linha diferente do original.
+    import re as _re
+    saida = _re.sub(r"\s+", " ", fitz.open(str(tmp_path / "o.pdf"))[0].get_text())
+    assert "THE POD SCALES." in saida
 
 
 def test_pipeline_parcial_quando_tokens_acabam(tmp_path):

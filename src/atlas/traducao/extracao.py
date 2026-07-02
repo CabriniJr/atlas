@@ -40,16 +40,16 @@ def classificar_papel(bloco: dict, largura_pagina: float) -> str:
     """Classifica o papel do bloco para o render editorial (ADR-0033).
 
     - ``imutavel``: sem texto tradutível OU código monoespaçado (nunca reflui).
-    - ``prosa``: parágrafo largo (≥ metade da página) e multi-linha (≥ 3 linhas) —
-      reflui e gera página de continuação quando cresce.
-    - ``encaixado`` (default seguro): legenda/label/célula — fit-in-place no bbox.
+    - ``prosa``: parágrafo largo (≥ metade da página) e multi-linha (≥ 2 linhas) —
+      reflui e empurra os blocos seguintes; gera página de continuação quando cresce.
+    - ``encaixado`` (default seguro): legenda/label/título de 1 linha — fit-in-place.
     """
     texto = (bloco.get("texto") or "").strip()
     if not texto or bloco.get("mono"):
         return "imutavel"
     x0, _, x1, _ = bloco["bbox"]
     largo = (x1 - x0) >= 0.5 * largura_pagina
-    multilinha = bloco.get("n_linhas", 1) >= 3
+    multilinha = bloco.get("n_linhas", 1) >= 2
     if largo and multilinha:
         return "prosa"
     return "encaixado"

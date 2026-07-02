@@ -16,6 +16,7 @@ substituido-por: —
 | Versão | Data       | Autor     | Mudança | Aprovado por |
 |--------|------------|-----------|---------|--------------|
 | 1.0    | 2026-07-01 | Tech Lead | Criação — decisão do PO: render editorial, híbrido por papel de bloco | PO/PM |
+| 1.1    | 2026-07-01 | Tech Lead | E9-01b: reflow passa a **empurrar os blocos vizinhos** (fim da colisão observada na run de controle) e o texto usa **fonte Unicode embutida** (bullets/aspas/travessões — a Helvetica builtin virava `?`). Prosa relaxada p/ 2+ linhas. | PO/PM |
 
 ---
 

@@ -18,8 +18,10 @@ from atlas.traducao.remontagem import remontar_documento
 from atlas.traducao.traducao_ia import (
     CacheTraducao,
     ConfigTraducao,
+    aplicar_unificacao,
     detectar_glossario,
     refinar_blocos,
+    unificar_termos,
 )
 from atlas.traducao.tradutor_bruto import traduzir_bruto
 
@@ -87,6 +89,31 @@ def _traduzir_pagina(traduziveis, cfg, cache, invocar_fn, esgotado, bruto_fn):
     return refinar_blocos(traduziveis, brutos, cfg, cache, invocar_fn=invocar_fn)
 
 
+def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoTraducao:
+    """Re-renderiza o PDF usando só o que já está no cache (E9-05). Sem chamadas de IA:
+    blocos sem tradução cacheada caem no texto original (nunca perde conteúdo)."""
+    blocos_traduzidos = 0
+    render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
+    for i in range(total):
+        blocos = extrair_pagina(doc[i], i)
+        traducoes: dict[int, str] = {}
+        for b in blocos:
+            if b.skip:
+                continue
+            # refino tem prioridade; cai no bruto (raw) se a run foi parcial (ADR-0031).
+            cached = cache.get(b.texto, cfg) or cache.get_bruto(b.texto, cfg)
+            if cached is not None:
+                traducoes[b.id] = cached
+        blocos_traduzidos += len(traducoes)
+        render_paginas[i] = (blocos, traducoes)
+        if on_progress:
+            on_progress(ProgressoTraducao(total, i + 1, blocos_traduzidos, fase="traduzindo"))
+    remontar_documento(doc, render_paginas, min_fonte_pct=cfg.min_fonte_pct)
+    doc.save(destino, garbage=4, deflate=True)
+    doc.close()
+    return ProgressoTraducao(total, total, blocos_traduzidos)
+
+
 def traduzir_pdf(
     origem: str,
     destino: str,
@@ -96,11 +123,18 @@ def traduzir_pdf(
     cache: CacheTraducao | None = None,
     cache_path: str | None = None,
     bruto_fn=None,
+    somente_render: bool = False,
 ) -> ProgressoTraducao:
+    """Traduz um PDF (ADR-0030/0031) ou, com ``somente_render=True``, apenas
+    **re-renderiza** a partir do cache já pago — zero IA (E9-05). É o que permite
+    iterar o layout (``spec.render``) sem repagar a tradução (``spec.traducao``)."""
     bruto_fn = bruto_fn or traduzir_bruto
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
     total = doc.page_count
+
+    if somente_render:
+        return _render_do_cache(doc, destino, cfg, cache, total, on_progress)
 
     # glossario_auto: detecta termos técnicos a preservar antes de traduzir (ADR-0030).
     detectados: list[str] = []
@@ -131,6 +165,16 @@ def traduzir_pdf(
         )
         if on_progress:
             on_progress(prog)
+    # Comparador de consistência (ADR-0034): opt-in e só quando concluiu. Unifica
+    # termos/nomes divergentes via mapa determinístico aplicado antes do render.
+    if cfg.comparador and not esgotado:
+        textos = [t for _, trs in render_paginas.values() for t in trs.values()]
+        mapa = unificar_termos(textos, cfg, invocar_fn)
+        if mapa:
+            for _, trs in render_paginas.values():
+                for bid in trs:
+                    trs[bid] = aplicar_unificacao(trs[bid], mapa)
+
     # Render editorial ao fim (determinístico): reflow de prosa + páginas de
     # continuação sem embaralhar os índices durante a tradução (ADR-0033).
     remontar_documento(doc, render_paginas, min_fonte_pct=cfg.min_fonte_pct)
