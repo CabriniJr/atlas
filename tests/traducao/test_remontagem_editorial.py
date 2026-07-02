@@ -80,7 +80,7 @@ def test_prosa_nao_sobrepoe_vizinhos(tmp_path):
                  for b in blocos if not b.skip}
     remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90)
     caixas = sorted((b[:4] for b in doc[0].get_text("blocks")), key=lambda r: r[1])
-    for (_, _, _, y1), (_, y0b, _, _) in zip(caixas, caixas[1:]):
+    for (_, _, _, y1), (_, y0b, _, _) in zip(caixas, caixas[1:], strict=False):
         assert y0b >= y1 - 1.0, "blocos de texto não podem se sobrepor verticalmente"
     doc.close()
     doc = fitz.open()
