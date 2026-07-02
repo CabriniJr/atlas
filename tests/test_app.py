@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from atlas.app import Update, montar_disparo, processar_update
+from atlas.app import Update, ciclo_scheduler, montar_disparo, processar_update
 from atlas.config import Config
 from atlas.db import Database
 from atlas.routines import Rotina
@@ -63,3 +64,54 @@ def test_estranho_e_ignorado():
 
     assert adapter.enviados == []
     assert db.connection.execute("SELECT COUNT(*) AS n FROM activities").fetchone()["n"] == 0
+
+
+# ── ciclo_scheduler roda independente do Telegram (regressão) ───────────────
+# Um token/rede do Telegram inválido não pode travar retomada de jobs pausados
+# (ADR-0035) — por isso ciclo_scheduler não recebe o adapter, só o necessário
+# pro agendador/retomada. Ver app.run(): o long-poll e o ciclo_scheduler agora
+# são try/except separados, exatamente pra essa falha não se propagar.
+
+
+@dataclass
+class _FakeRes:
+    name: str
+    status: dict = field(default_factory=dict)
+
+
+class _FakeStoreRetomada:
+    def __init__(self, por_kind: dict[str, list[_FakeRes]]):
+        self._por_kind = por_kind
+
+    def kinds(self):
+        return list(self._por_kind)
+
+    def list(self, kind):
+        return list(self._por_kind.get(kind, []))
+
+    def set_status(self, kind, name, status, agora):
+        for r in self._por_kind.get(kind, []):
+            if r.name == name:
+                r.status = status
+
+
+def test_ciclo_scheduler_dispara_retomada_sem_depender_do_telegram():
+    """Regressão: ciclo_scheduler não recebe adapter — é impossível que uma
+    falha no Telegram (ex.: token inválido) impeça um job pausado de retomar."""
+    db = Database(":memory:")
+    agora = datetime(2026, 7, 2, 13, 46, 0)
+    passado = agora - timedelta(minutes=1)
+    store = _FakeStoreRetomada({
+        "Traducao": [
+            _FakeRes(name="livro", status={"fase": "pausado", "retoma_em": passado.isoformat(),
+                                            "retoma_collect": "traduzir-pdf"}),
+        ]
+    })
+    chamados = []
+
+    def disparar_retomada(kind, name, collect):
+        chamados.append((kind, name, collect))
+
+    ciclo_scheduler(agora, [], db, lambda r: None, lambda msg: None, store, disparar_retomada)
+
+    assert chamados == [("Traducao", "livro", "traduzir-pdf")]

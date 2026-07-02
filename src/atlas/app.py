@@ -125,6 +125,16 @@ def montar_disparo_retomada(store: ResourceStore) -> Callable[[str, str, str], o
     return disparar
 
 
+def ciclo_scheduler(agora, rotinas, db, disparar, enviar_alarme, store, disparar_retomada) -> None:
+    """Um ciclo de agenda + alarmes + retomadas (ADR-0035). Roda a cada volta do
+    loop, **independente** do Telegram — extraído p/ ser testável isoladamente e
+    p/ garantir que uma falha no long-poll (ex.: token inválido) não impede jobs
+    pausados de retomar sozinhos."""
+    tick(agora, rotinas, db, disparar)
+    tick_alarmes(agora, db, enviar_alarme, store=store)
+    retomar_pausados(store, agora, disparar_retomada)
+
+
 def run(config: Config | None = None) -> None:
     """Inicia o loop de operação do bot (bloqueante)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -196,15 +206,19 @@ def run(config: Config | None = None) -> None:
                 upd = _normalizar(update_cru)
                 if upd is not None:
                     processar_update(upd, config, db, adapter, store=store)
-            # Após cada janela de long-poll, verifica agenda, alarmes e retomadas.
-            agora = datetime.now()
-            tick(agora, carga.rotinas, db, disparar)
-            tick_alarmes(
-                agora, db, lambda msg: adapter.enviar(config.allowed_user_id, msg), store=store
-            )
-            retomar_pausados(store, agora, disparar_retomada)  # ADR-0035
         except KeyboardInterrupt:  # noqa: PERF203
             _log.info("Encerrando.")
             break
+        except Exception:  # noqa: BLE001 — Telegram fora do ar não pode travar o scheduler
+            _log.exception("Erro no long-poll do Telegram; seguindo.")
+
+        # Agenda, alarmes e retomadas rodam **independente** do Telegram (ADR-0006):
+        # um token inválido ou a rede fora não pode impedir jobs pausados (ADR-0035)
+        # de retomar sozinhos — por isso é um try/except separado do bloco acima.
+        try:
+            ciclo_scheduler(
+                datetime.now(), carga.rotinas, db, disparar,
+                lambda msg: adapter.enviar(config.allowed_user_id, msg), store, disparar_retomada,
+            )
         except Exception:  # noqa: BLE001 — resiliência: um erro não derruba o loop
-            _log.exception("Erro no loop; seguindo.")
+            _log.exception("Erro no ciclo do scheduler; seguindo.")
