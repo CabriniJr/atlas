@@ -203,7 +203,7 @@ atualizado-em: 2026-06-23
 | ID | Item | Estado | Ref |
 |---|---|---|---|
 | E9-00 | Base: store thread-safe + resume real (cache da MT bruta) | **feito** | commits `1c34a0a`, `1a8e0bf` |
-| E9-01 | **Sub-projeto A** — render editorial híbrido (reflow prosa + página extra; encaixados fit; imagens intactas; notas de rodapé) | spec **em-revisão** | [ADR-0033](../arquitetura/adr/ADR-0033-render-editorial-hibrido.md) · [spec](../specs/traducao-render-editorial.md) |
+| E9-01 | **Sub-projeto A** — render editorial híbrido (reflow prosa + página extra; encaixados fit; imagens intactas; notas de rodapé) | **feito** — `layout.py` + classificação de papel + `remontar_documento` no pipeline; notas de rodapé (render); testes verdes | [ADR-0033](../arquitetura/adr/ADR-0033-render-editorial-hibrido.md) · [spec](../specs/traducao-render-editorial.md) · [plano](../superpowers/plans/2026-07-01-render-editorial.md) |
 | E9-02 | **Sub-projeto B** — qualidade AI-augmented: refino em lotes maiores + comparador opt-in (`spec.comparador`) | decidido; a implementar | (ADR a criar) |
 | E9-03 | Agente **Editor** especializado (Kind `Agente`) + **LLM-as-judge** opcional (crítica→revisão) | proposto | (ADR a criar) |
 | E9-04 | Configs **modulares de qualidade** (quanto/qual IA revisa por estágio; níveis rascunho/padrão/editorial) | proposto | (ADR a criar) |
