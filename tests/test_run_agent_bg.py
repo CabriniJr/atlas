@@ -123,3 +123,67 @@ def test_run_agent_bg_ollama_registra_custo_zero(store, tmp_path, monkeypatch):
     assert ag.status["custo_total_usd"] == 0.0
     assert ag.status["ultimo_modelo"] == "llama3.1"
     api._runs.pop(run["id"], None)
+
+
+def test_run_agent_bg_ollama_usa_max_turnos_do_spec(store, tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "_PROJECT_DIR", str(tmp_path))
+    _make_agente(
+        store, "a", {"modo": "code", "motor": "ollama", "modelo": "llama3.1", "max_turnos": 100}
+    )
+    run = _make_run("a", "tarefa")
+
+    monkeypatch.setattr(agente_ollama, "ollama_disponivel", lambda ep, **k: True)
+    vistos = {}
+
+    def fake_rodar_loop(mensagem, **kw):
+        vistos.update(kw)
+        kw["on_evento"]({"type": "done"})
+
+    monkeypatch.setattr(agente_ollama, "rodar_loop", fake_rodar_loop)
+
+    api._run_agent_bg(run, store)
+
+    assert vistos["max_turnos"] == 100
+    api._runs.pop(run["id"], None)
+
+
+def test_run_agent_bg_ollama_sem_max_turnos_usa_default(store, tmp_path, monkeypatch):
+    monkeypatch.setattr(api, "_PROJECT_DIR", str(tmp_path))
+    _make_agente(store, "a", {"modo": "code", "motor": "ollama", "modelo": "llama3.1"})
+    run = _make_run("a", "tarefa")
+
+    monkeypatch.setattr(agente_ollama, "ollama_disponivel", lambda ep, **k: True)
+    vistos = {}
+
+    def fake_rodar_loop(mensagem, **kw):
+        vistos.update(kw)
+        kw["on_evento"]({"type": "done"})
+
+    monkeypatch.setattr(agente_ollama, "rodar_loop", fake_rodar_loop)
+
+    api._run_agent_bg(run, store)
+
+    assert vistos["max_turnos"] == agente_ollama.TURNOS_MAX_PADRAO
+    api._runs.pop(run["id"], None)
+
+
+def test_run_agent_bg_injeta_claude_md_no_system_prompt(store, tmp_path, monkeypatch):
+    (tmp_path / "CLAUDE.md").write_text("REGRA-MARCADOR-DE-TESTE")
+    monkeypatch.setattr(api, "_PROJECT_DIR", str(tmp_path))
+    api._claude_md_cache.clear()
+    _make_agente(store, "a", {"modo": "code", "motor": "ollama", "modelo": "llama3.1"})
+    run = _make_run("a", "tarefa")
+
+    monkeypatch.setattr(agente_ollama, "ollama_disponivel", lambda ep, **k: True)
+    vistos = {}
+
+    def fake_rodar_loop(mensagem, **kw):
+        vistos.update(kw)
+        kw["on_evento"]({"type": "done"})
+
+    monkeypatch.setattr(agente_ollama, "rodar_loop", fake_rodar_loop)
+
+    api._run_agent_bg(run, store)
+
+    assert "REGRA-MARCADOR-DE-TESTE" in vistos["system_prompt"]
+    api._runs.pop(run["id"], None)

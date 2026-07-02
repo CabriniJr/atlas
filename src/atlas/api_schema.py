@@ -449,6 +449,12 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "opts": ["true", "false"],
                 "hint": "true = nada auto-aplicado; promoção exige revisão humana. ADR-0028",
             },
+            {
+                "k": "max_turnos",
+                "type": "number",
+                "label": "Máx. turnos (modo code + motor ollama)",
+                "hint": "Default 40 — teto de rodadas de tool-calling antes de encerrar (ADR-0044)",
+            },
         ],
         "labels": [{"k": "dominio", "label": "Domínio", "hint": "repo · estudo · geral · dev"}],
     },

@@ -9,9 +9,11 @@ from atlas.agente_ollama import (
     OllamaIndisponivel,
     executar_tool_call,
     ferramenta_edit_file,
+    ferramenta_find_files,
     ferramenta_list_dir,
     ferramenta_read_file,
     ferramenta_run_command,
+    ferramenta_search_text,
     ferramenta_write_file,
     filtrar_ferramentas,
     rodar_loop,
@@ -105,11 +107,53 @@ def test_run_command_timeout_levanta_ferramenta_erro(tmp_path):
         ferramenta_run_command(str(tmp_path), "sleep 5", timeout=0.1)
 
 
+# ── search_text / find_files (equivalentes a Grep/Glob, ADR-0044) ────────────
+
+
+def test_search_text_acha_padrao_com_arquivo_e_linha(tmp_path):
+    (tmp_path / "a.py").write_text("def foo():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def bar():\n    return 2\n")
+    out = ferramenta_search_text(str(tmp_path), r"return \d")
+    assert "a.py:2: return 1" in out
+    assert "b.py:2: return 2" in out
+
+
+def test_search_text_sem_match_devolve_mensagem_vazia(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1\n")
+    assert ferramenta_search_text(str(tmp_path), "nao_existe") == "(nenhum resultado)"
+
+
+def test_search_text_ignora_dirs_ignorados(tmp_path):
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "config").write_text("achar_isto")
+    (tmp_path / "real.py").write_text("achar_isto\n")
+    out = ferramenta_search_text(str(tmp_path), "achar_isto")
+    assert "real.py" in out
+    assert ".git" not in out
+
+
+def test_search_text_regex_invalido_levanta_erro(tmp_path):
+    with pytest.raises(FerramentaErro, match="regex"):
+        ferramenta_search_text(str(tmp_path), "(")
+
+
+def test_find_files_acha_por_glob(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "mod.py").write_text("")
+    (tmp_path / "readme.md").write_text("")
+    out = ferramenta_find_files(str(tmp_path), "**/*.py")
+    assert out == "sub/mod.py"
+
+
+def test_find_files_sem_match_devolve_mensagem_vazia(tmp_path):
+    assert ferramenta_find_files(str(tmp_path), "*.rs") == "(nenhum resultado)"
+
+
 # ── Allow/deny (mesmo padrão de api.build_tool_args, ADR-0028) ────────────────
 
 
 def test_filtrar_ferramentas_sem_filtro_devolve_catalogo_completo():
-    assert len(filtrar_ferramentas(None, None)) == 5
+    assert len(filtrar_ferramentas(None, None)) == 7
 
 
 def test_filtrar_ferramentas_allowed_restringe():
@@ -122,7 +166,7 @@ def test_filtrar_ferramentas_denied_remove():
     schemas = filtrar_ferramentas(None, "run_command")
     nomes = {s["function"]["name"] for s in schemas}
     assert "run_command" not in nomes
-    assert len(nomes) == 4
+    assert len(nomes) == 6
 
 
 # ── Dispatch de tool call ─────────────────────────────────────────────────────

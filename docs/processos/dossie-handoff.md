@@ -19,6 +19,7 @@ atualizado-em: 2026-06-26
 | 1.3    | 2026-07-01 | Tech Lead | Épico E9 (tradutor editorial): fixes de store/resume + export md/epub; ADR-0033 + spec + plano do render editorial; E9-01 tarefas 1–4 feitas | — |
 | 1.4    | 2026-07-02 | Tech Lead | E9-01..E9-12 concluídos (render editorial HTML/WeasyPrint, TOC/hyperlinks/folio, fallback claude↔ollama). Nova frente **E9-13** (ADR-0041, fidelidade tipográfica + paginação adaptativa) iniciada — 2/12 tarefas feitas | — |
 | 1.5    | 2026-07-02 | Tech Lead | **Agente modo `code` via Ollama nativo** (ADR-0042/E7-45, pedido do PO, prioridade máxima) e **recuperação de órfãos no boot + serialização de chamadas Ollama** (ADR-0043/E9-14) — ambos commitados em `main`; não fazem parte do E9-13 | — |
+| 1.6    | 2026-07-02 | Tech Lead | **Qualidade/auto mode do Agente via Ollama** (ADR-0044/E7-46): grep/glob reais, CLAUDE.md injetado, `max_turnos`, `POST /_self_restart`, aba 🤖 Auto. `atlas-builder` passou a usar `provider=ollama-local` (gemma4) | — |
 
 ---
 
@@ -159,7 +160,8 @@ ir a produção: merge em `main` (o CD aplica em ≤5 min). Instalação do CD: 
   (modo `code`, só Agentes marcados). `_resolve_engine(spec, store)` resolve
   motor/modelo/endpoint a partir do `LLMProvider` (ou campos do Agente).
 - **Endpoints especiais** (em `api.py`, `do_POST`/`do_GET`): `/_run`, `/_cmd`,
-  `/_chat`, `/_insight`, `/_agent_run` (+ `/stream`), `/_status`, `/_schema`, `/_complete`.
+  `/_chat`, `/_insight`, `/_agent_run` (+ `/stream`), `/_status`, `/_schema`, `/_complete`,
+  `/_self_restart` (admin-only, ADR-0044 — reinício destacado do processo local).
 
 ## 4. O agente que constrói (atlas-builder)
 

@@ -1,9 +1,11 @@
 """Debug session — a diagnostics CLI exposed over Telegram.
 
 Read-only inspection of the engine's state: system status, recent runs, loaded
-routines, table counts and (non-secret) env. Lifecycle ops (rebuild/restart)
-stay host-side in ``scripts/atlasctl.sh`` — the bot runs inside the container and
-can't manage its own container.
+routines, table counts and (non-secret) env. Full container rebuilds still stay
+host-side in ``scripts/atlasctl.sh``. A local (non-containerized, systemd
+--user) restart of *this* process is available to the modo=code agent via
+``POST /_self_restart`` (admin-only, ADR-0044) — it self-updates after
+committing new code, no human needed to run ``systemctl`` by hand.
 
 Owner-only (the handler already filters by user id).
 """

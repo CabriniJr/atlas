@@ -627,6 +627,20 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(202, {"run_id": run["id"], "agente": agente_name})
             return
 
+        # Auto-reinício do processo local (ADR-0044): permite o próprio agente
+        # (via API, não shell direto) aplicar código já commitado sem depender
+        # de humano — admin-only (destrutivo: mata o processo que atende esta
+        # request). Restart roda destacado (start_new_session) após responder,
+        # pra não travar a resposta HTTP no processo que está sendo morto.
+        if path == _API_PREFIX + "/_self_restart":
+            if self._identity()[1] != "admin":
+                self._json(403, {"error": "admin requerido"})
+                return
+            servico = os.environ.get("ATLAS_SYSTEMD_SERVICE", "atlas.service")
+            self._json(202, {"ok": True, "servico": servico, "restart_em_s": _SELF_RESTART_DELAY_S})
+            threading.Timer(_SELF_RESTART_DELAY_S, _agendar_self_restart, args=(servico,)).start()
+            return
+
         # Curadoria do gate (SPEC-CURADORIA-GATE): descartar/aprovar o diff de um run.
         _ar_prefix = _API_PREFIX + "/_agent_run/"
         if path.startswith(_ar_prefix) and path.endswith(("/discard", "/approve")):
@@ -1781,6 +1795,27 @@ def _finish_run(run: dict) -> None:
         run["cond"].notify_all()
 
 
+_SELF_RESTART_DELAY_S = 0.3  # tempo p/ a resposta HTTP sair antes do processo morrer
+
+
+def _agendar_self_restart(servico: str) -> None:  # pragma: no cover — mata o processo de verdade
+    """Dispara ``systemctl --user restart`` destacado (ADR-0044).
+
+    ``start_new_session=True`` desacopla o filho do grupo de processo do pai —
+    sobrevive ao SIGTERM que o próprio restart manda pro processo atual.
+    Nunca propaga exceção: falha aqui não deve derrubar o processo de outro jeito.
+    """
+    try:
+        subprocess.Popen(
+            ["systemctl", "--user", "restart", servico],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:  # noqa: BLE001
+        _log.exception("_agendar_self_restart: falha ao disparar restart de %s", servico)
+
+
 def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     """Thread de background do modo=code: despacha pro motor resolvido.
 
@@ -1820,7 +1855,12 @@ def _run_agent_bg(run: dict, store: ResourceStore) -> None:
     # Conhecimento operacional do Atlas: schema de objetos + como usar a API.
     # Garante que o agente CRIE recursos pela API (não editando SQLite/arquivos soltos).
     api_context = _agent_api_context(store)
-    full_system = (system_prompt + "\n\n" + api_context) if system_prompt else api_context
+    # Diretrizes do projeto (ADR-0044): o claude CLI lê o CLAUDE.md sozinho por
+    # estar na raiz do repo; o loop nativo ollama não — injeta explicitamente
+    # pra ambos seguirem TDD/conventional commits/ADR-first igual a uma sessão real.
+    diretrizes = _claude_md_context()
+    partes = [p for p in (system_prompt, diretrizes, api_context) if p]
+    full_system = "\n\n".join(partes)
 
     # Gate de curadoria (ADR-0028 §4): default true p/ code. Nada gerado aqui é
     # auto-comitado/ativado — a promoção é a revisão humana do diff (CLAUDE.md §6).
@@ -1994,6 +2034,7 @@ def _run_agent_bg_ollama(
         },
     )
     try:
+        max_turnos = int(spec.get("max_turnos") or 0) or agente_ollama.TURNOS_MAX_PADRAO
         agente_ollama.rodar_loop(
             mensagem,
             system_prompt=full_system,
@@ -2003,6 +2044,7 @@ def _run_agent_bg_ollama(
             timeout=timeout,
             allowed_tools=spec.get("allowed_tools"),
             denied_tools=spec.get("denied_tools"),
+            max_turnos=max_turnos,
             on_evento=lambda ev: _emit(run, ev),
         )
         _registrar_gasto_agente(store, agente_name, 0.0, modelo)
@@ -2090,6 +2132,31 @@ def _stream_run_sse(run: dict, wfile) -> None:
         pass
 
 
+_claude_md_cache: dict[str, tuple[float, str]] = {}
+
+
+def _claude_md_context() -> str:
+    """Conteúdo de ``CLAUDE.md`` (raiz do projeto), cacheado por mtime (ADR-0044).
+
+    O claude CLI já lê o CLAUDE.md sozinho por rodar dentro do repo; o loop
+    nativo ollama (``agente_ollama``) não tem esse comportamento embutido —
+    injetar aqui garante as mesmas diretrizes (TDD, conventional commits,
+    ADR-first) pros dois motores. Cache evita reler o arquivo em todo run.
+    """
+    caminho = Path(_PROJECT_DIR) / "CLAUDE.md"
+    try:
+        mtime = caminho.stat().st_mtime
+    except OSError:
+        return ""
+    cache_key = str(caminho)
+    cached = _claude_md_cache.get(cache_key)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    texto = caminho.read_text(encoding="utf-8", errors="replace")
+    _claude_md_cache[cache_key] = (mtime, texto)
+    return texto
+
+
 def _agent_api_context(store: ResourceStore) -> str:
     """Instruções operacionais p/ o Agente modo=code: modelo de objetos + uso da API.
 
@@ -2119,6 +2186,12 @@ def _agent_api_context(store: ResourceStore) -> str:
         f"  Detalhe:   curl -s {base}/<Kind>/<name>",
         f"  Remover:   curl -s -X DELETE {base}/<Kind>/<name>",
         f"  Schema:    curl -s {base}/_schema   (forms e campos por Kind)",
+        "",
+        "Depois de commitar (git add/commit/push via run_command, seguindo as",
+        "diretrizes de CLAUDE.md acima), para aplicar o código novo NESTE processo",
+        "local, chame (ADR-0044, admin-only):",
+        f"    curl -s -X POST {base}/_self_restart",
+        "NUNCA rode systemctl/kill diretamente — use sempre esse endpoint.",
         "",
         "Kinds e campos de spec (respeite tipos e opções):",
     ]

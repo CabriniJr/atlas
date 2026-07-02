@@ -19,15 +19,19 @@ fallback para claude, ver ``api._run_agent_bg``).
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-_TURNOS_MAX = 40
+TURNOS_MAX_PADRAO = 40  # público — api.py usa como default quando spec.max_turnos vazio (ADR-0044)
+_TURNOS_MAX = TURNOS_MAX_PADRAO
 _TAMANHO_MAX_ARQUIVO = 200_000  # chars — protege contra ler um arquivo gigante
 _TAMANHO_MAX_SAIDA_COMANDO = 4_000  # chars de stdout+stderr guardados no evento
+_TAMANHO_MAX_BUSCA = 200  # linhas/arquivos por chamada de search_text/find_files
+_DIRS_IGNORADOS = {".git", ".venv", "__pycache__", "node_modules", ".ruff_cache", ".pytest_cache"}
 
 
 class FerramentaErro(RuntimeError):
@@ -100,12 +104,67 @@ def ferramenta_run_command(cwd: str, command: str, timeout: int = 60) -> str:
     return f"(exit {proc.returncode})\n{saida[-_TAMANHO_MAX_SAIDA_COMANDO:]}"
 
 
+def _arquivos_do_workspace(raiz: Path, base: Path):
+    for p in raiz.rglob("*"):
+        if not p.is_file():
+            continue
+        if any(parte in _DIRS_IGNORADOS for parte in p.relative_to(base).parts):
+            continue
+        yield p
+
+
+def ferramenta_search_text(cwd: str, pattern: str, path: str = ".") -> str:
+    """Busca por padrão (regex) linha a linha nos arquivos do workspace —
+    equivalente ao Grep do Claude Code (pendência do ADR-0042)."""
+    raiz = _resolver_no_workspace(cwd, path)
+    if not raiz.is_dir():
+        raise FerramentaErro(f"diretório não encontrado: {path}")
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        raise FerramentaErro(f"pattern regex inválido: {exc}") from exc
+    base = Path(cwd).resolve()
+    achados: list[str] = []
+    for arq in _arquivos_do_workspace(raiz, base):
+        try:
+            texto = arq.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        rel = arq.relative_to(base)
+        for i, linha in enumerate(texto.splitlines(), start=1):
+            if regex.search(linha):
+                achados.append(f"{rel}:{i}: {linha.strip()[:200]}")
+                if len(achados) >= _TAMANHO_MAX_BUSCA:
+                    achados.append("… (truncado)")
+                    return "\n".join(achados)
+    return "\n".join(achados) or "(nenhum resultado)"
+
+
+def ferramenta_find_files(cwd: str, pattern: str, path: str = ".") -> str:
+    """Busca arquivos por padrão de nome (glob) — equivalente ao Glob do
+    Claude Code (pendência do ADR-0042)."""
+    raiz = _resolver_no_workspace(cwd, path)
+    if not raiz.is_dir():
+        raise FerramentaErro(f"diretório não encontrado: {path}")
+    base = Path(cwd).resolve()
+    achados = sorted(
+        str(p.relative_to(base))
+        for p in raiz.rglob(pattern)
+        if not any(parte in _DIRS_IGNORADOS for parte in p.relative_to(base).parts)
+    )
+    if len(achados) > _TAMANHO_MAX_BUSCA:
+        achados = [*achados[:_TAMANHO_MAX_BUSCA], "… (truncado)"]
+    return "\n".join(achados) or "(nenhum resultado)"
+
+
 _FERRAMENTAS: dict[str, Callable[..., str]] = {
     "read_file": ferramenta_read_file,
     "list_dir": ferramenta_list_dir,
     "write_file": ferramenta_write_file,
     "edit_file": ferramenta_edit_file,
     "run_command": ferramenta_run_command,
+    "search_text": ferramenta_search_text,
+    "find_files": ferramenta_find_files,
 }
 
 _TOOL_SCHEMAS: list[dict[str, Any]] = [
@@ -133,6 +192,42 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "properties": {
                     "path": {"type": "string", "description": "Caminho relativo (default: raiz)"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_text",
+            "description": (
+                "Busca um padrão (regex) linha a linha nos arquivos do workspace "
+                "(equivalente ao Grep) — use ANTES de ler arquivo por arquivo às cegas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Regex a buscar"},
+                    "path": {"type": "string", "description": "Subpasta (default: raiz)"},
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_files",
+            "description": (
+                "Busca arquivos por padrão de nome/glob (ex.: '*.py', '**/*.js') no "
+                "workspace — equivalente ao Glob."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Padrão glob (ex.: '**/*.py')"},
+                    "path": {"type": "string", "description": "Subpasta (default: raiz)"},
+                },
+                "required": ["pattern"],
             },
         },
     },
@@ -259,6 +354,9 @@ _INSTRUCOES_BASE = """\
 Você é um agente de desenvolvimento com acesso a um workspace de arquivos via tools.
 
 Regras obrigatórias de uso das tools:
+- Prefira search_text (grep por regex) e find_files (glob por nome) a navegar
+  list_dir pasta por pasta às cegas — são mais rápidas pra achar onde algo
+  está definido antes de ler o arquivo inteiro.
 - NUNCA edite ou escreva um arquivo sem antes ler o conteúdo atual com read_file
   (ou confirmar com list_dir que ele não existe, se for criar um novo).
 - Em edit_file, old_string deve ser copiado EXATAMENTE do conteúdo real do

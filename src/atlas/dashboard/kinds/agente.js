@@ -9,10 +9,11 @@
 registerRender('Agente', function renderAgente(r, container) {
   const name = r.name;
   const s = r.spec || {};
+  const st = r.status || {};
 
   container.innerHTML = _agenteShell(r);
-  _wireAgente(name, s, container);
-  _loadAgenteTab(name, s, 'chat', container);
+  _wireAgente(name, s, st, container);
+  _loadAgenteTab(name, s, st, 'chat', container);
   _updateCuradoriaBadge(name, container);
 });
 
@@ -61,24 +62,25 @@ function _agenteShell(r) {
     <div class="ag-tabbar">
       <button class="ag-tab active" data-tab="chat">💬 Chat</button>
       <button class="ag-tab" data-tab="curadoria">🔍 Curadoria<span class="ag-cur-badge" id="ag-cur-badge-${esc(r.name)}"></span></button>
+      <button class="ag-tab" data-tab="auto">🤖 Auto</button>
       <button class="ag-tab" data-tab="config">⚙️ Config</button>
     </div>
     <div class="ag-body" id="ag-body-${esc(r.name)}"></div>
   </div>`;
 }
 
-function _wireAgente(name, s, container) {
+function _wireAgente(name, s, st, container) {
   container.querySelectorAll('.ag-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.ag-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      _loadAgenteTab(name, s, btn.dataset.tab, container);
+      _loadAgenteTab(name, s, st, btn.dataset.tab, container);
     });
   });
 }
 
 // ── Tab dispatcher ────────────────────────────────────────────────────────────
-function _loadAgenteTab(name, s, tab, container) {
+function _loadAgenteTab(name, s, st, tab, container) {
   const body = container.querySelector(`#ag-body-${CSS.escape(name)}`);
   if (!body) return;
   if (tab === 'chat') {
@@ -86,9 +88,45 @@ function _loadAgenteTab(name, s, tab, container) {
     else _tabChat(name, s, body);
   } else if (tab === 'curadoria') {
     _tabCuradoria(name, body, container);
+  } else if (tab === 'auto') {
+    _tabAuto(name, s, st, body);
   } else if (tab === 'config') {
     _tabAgenteConfig(name, body);
   }
+}
+
+// ── Tab: Auto mode (ADR-0044) ──────────────────────────────────────────────────
+// Painel de visibilidade do modo=code: motor/modelo real, teto de turnos,
+// gate de curadoria, workspace e tools — pedido do PO ("UI rica... erros
+// simples não me travarem", visibilidade de desenvolvimento via a própria API).
+function _tabAuto(name, s, st, el) {
+  const { motor, modelo } = _motorEModelo(s, st);
+  const isCode = s.modo === 'code';
+  const maxTurnos = s.max_turnos || 40;
+  const gateOn = String(s.gate ?? true).trim().toLowerCase() !== 'false';
+  const workspace = s.workspace || '(raiz do projeto — amplo)';
+  const allowed = s.allowed_tools || '(todas)';
+  const denied = s.denied_tools || '(nenhuma)';
+  const engineLabel = motor === 'ollama' ? '🦙 Ollama (local, custo 0)'
+    : motor === 'claude' ? '⚡ Claude'
+    : `⚙️ ${esc(modelo)}`;
+
+  el.innerHTML = `<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    ${!isCode ? '<div class="ag-hint">Auto mode só se aplica a agentes em <strong>modo=code</strong>.</div>' : ''}
+    <div class="ag-auto-card">
+      <div class="ag-auto-row"><span>Motor real</span><strong>${engineLabel}</strong></div>
+      <div class="ag-auto-row"><span>Modelo</span><strong>${esc(modelo)}</strong></div>
+      <div class="ag-auto-row"><span>Máx. turnos</span><strong>${esc(String(maxTurnos))}</strong></div>
+      <div class="ag-auto-row"><span>Gate de curadoria</span><strong>${gateOn ? '🔒 ativo — revisão humana antes de promover' : '🔓 desativado — auto-aplica'}</strong></div>
+      <div class="ag-auto-row"><span>Workspace</span><strong>${esc(workspace)}</strong></div>
+      <div class="ag-auto-row"><span>Tools permitidas</span><strong>${esc(allowed)}</strong></div>
+      <div class="ag-auto-row"><span>Tools negadas</span><strong>${esc(denied)}</strong></div>
+      <div class="ag-auto-row"><span>Diretrizes do projeto</span><strong>✅ CLAUDE.md injetado no system prompt</strong></div>
+    </div>
+    <div class="ag-hint">Erro de UMA tool nunca trava o run (evento <code>warning</code>, não <code>error</code>)
+      — o modelo vê o erro e tenta de novo sozinho. Só falha do endpoint em si encerra o run.
+      Ajuste teto de turnos/gate/tools na aba ⚙️ Config.</div>
+  </div>`;
 }
 
 // ── Tab: Chat ─────────────────────────────────────────────────────────────────
