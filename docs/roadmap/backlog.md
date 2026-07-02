@@ -209,6 +209,7 @@ atualizado-em: 2026-06-23
 | E9-02 | **Sub-projeto B** — qualidade AI-augmented: refino em lotes maiores + comparador opt-in (`spec.comparador`) | decidido; a implementar | (ADR a criar) |
 | E9-03 | Agente **Editor** especializado (Kind `Agente`) + **LLM-as-judge** opcional (crítica→revisão) | proposto | (ADR a criar) |
 | E9-04 | Configs **modulares de qualidade** (quanto/qual IA revisa por estágio; níveis rascunho/padrão/editorial) | proposto | (ADR a criar) |
+| E9-06 | **Pilar 1 — job pausável/reagendável por escassez** (core Kind-agnóstico): pausa+checkpoint e **retoma sozinho** após a janela de quota (`spec.janela_retomada_seg`, default 5h) | **feito** — `retomada.py` + varredura no loop; tradução parcial pausa e reagenda | [ADR-0035](../arquitetura/adr/ADR-0035-job-pausavel-reagendavel.md) |
 
 ## Dívida de documentação
 | ID | Item | Estado |

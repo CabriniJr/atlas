@@ -85,6 +85,7 @@ atualizado-em: 2026-06-23
 | [0031](ADR-0031-traducao-mt-mais-refino.md) | **Tradução em 2 estágios** (MT bruta via deep-translator + refino por LLM; modular, Haiku default, resumível) | **aceito** | Pedido do PO (timeout/tokens; refino sobre bruto) |
 | [0032](ADR-0032-export-traducao-md-epub.md) | **Export `.md`/`.epub`** (serializa PDF traduzido → Markdown; EPUB via pandoc) | **aceito** | Pedido do PO ("out epub/md, reusar programa que já faz isso") |
 | [0033](ADR-0033-render-editorial-hibrido.md) | **Render editorial ipsis-litteris** (híbrido por papel: prosa reflui + página extra; encaixados fit; imagens intactas; notas de rodapé) | **aceito** | Norte do PO (PDF nível editorial p/ democratizar artigos) |
+| [0035](ADR-0035-job-pausavel-reagendavel.md) | **Job pausável/reagendável por escassez** (mid-run): pausa+checkpoint e retoma sozinho após a janela de quota; capacidade genérica do núcleo | **aceito** | PO: "parar por escassez e terminar sozinho daqui X horas" |
 
 ## Lastro
 
