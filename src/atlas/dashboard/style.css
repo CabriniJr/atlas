@@ -624,6 +624,7 @@ body[data-view="home"] #home-view{display:flex}
 .ag-badge{padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600}
 .ag-badge.claude{background:#4a5568;color:#e2e8f0}
 .ag-badge.ollama{background:#2d6a4f;color:#d8f3dc}
+.ag-badge.provider{background:#2f4a5c;color:#cde8f6}
 .ag-badge.code{background:#5a2e8c;color:#e9d8ff}
 .ag-badge.cost{background:#3a2e10;color:#ffd98a;border:1px solid #6b5520}
 .ag-run-badge{font-size:10px;color:#b48ce8;padding:1px 6px;border:1px solid #5a2e8c;border-radius:10px;animation:pulse 1.5s ease-in-out infinite}

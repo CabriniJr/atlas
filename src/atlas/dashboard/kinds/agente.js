@@ -16,12 +16,28 @@ registerRender('Agente', function renderAgente(r, container) {
   _updateCuradoriaBadge(name, container);
 });
 
+// Resolve motor/modelo pra exibição (ADR-0042: motor pode ser claude OU ollama,
+// direto no spec ou via LLMProvider referenciado — o front não resolve o
+// provider, então usa o último modelo realmente usado (status.ultimo_modelo,
+// escrito por _registrar_gasto_agente) como fonte de verdade quando existe;
+// sem histórico ainda, mostra o nome do provider em vez de assumir "claude".
+function _motorEModelo(s, st) {
+  const modeloReal = (st && st.ultimo_modelo) || s.modelo || '';
+  if (modeloReal) {
+    return { motor: modeloReal.startsWith('claude') ? 'claude' : 'ollama', modelo: modeloReal };
+  }
+  if (s.provider) {
+    return { motor: 'provider', modelo: s.provider };
+  }
+  const motor = s.motor || 'claude';
+  return { motor, modelo: motor === 'ollama' ? 'gemma4' : 'claude-haiku-4-5-20251001' };
+}
+
 // ── Shell ─────────────────────────────────────────────────────────────────────
 function _agenteShell(r) {
   const s = r.spec || {};
   const st = r.status || {};
-  const motor = s.motor || 'claude';
-  const modelo = s.modelo || s.provider || (motor === 'ollama' ? 'gemma4' : 'claude-haiku-4-5-20251001');
+  const { motor, modelo } = _motorEModelo(s, st);
   const nivel = s.nivel_contexto || 'none';
   const runs = st.runs || 0;
   const custo = st.custo_total_usd != null ? Number(st.custo_total_usd) : null;
@@ -230,12 +246,13 @@ const _codeRuns = {};
 function _tabChatCode(name, s, el) {
   if (!_codeHist[name]) _codeHist[name] = [];
   const hist = _codeHist[name];
-  const modelo = s.modelo || 'claude-sonnet-4-6';
+  const { motor, modelo } = _motorEModelo(s, null);
+  const label = motor === 'ollama' ? '🦙 Ollama' : motor === 'provider' ? `⚙️ ${esc(modelo)}` : '⚡ Claude Code';
   const activeRun = _codeRuns[name] || null;
 
   el.innerHTML = `<div class="ag-chat-wrap">
     <div class="ag-toolbar">
-      <span class="ag-badge code">⚡ Claude Code</span>
+      <span class="ag-badge code">${label}</span>
       <span style="color:var(--muted);font-size:11px">${esc(modelo)}</span>
       ${activeRun && !activeRun.done
         ? `<span class="ag-run-badge" id="agc-runbadge-${esc(name)}">⏳ executando…</span>`
