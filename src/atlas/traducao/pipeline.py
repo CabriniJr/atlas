@@ -14,7 +14,7 @@ import fitz
 
 from atlas.ia import invocar as _invocar_padrao
 from atlas.traducao.extracao import extrair_pagina
-from atlas.traducao.remontagem import remontar_pagina
+from atlas.traducao.remontagem import remontar_documento
 from atlas.traducao.traducao_ia import (
     CacheTraducao,
     ConfigTraducao,
@@ -113,6 +113,7 @@ def traduzir_pdf(
 
     blocos_traduzidos = 0
     esgotado = False
+    render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
     for i in range(total):
         page = doc[i]
         blocos = extrair_pagina(page, i)
@@ -122,7 +123,7 @@ def traduzir_pdf(
         )
         esgotado = esgotado or esg
         blocos_traduzidos += len(traducoes)
-        remontar_pagina(page, blocos, traducoes)
+        render_paginas[i] = (blocos, traducoes)  # render editorial acontece no fim
         if cache_path:
             cache.salvar(cache_path)  # checkpoint por página ⇒ resume real (ADR-0031)
         prog = ProgressoTraducao(
@@ -130,6 +131,9 @@ def traduzir_pdf(
         )
         if on_progress:
             on_progress(prog)
+    # Render editorial ao fim (determinístico): reflow de prosa + páginas de
+    # continuação sem embaralhar os índices durante a tradução (ADR-0033).
+    remontar_documento(doc, render_paginas, min_fonte_pct=cfg.min_fonte_pct)
     doc.save(destino, garbage=4, deflate=True)
     doc.close()
     return ProgressoTraducao(

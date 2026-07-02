@@ -45,3 +45,35 @@ def test_traduz_pdf_gera_saida_e_reporta_progresso(tmp_path):
     assert progresso == [1, 2]
     assert out.exists()
     assert "TRADUZIDO" in fitz.open(out)[0].get_text()
+
+
+def test_pipeline_usa_render_editorial_gera_continuacao(tmp_path):
+    """Prosa + tradução gigante deve gerar página de continuação via o pipeline."""
+    import re
+
+    from atlas.traducao.pipeline import traduzir_pdf
+    from atlas.traducao.traducao_ia import ConfigTraducao
+
+    src = tmp_path / "src.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_textbox(
+        fitz.Rect(72, 90, 520, 200), "Original paragraph. " * 12,
+        fontname="helv", fontsize=11,
+    )
+    doc.save(str(src))
+    doc.close()
+
+    def invocar_gigante(prompt, modelo=None, timeout=60, motor="claude"):
+        ids = re.findall(r"\[\[(\d+)\]\]", prompt)
+        return "\n".join(f"[[{i}]] " + ("Tradução enorme. " * 120) for i in ids)
+
+    out = tmp_path / "out.pdf"
+    traduzir_pdf(
+        str(src), str(out), ConfigTraducao(),
+        invocar_fn=invocar_gigante,
+        bruto_fn=lambda textos, cfg: ["BRUTO"] * len(textos),
+    )
+    res = fitz.open(str(out))
+    assert res.page_count > 1, "render editorial deveria ter gerado página de continuação"
+    res.close()

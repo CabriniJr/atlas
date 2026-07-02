@@ -60,6 +60,24 @@ def remontar_pagina(page, blocos: list[BlocoTraducao], traducoes: dict[int, str]
             size -= 0.5  # não coube: encolhe e tenta de novo
 
 
+def _maior_fonte_que_cabe(page, rect: fitz.Rect, texto: str, inicio: float) -> float:
+    """Encolhe de ``inicio`` até ``_MIN_FONTSIZE`` para o texto caber em ``rect``.
+
+    Fit-in-place para encaixados que não cabem nem no piso de legibilidade: melhor
+    uma legenda menor no lugar certo do que truncada/repaginada (ADR-0033).
+    """
+    fs = inicio
+    while fs > _MIN_FONTSIZE:
+        tmp = fitz.open()
+        tp = tmp.new_page(width=page.rect.width, height=page.rect.height)
+        sobra = tp.insert_textbox(rect, texto, fontname=_FONTE_FALLBACK, fontsize=fs, align=0)
+        tmp.close()
+        if sobra >= 0:
+            return fs
+        fs -= 0.5
+    return _MIN_FONTSIZE
+
+
 def _traduzivel(b: BlocoTraducao, traducoes: dict[int, str]) -> bool:
     """Bloco que deve ser redigido/reescrito: tem tradução e não é imutável/skip."""
     return (not b.skip) and b.papel != "imutavel" and b.id in traducoes
@@ -103,18 +121,14 @@ def remontar_documento(
                                     color=color, align=0)
                 if resto.strip():
                     overflow.append(resto)
-            else:  # encaixado: fit-in-place com piso de legibilidade
+            else:  # encaixado: fit-in-place — nunca transborda (legenda/label/célula)
+                # Preferência: caber com fonte ≥ piso de legibilidade. Se não couber
+                # nem no piso, encolhe até _MIN_FONTSIZE (fitting manda; não trunca).
                 fs = fontsize_que_cabe(page, rect, texto, base, min_fonte_pct, _FONTE_FALLBACK)
-                if fs is None:  # nem no piso coube → pagina como prosa
-                    piso = base * min_fonte_pct / 100.0
-                    cabe, resto = paginar_prosa(page, rect, texto, piso, _FONTE_FALLBACK)
-                    page.insert_textbox(rect, cabe, fontname=_FONTE_FALLBACK, fontsize=piso,
-                                        color=color, align=0)
-                    if resto.strip():
-                        overflow.append(resto)
-                else:
-                    page.insert_textbox(rect, texto, fontname=_FONTE_FALLBACK, fontsize=fs,
-                                        color=color, align=0)
+                if fs is None:
+                    fs = _maior_fonte_que_cabe(page, rect, texto, base * min_fonte_pct / 100.0)
+                page.insert_textbox(rect, texto, fontname=_FONTE_FALLBACK, fontsize=fs,
+                                    color=color, align=0)
 
         # 3) página(s) de continuação para o transbordo (preserva ordem de leitura).
         _inserir_continuacao(doc, idx, overflow)
