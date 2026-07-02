@@ -78,3 +78,24 @@ def test_fidelidade_ordem_e_figuras(tmp_path):
     assert "Alfa" in t and "Beta" in t
     assert t.index("Alfa") < t.index("Beta")  # ordem de leitura preservada
     doc.close()
+
+
+def test_nota_de_rodape_para_termo_mantido(tmp_path):
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Original mentions Kubernetes here.", fontsize=11)
+    src = tmp_path / "s.pdf"
+    doc.save(str(src))
+    doc.close()
+
+    doc = fitz.open(str(src))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: "O texto menciona Kubernetes aqui." for b in blocos if not b.skip}
+    notas = {
+        b.id: [{"termo": "Kubernetes", "glosa": "orquestrador de contêineres"}]
+        for b in blocos if not b.skip
+    }
+    remontar_documento(doc, {0: (blocos, traducoes)}, min_fonte_pct=90, notas=notas)
+    txt = doc[0].get_text()
+    assert "orquestrador de contêineres" in txt  # glosa impressa ao pé
+    doc.close()

@@ -84,7 +84,10 @@ def _traduzivel(b: BlocoTraducao, traducoes: dict[int, str]) -> bool:
 
 
 def remontar_documento(
-    doc, paginas: dict[int, tuple[list[BlocoTraducao], dict[int, str]]], min_fonte_pct: int = 90
+    doc,
+    paginas: dict[int, tuple[list[BlocoTraducao], dict[int, str]]],
+    min_fonte_pct: int = 90,
+    notas: dict[int, list[dict]] | None = None,
 ) -> None:
     """Remonta o doc in-place em nível editorial (ADR-0033).
 
@@ -108,9 +111,12 @@ def remontar_documento(
 
         # 2) reinsere por papel; prosa que transborda vira overflow.
         overflow: list[str] = []
+        glosas: list[dict] = []
         for b in blocos:
             if not _traduzivel(b, traducoes):
                 continue
+            if notas and b.id in notas:
+                glosas.extend(notas[b.id])
             texto = traducoes[b.id]
             base = b.spans[0].size if b.spans else 11.0
             color = _cor_rgb(b.spans[0].color if b.spans else 0)
@@ -130,8 +136,29 @@ def remontar_documento(
                 page.insert_textbox(rect, texto, fontname=_FONTE_FALLBACK, fontsize=fs,
                                     color=color, align=0)
 
-        # 3) página(s) de continuação para o transbordo (preserva ordem de leitura).
+        # 3) notas de rodapé (termos mantidos no idioma de origem) ao pé da página.
+        _inserir_rodape(page, glosas)
+
+        # 4) página(s) de continuação para o transbordo (preserva ordem de leitura).
         _inserir_continuacao(doc, idx, overflow)
+
+
+def _inserir_rodape(page, glosas: list[dict]) -> None:
+    """Escreve as glosas numeradas ao pé da página, em fonte pequena (ADR-0033)."""
+    if not glosas:
+        return
+    largura, altura = page.rect.width, page.rect.height
+    linhas = [
+        f"{i}. {g.get('termo', '')} — {g.get('glosa', '')}".strip(" —")
+        for i, g in enumerate(glosas, 1)
+    ]
+    corpo = "\n".join(linhas)
+    # faixa ~ (n+1) linhas de 9pt acima da margem inferior; separador fino em cima.
+    altura_faixa = 9 * (len(linhas) + 1)
+    topo = altura - _MARGEM / 2 - altura_faixa
+    page.draw_line((_MARGEM, topo - 2), (largura / 2, topo - 2), width=0.5)
+    rect = fitz.Rect(_MARGEM, topo, largura - _MARGEM, altura - _MARGEM / 4)
+    page.insert_textbox(rect, corpo, fontname=_FONTE_FALLBACK, fontsize=8, align=0)
 
 
 def _inserir_continuacao(doc, idx: int, overflow: list[str]) -> None:
