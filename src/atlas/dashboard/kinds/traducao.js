@@ -36,10 +36,41 @@ function _trShell(r) {
       <input type="file" id="tr-file" accept="application/pdf" style="display:none">
       <button class="btn" id="tr-upload">⬆️ Enviar PDF</button>
       <button class="btn" id="tr-estimar" ${origem ? '' : 'disabled'}>💵 Estimar</button>
+      <button class="btn" id="tr-config-toggle">⚙️ Config</button>
+      <button class="btn" id="tr-render" title="Re-renderiza o PDF a partir do cache já pago — não gasta IA" ${origem ? '' : 'disabled'}>🎨 Só re-renderizar (grátis)</button>
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
     </div>
+    <div id="tr-config" style="display:none">${_trConfig(s)}</div>
     <div id="tr-estimativa"></div>
     <div id="tr-progresso">${_trProgresso(st, r.name)}</div>
+  </div>`;
+}
+
+// Painel de controle da criação (ADR-0034/0035 + E9): modelo por estágio e params.
+// spec.traducao afeta o cache de IA; spec.render (min_fonte/notas) não (E9-05).
+function _trConfig(s) {
+  const v = (k, d) => (s[k] != null ? s[k] : d);
+  const bool = (k, d) => (v(k, d) === true || v(k, d) === 'true');
+  const row = (lbl, inner) => `<label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;margin:4px 0"><span style="color:var(--muted)">${lbl}</span>${inner}</label>`;
+  const inp = (id, val, ph = '', w = 150) => `<input id="${id}" value="${esc(String(val ?? ''))}" placeholder="${esc(ph)}" style="width:${w}px">`;
+  const chk = (id, on) => `<input type="checkbox" id="${id}" ${on ? 'checked' : ''}>`;
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Tradução (afeta a IA — mudar re-traduz)</div>
+    ${row('Motor', `<select id="cfg-motor" style="width:150px"><option ${v('motor','claude')==='claude'?'selected':''}>claude</option><option ${v('motor')==='ollama'?'selected':''}>ollama</option></select>`)}
+    ${row('Modelo (refino)', inp('cfg-modelo', v('modelo',''), 'default'))}
+    ${row('Refinar (LLM)', chk('cfg-refino', bool('refino', true)))}
+    ${row('Blocos por lote', inp('cfg-lote', v('lote_refino', 60), '', 80))}
+    ${row('Comparador de consistência', chk('cfg-comparador', bool('comparador', false)))}
+    ${row('Modelo do comparador', inp('cfg-modelo-comp', v('modelo_comparador',''), 'default (Opus)'))}
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Render (não gasta IA — grátis iterar)</div>
+    ${row('Fonte mínima (% legibilidade)', inp('cfg-minfonte', v('min_fonte_pct', 90), '', 80))}
+    ${row('Notas de rodapé (termos mantidos)', chk('cfg-notas', bool('notas_rodape', false)))}
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">Automação (ADR-0035)</div>
+    ${row('Retomada após escassez (segundos)', inp('cfg-janela', v('janela_retomada_seg', 18000), '5h = 18000', 100))}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" id="tr-config-save" style="border-color:var(--green);color:var(--green)">💾 Salvar config</button>
+      <span id="tr-config-msg" style="font-size:12px;color:var(--muted);align-self:center"></span>
+    </div>
   </div>`;
 }
 
@@ -68,6 +99,19 @@ function _trProgresso(st, name) {
   if (!fase) return '';
   if (fase === 'erro') {
     return `<div style="color:var(--red);font-size:13px">⚠️ ${esc(st.erro || 'falhou')}</div>${_trLog(st)}`;
+  }
+  if (fase === 'pausado' || fase === 'retomando') {
+    const hora = st.retoma_em ? new Date(st.retoma_em).toLocaleTimeString().slice(0, 5) : '';
+    const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
+    const retomando = fase === 'retomando';
+    const cabec = retomando
+      ? `<div style="color:var(--blue);font-size:13px">🔄 retomando de onde parou…</div>`
+      : `<div style="color:var(--yellow,#d9a441);font-size:13px">⏸ pausado por escassez de token — ${pp} pág prontas<br><span style="font-size:12px;color:var(--muted)">retoma sozinho${hora ? ' às ' + esc(hora) : ''} (ADR-0035); ou retome agora.</span></div>`;
+    const btns = `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      ${retomando ? '' : `<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="document.getElementById('tr-traduzir').click()">▶ Retomar agora</button>`}
+      ${st.saida ? `<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar (parcial)</button>` : ''}
+    </div>`;
+    return `${cabec}${btns}${_trLog(st)}`;
   }
   if (fase === 'pronto' || fase === 'parcial') {
     const parcial = fase === 'parcial';
@@ -149,7 +193,7 @@ function _trWire(name, container) {
     estBtn.disabled = false;
   };
 
-  const ATIVO = new Set(['preparando', 'traduzindo']);
+  const ATIVO = new Set(['preparando', 'traduzindo', 'retomando']);
   let polling = null;
   function _autoScrollLog() {
     const el = container.querySelector('#tr-log');
@@ -168,25 +212,67 @@ function _trWire(name, container) {
     } catch (e) { /* mantém tentando */ }
   }
 
-  if (trBtn) trBtn.onclick = async () => {
+  // Config: toggle + salvar (PUT do spec merjado). spec.render não invalida o cache.
+  const cfgToggle = container.querySelector('#tr-config-toggle');
+  const cfgBox = container.querySelector('#tr-config');
+  if (cfgToggle && cfgBox) cfgToggle.onclick = () => {
+    cfgBox.style.display = cfgBox.style.display === 'none' ? 'block' : 'none';
+  };
+  const cfgSave = container.querySelector('#tr-config-save');
+  if (cfgSave) cfgSave.onclick = async () => {
+    const msg = container.querySelector('#tr-config-msg');
+    const num = (id, d) => { const n = parseInt(container.querySelector(id).value, 10); return isNaN(n) ? d : n; };
+    const patch = {
+      motor: container.querySelector('#cfg-motor').value,
+      modelo: container.querySelector('#cfg-modelo').value.trim(),
+      refino: container.querySelector('#cfg-refino').checked,
+      lote_refino: num('#cfg-lote', 60),
+      comparador: container.querySelector('#cfg-comparador').checked,
+      modelo_comparador: container.querySelector('#cfg-modelo-comp').value.trim(),
+      min_fonte_pct: num('#cfg-minfonte', 90),
+      notas_rodape: container.querySelector('#cfg-notas').checked,
+      janela_retomada_seg: num('#cfg-janela', 18000),
+    };
+    msg.textContent = 'salvando…';
+    try { await _trPutSpec(name, patch); msg.textContent = '✓ salvo'; }
+    catch (err) { msg.textContent = '⚠️ ' + err.message; }
+  };
+
+  async function iniciar(renderOnly) {
     trBtn.disabled = true;
-    progBox.innerHTML = _trProgresso({ fase: 'preparando', progresso_pct: 0, atividade: 'iniciando…', iniciado_em: new Date().toISOString(), log: [] }, name);
+    const rBtn = container.querySelector('#tr-render'); if (rBtn) rBtn.disabled = true;
+    const ativ = renderOnly ? 're-renderizando (sem IA)…' : 'iniciando…';
+    progBox.innerHTML = _trProgresso({ fase: 'preparando', progresso_pct: 0, atividade: ativ, iniciado_em: new Date().toISOString(), log: [] }, name);
     try {
+      await _trPutSpec(name, { somente_render: !!renderOnly });  // flag lida pela rotina
       await apiFetch(API + '/_traduzir', { method: 'POST', body: JSON.stringify({ label: name }) });
       if (!polling) { polling = setInterval(poll, 1500); poll(); }
     } catch (err) {
       progBox.innerHTML = `<div style="color:var(--red);font-size:13px">erro: ${esc(err.message)}</div>`;
-      trBtn.disabled = false;
+      trBtn.disabled = false; if (rBtn) rBtn.disabled = false;
     }
-  };
+  }
+
+  if (trBtn) trBtn.onclick = () => iniciar(false);
+  const rBtn = container.querySelector('#tr-render');
+  if (rBtn) rBtn.onclick = () => iniciar(true);
 
   // Se já estava em andamento ao abrir, retoma o polling.
   const cur = container.querySelector('#tr-progresso').textContent || '';
-  if (cur.includes('traduzindo') || cur.includes('preparando') || cur.includes('detectando')) {
+  if (cur.includes('traduzindo') || cur.includes('preparando') || cur.includes('detectando') || cur.includes('retomando')) {
     if (trBtn) trBtn.disabled = true;
     polling = setInterval(poll, 1500);
   }
   _autoScrollLog();
+}
+
+// Salva o spec merjando um patch (PUT do recurso inteiro, como o editor genérico).
+async function _trPutSpec(name, patch) {
+  const r = await apiFetch(API + '/Traducao/' + encodeURIComponent(name));
+  const spec = { ...(r.spec || {}), ...patch };
+  const labels = r.labels || {};
+  await apiFetch(API + '/Traducao/' + encodeURIComponent(name),
+    { method: 'PUT', body: JSON.stringify({ labels, spec, status: r.status || {} }) });
 }
 
 // Baixa o PDF traduzido (blob + auth); global p/ o onclick do botão de progresso.
