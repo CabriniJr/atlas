@@ -72,24 +72,55 @@ def _cor_hex(color: int) -> str:
     return f"#{(color & 0xFFFFFF):06x}"
 
 
+# Piso de largura/altura útil: abaixo disso a margem calculada não é confiável
+# (documento com pouco texto/páginas esparsas) — evita coluna estreita demais,
+# que faz o texto traduzido (mais longo) colidir/paginar em cima do folio.
+_MIN_CONTEUDO_LARGURA = 300.0
+_MIN_CONTEUDO_ALTURA = 400.0
+
+
 def _geometria(doc, paginas) -> dict:
-    """Tamanho da página e margens medianas do texto (para o @page do CSS)."""
+    """Tamanho da página e margens do texto (para o @page do CSS).
+
+    ``left``/``top`` usam a mediana **por página** de onde o texto *começa* — um
+    parágrafo normal quase sempre começa perto da margem real, então isso é
+    robusto mesmo em páginas com só linhas curtas.
+
+    ``right``/``bottom`` são diferentes: só uma linha que *alcança* a borda real
+    revela a margem verdadeira (uma página de sumário/lista/código, cheia de
+    linhas curtas, nunca chega perto). Por isso são calculados a partir de um
+    **quantil alto de todos os blocos do documento** (não mediana por página) —
+    com dados suficientes, algumas linhas longas em algum lugar do livro chegam
+    perto da margem real. Documentos com pouquíssimo texto (poucos blocos) não
+    têm dado suficiente pra confiar nisso, então há um piso mínimo de largura/
+    altura útil (``_MIN_CONTEUDO_*``) que evita colunas absurdamente estreitas —
+    e a paginação/wrap excessivo (texto colidindo com o folio) que isso causava.
+    """
     pw, ph = doc[0].rect.width, doc[0].rect.height
-    lefts, rights, tops, bots = [], [], [], []
+    lefts, tops = [], []
+    direitas_abs, fundos_abs = [], []
     for idx, (blocos, _tr) in paginas.items():  # noqa: B007 — idx documenta o loop
         uteis = [b for b in blocos if not b.skip and b.bbox and not _e_folio(b, ph)]
         if not uteis:
             continue
         lefts.append(min(b.bbox[0] for b in uteis))
-        rights.append(pw - max(b.bbox[2] for b in uteis))
         tops.append(min(b.bbox[1] for b in uteis))
-        bots.append(ph - max(b.bbox[3] for b in uteis))
+        direitas_abs.extend(b.bbox[2] for b in uteis)
+        fundos_abs.extend(b.bbox[3] for b in uteis)
     med = lambda xs, d: statistics.median(xs) if xs else d  # noqa: E731
-    return {
-        "pw": pw, "ph": ph,
-        "left": max(24.0, med(lefts, 72)), "right": max(24.0, med(rights, 72)),
-        "top": max(24.0, med(tops, 60)), "bottom": max(24.0, med(bots, 60)),
-    }
+    quantil_alto = lambda xs, d: sorted(xs)[max(0, round(len(xs) * 0.95) - 1)] if xs else d  # noqa: E731
+
+    left = max(24.0, med(lefts, 72))
+    top = max(24.0, med(tops, 60))
+    right = max(24.0, pw - quantil_alto(direitas_abs, pw - 72))
+    bottom = max(24.0, ph - quantil_alto(fundos_abs, ph - 60))
+
+    if pw - left - right < _MIN_CONTEUDO_LARGURA:
+        right = max(24.0, pw - left - _MIN_CONTEUDO_LARGURA)
+    if ph - top - bottom < _MIN_CONTEUDO_ALTURA:
+        bottom = max(24.0, ph - top - _MIN_CONTEUDO_ALTURA)
+
+    return {"pw": pw, "ph": ph, "left": left, "right": right, "top": top, "bottom": bottom}
 
 
 def _imagens(doc, page) -> list[tuple]:
