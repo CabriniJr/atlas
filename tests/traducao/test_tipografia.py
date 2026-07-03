@@ -50,6 +50,24 @@ def test_clusters_titulo_sem_heading_e_vazio():
     assert clusters_titulo([11, 11, 11], corpo_sz=11) == []
 
 
+def test_clusters_titulo_ignora_tamanho_de_uma_ocorrencia_so():
+    """Frequência-awareness (ADR-0041): um tamanho grande que aparece UMA vez
+    (título de capa, rótulo de figura) é ruído, não um nível de heading. Sem o
+    filtro, a capa (31.5pt, 1x) roubava a tier h1 e o cabeçalho de seção
+    (18.9pt, muitas vezes) — o nível de conteúdo de verdade — era descartado."""
+    # capa 31.5 (1x) + parte 28 (3x) + capítulo 25 (5x) + seção 18.9 (20x)
+    tamanhos = [31.5] + [28.0] * 3 + [25.0] * 5 + [18.9] * 20
+    clusters = clusters_titulo(tamanhos, corpo_sz=10.5)
+    assert 31.5 not in clusters  # capa (1 ocorrência) não vira tier
+    assert clusters == [28.0, 25.0, 18.9]  # parte/capítulo/seção
+
+
+def test_clusters_titulo_max_niveis_configuravel():
+    tamanhos = [28.0] * 3 + [25.0] * 3 + [20.0] * 3 + [16.0] * 3
+    assert clusters_titulo(tamanhos, corpo_sz=10.5, max_niveis=4) == [28.0, 25.0, 20.0, 16.0]
+    assert clusters_titulo(tamanhos, corpo_sz=10.5, max_niveis=2) == [28.0, 25.0]
+
+
 def test_nivel_titulo_bate_no_cluster_mais_proximo():
     clusters = [24.0, 18.0, 14.0]
     assert nivel_titulo(24.2, clusters) == "h1"
@@ -77,7 +95,11 @@ def test_extrai_fonte_real_embutida(tmp_path):
 
     fonte_path = str(
         __import__("pathlib").Path(__file__).resolve().parents[2]
-        / "src" / "atlas" / "traducao" / "fonts" / "LiberationSans-Regular.ttf"
+        / "src"
+        / "atlas"
+        / "traducao"
+        / "fonts"
+        / "LiberationSans-Regular.ttf"
     )
     doc = fitz.open()
     page = doc.new_page()
@@ -132,9 +154,11 @@ def test_bloco_prosa_com_poucos_termos_courier_nao_e_mono():
         _SpanFake("mycompany.com/someannotation", "Courier"),
         _SpanFake(" with the value ", "NewBaskerville-Roman"),
         _SpanFake("foo", "Courier"),
-        _SpanFake(" bar. It's a good idea to use this format for annotation keys "
-                   "to prevent key collisions across tools and libraries.",
-                   "NewBaskerville-Roman"),
+        _SpanFake(
+            " bar. It's a good idea to use this format for annotation keys "
+            "to prevent key collisions across tools and libraries.",
+            "NewBaskerville-Roman",
+        ),
     ]
     assert bloco_e_mono(spans) is False
 

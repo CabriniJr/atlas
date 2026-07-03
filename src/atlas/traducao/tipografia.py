@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import re
+from collections import Counter
 from collections.abc import Callable
 
 _RE_ENFASE = re.compile(r"\*\*(.+?)\*\*|_(.+?)_", re.DOTALL)
@@ -31,12 +32,27 @@ def converter_enfase(texto: str, escapar: Callable[[str], str]) -> str:
     return "".join(partes)
 
 
-def clusters_titulo(tamanhos: list[float], corpo_sz: float) -> list[float]:
-    """Até 3 tamanhos-âncora (h1 > h2 > h3), do maior pro menor, agrupando os
-    tamanhos de fonte "grandes" do documento (>= 1.15x o corpo) por proximidade
-    (gap <= 0.75pt cai no mesmo cluster). Documento sem heading grande ⇒ ``[]``
-    (nenhum nível é tratado como título)."""
-    grandes = sorted({round(s, 1) for s in tamanhos if s >= corpo_sz * 1.15}, reverse=True)
+def clusters_titulo(
+    tamanhos: list[float], corpo_sz: float, max_niveis: int = 3, min_ocorrencias: int = 2
+) -> list[float]:
+    """Até ``max_niveis`` tamanhos-âncora (h1 > h2 > h3…), do maior pro menor,
+    agrupando os tamanhos de fonte "grandes" do documento (>= 1.15x o corpo) por
+    proximidade (gap <= 0.75pt cai no mesmo cluster). Documento sem heading
+    grande ⇒ ``[]`` (nenhum nível é tratado como título).
+
+    **Filtro de frequência (ADR-0041 fix):** um tamanho só define um NÍVEL de
+    heading se RECORRE (>= ``min_ocorrencias`` blocos) — um tamanho que aparece
+    uma vez é ruído (título de capa, rótulo de figura, variação de render),
+    não uma tier estrutural. Sem esse filtro, ``{round(s,1) ...}`` (set) tratava
+    o título de capa (1 ocorrência) igual a um cabeçalho de seção (127
+    ocorrências), e os "3 maiores tamanhos" pegavam capa/parte/capítulo (raros)
+    e DESCARTAVAM os cabeçalhos de seção/subseção (frequentes) — que renderizavam
+    como parágrafo comum, sem virar heading, sem atualizar o folio corrente, sem
+    proteção de órfão (achado real, auditoria visual, Observability Engineering:
+    o folio ficava travado no título do livro porque as seções nunca eram
+    headings)."""
+    freq = Counter(round(s, 1) for s in tamanhos if s >= corpo_sz * 1.15)
+    grandes = sorted((s for s, n in freq.items() if n >= min_ocorrencias), reverse=True)
     if not grandes:
         return []
     clusters: list[list[float]] = [[grandes[0]]]
@@ -45,7 +61,7 @@ def clusters_titulo(tamanhos: list[float], corpo_sz: float) -> list[float]:
             clusters[-1].append(s)
         else:
             clusters.append([s])
-    return [c[0] for c in clusters[:3]]
+    return [c[0] for c in clusters[:max_niveis]]
 
 
 def nivel_titulo(sz: float, clusters: list[float], tol: float = 0.5) -> str | None:
@@ -103,8 +119,7 @@ def gerar_font_faces(fontes: dict[str, str]) -> str:
     """``@font-face`` p/ cada fonte real extraída — pronto p/ embutir no
     ``<style>`` do render editorial (ADR-0041)."""
     return "\n".join(
-        f'@font-face {{ font-family: "{nome}"; src: url({uri}); }}'
-        for nome, uri in fontes.items()
+        f'@font-face {{ font-family: "{nome}"; src: url({uri}); }}' for nome, uri in fontes.items()
     )
 
 
