@@ -1,4 +1,9 @@
-from atlas.traducao.tipografia import converter_enfase
+from atlas.traducao.tipografia import (
+    clusters_titulo,
+    converter_enfase,
+    nivel_titulo,
+    taxa_abre_pagina,
+)
 
 
 def _escapar(t):
@@ -23,3 +28,33 @@ def test_marcador_desbalanceado_fica_literal():
 def test_texto_sem_marcador_so_escapa():
     out = converter_enfase("<script>alert(1)</script>", _escapar)
     assert out == "&lt;script&gt;alert(1)&lt;/script&gt;"
+
+
+def test_clusters_titulo_ate_3_niveis_do_maior_pro_menor():
+    tamanhos = [11, 11, 11, 24, 24, 18, 18, 18, 14, 14, 11, 11]
+    clusters = clusters_titulo(tamanhos, corpo_sz=11)
+    assert clusters == [24.0, 18.0, 14.0]
+
+
+def test_clusters_titulo_sem_heading_e_vazio():
+    assert clusters_titulo([11, 11, 11], corpo_sz=11) == []
+
+
+def test_nivel_titulo_bate_no_cluster_mais_proximo():
+    clusters = [24.0, 18.0, 14.0]
+    assert nivel_titulo(24.2, clusters) == "h1"
+    assert nivel_titulo(18.0, clusters) == "h2"
+    assert nivel_titulo(14.1, clusters) == "h3"
+    assert nivel_titulo(11.0, clusters) is None
+
+
+def test_taxa_abre_pagina_forca_quebra_com_amostra_suficiente():
+    ocorrencias = {"h1": [True, True, True, False], "h2": [True, False, False]}
+    out = taxa_abre_pagina(ocorrencias)
+    assert out["h1"] is True  # 3/4 = 75% >= 60%
+    assert out["h2"] is False  # 1/3 = 33% < 60%
+
+
+def test_taxa_abre_pagina_amostra_pequena_fica_falso():
+    out = taxa_abre_pagina({"h3": [True, True]})  # só 2 ocorrências
+    assert out["h3"] is False

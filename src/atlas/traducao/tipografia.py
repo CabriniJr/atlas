@@ -28,3 +28,45 @@ def converter_enfase(texto: str, escapar: Callable[[str], str]) -> str:
         pos = m.end()
     partes.append(escapar(texto[pos:]))
     return "".join(partes)
+
+
+def clusters_titulo(tamanhos: list[float], corpo_sz: float) -> list[float]:
+    """Até 3 tamanhos-âncora (h1 > h2 > h3), do maior pro menor, agrupando os
+    tamanhos de fonte "grandes" do documento (>= 1.15x o corpo) por proximidade
+    (gap <= 0.75pt cai no mesmo cluster). Documento sem heading grande ⇒ ``[]``
+    (nenhum nível é tratado como título)."""
+    grandes = sorted({round(s, 1) for s in tamanhos if s >= corpo_sz * 1.15}, reverse=True)
+    if not grandes:
+        return []
+    clusters: list[list[float]] = [[grandes[0]]]
+    for s in grandes[1:]:
+        if clusters[-1][-1] - s <= 0.75:
+            clusters[-1].append(s)
+        else:
+            clusters.append([s])
+    return [c[0] for c in clusters[:3]]
+
+
+def nivel_titulo(sz: float, clusters: list[float], tol: float = 0.5) -> str | None:
+    """``"h1"``/``"h2"``/``"h3"`` conforme o cluster mais próximo (dentro de
+    ``tol``); ``None`` se não bater com nenhum (texto de corpo comum)."""
+    for nivel, ref in zip(("h1", "h2", "h3"), clusters):
+        if abs(sz - ref) <= tol:
+            return nivel
+    return None
+
+
+def taxa_abre_pagina(
+    ocorrencias: dict[str, list[bool]], min_amostra: int = 3, limiar: float = 0.6
+) -> dict[str, bool]:
+    """Por nível de heading, decide se ele deve forçar quebra de página: taxa de
+    ocorrências que abriram a página original >= ``limiar``, com amostra mínima
+    ``min_amostra`` (evita decidir por 1-2 casos isolados — ADR-0041)."""
+    out: dict[str, bool] = {}
+    for nivel, flags in ocorrencias.items():
+        if len(flags) < min_amostra:
+            out[nivel] = False
+            continue
+        taxa = sum(1 for f in flags if f) / len(flags)
+        out[nivel] = taxa >= limiar
+    return out
