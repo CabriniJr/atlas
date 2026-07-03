@@ -65,6 +65,31 @@ def test_elemento_apos_rotulo_suprime_o_proprio_break_before():
     assert "break-before:avoid" in html
 
 
+def test_elemento_link_goto_nao_ganha_classe_ext_nem_sublinhado():
+    """Achado real (auditoria visual, Kubernetes in Action): o sumário
+    inteiro (e referências cruzadas em prosa, "Chapter N") saía sublinhado
+    feito link de navegador — o original NUNCA sublinha referência cruzada
+    interna, só uma URL externa de verdade se comporta assim."""
+    from atlas.traducao.editorial_html import _estilo
+
+    b = _bloco("Texto qualquer")
+    est = _estilo(b)
+    html = _elemento(b, "Texto qualquer", est, body_sz=11.0, clusters=[], link=("goto", "cap1"))
+    assert 'class="ext"' not in html
+    assert 'href="#cap1"' in html
+
+
+def test_elemento_link_uri_ganha_classe_ext():
+    from atlas.traducao.editorial_html import _estilo
+
+    b = _bloco("Texto qualquer")
+    est = _estilo(b)
+    html = _elemento(
+        b, "Texto qualquer", est, body_sz=11.0, clusters=[], link=("uri", "https://example.com")
+    )
+    assert 'class="ext"' in html
+
+
 def test_estilo_cor_por_maioria_nao_pelo_primeiro_span():
     """Achado real (auditoria visual, Observability Engineering): um link
     cruzado colorido curto ("Chapter 1") no INÍCIO de um parágrafo preto

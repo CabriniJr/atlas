@@ -47,6 +47,21 @@ def _italic_span(s: Span) -> bool:
     return bool(s.flags & _FLAG_ITALIC) or "italic" in s.font.lower() or "oblique" in s.font.lower()
 
 
+def _precisa_espaco(anterior: Span, atual: Span) -> bool:
+    """``True`` se deve haver um espaço entre dois spans consecutivos: linha
+    diferente, folga visível no eixo x, OU um dos dois já tem espaço embutido
+    no próprio texto (PyMuPDF às vezes bota o espaço DENTRO do span seguinte,
+    não como gap real entre bboxes — ex. tipografia versalete/small-caps
+    "PART 3": o span " 3" começa colado no "ART" anterior, mas o próprio texto
+    já tem o espaço embutido; achado real, auditoria visual, Kubernetes in
+    Action). Sem essa checagem, o espaço embutido some no ``.strip()`` de cada
+    span e nunca é reposto (ADR-0041 fix)."""
+    mesma_linha = abs(atual.bbox[1] - anterior.bbox[1]) < 2.0
+    gap = atual.bbox[0] - anterior.bbox[2]
+    espaco_embutido = atual.text[:1] in (" ", "\t") or anterior.text[-1:] in (" ", "\t")
+    return (not mesma_linha) or gap > 1.0 or espaco_embutido
+
+
 def _juntar_spans(spans: list[Span]) -> str:
     """Junta o texto dos spans preservando o espaçamento REAL do PDF: só insere
     espaço entre dois spans quando havia uma folga visível entre eles (mesma
@@ -60,9 +75,7 @@ def _juntar_spans(spans: list[Span]) -> str:
         return ""
     saida = [partes_validas[0].text.strip()]
     for anterior, atual in zip(partes_validas, partes_validas[1:], strict=False):
-        mesma_linha = abs(atual.bbox[1] - anterior.bbox[1]) < 2.0
-        gap = atual.bbox[0] - anterior.bbox[2]
-        if (not mesma_linha) or gap > 1.0:
+        if _precisa_espaco(anterior, atual):
             saida.append(" ")
         saida.append(atual.text.strip())
     return "".join(saida)
@@ -100,7 +113,13 @@ def _marcar_enfase(spans: list[Span]) -> str:
     (negrito/itálico) com marcadores leves (``**b**``/``_i_``) — a tradução é
     instruída a preservá-los (ADR-0041); o render os converte em ``<b>``/``<i>``
     só no trecho, sem perder a ênfase de uma palavra isolada no meio do parágrafo.
-    """
+
+    Junta os spans com a MESMA lógica de adjacência do ``_juntar_spans`` (só
+    insere espaço quando havia folga real, ou linha diferente) — achado real
+    (auditoria visual, Kubernetes in Action): tipografia versalete/small-caps
+    é feita variando o TAMANHO por span ("P" maior + "ART" menor, sem gap
+    real), e o join fixo em espaço virava "P ART 3 B EYOND" em vez de "PART 3
+    BEYOND"."""
     partes_validas = [s for s in spans if s.text.strip()]
     if not partes_validas:
         return ""
@@ -109,15 +128,21 @@ def _marcar_enfase(spans: list[Span]) -> str:
     peso_ital = sum(len(s.text) for s in partes_validas if _italic_span(s))
     dom_bold = peso_bold > total / 2
     dom_ital = peso_ital > total / 2
-    saida: list[str] = []
-    for s in partes_validas:
+
+    def _marcado(s: Span) -> str:
         texto = s.text.strip()
         if _bold_span(s) and not dom_bold:
             texto = f"**{texto}**"
         if _italic_span(s) and not dom_ital:
             texto = f"_{texto}_"
-        saida.append(texto)
-    return " ".join(saida)
+        return texto
+
+    saida = [_marcado(partes_validas[0])]
+    for anterior, atual in zip(partes_validas, partes_validas[1:], strict=False):
+        if _precisa_espaco(anterior, atual):
+            saida.append(" ")
+        saida.append(_marcado(atual))
+    return "".join(saida)
 
 
 _PALAVRAS_MIN_TITULO_EMBUTIDO = 3  # mínimo de palavras pro prefixo "parecer" um título

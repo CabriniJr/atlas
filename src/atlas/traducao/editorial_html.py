@@ -439,7 +439,14 @@ img {{ max-width: 100%; }}
 .destaque {{ background: #f0f0f0; border: 0.6pt solid #ccc; border-radius: 4px;
              padding: 10px 14px; margin: .6em 0; page-break-inside: avoid; }}
 .destaque p, .destaque li {{ margin: .2em 0; }}
-a {{ text-decoration: underline; }}
+/* só link EXTERNO (uri) parece "link" (sublinhado) — cruzado interno
+   (goto: sumário, "Chapter N"/"Part N" em prosa) fica como no original:
+   sem sublinhado, é só texto normal (às vezes colorido) que por baixo
+   dos panos navega (achado real, auditoria visual, Observability
+   Engineering: sumário/prosa inteiros saíam sublinhados feito link de
+   navegador, o original nunca sublinha referência cruzada). */
+a {{ text-decoration: none; }}
+a.ext {{ text-decoration: underline; }}
 /* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
 p.toc {{ text-align: left; margin: .12em 0; }}
 p.toc a {{ color: #000; }}
@@ -772,7 +779,8 @@ def _elemento(
     if link:  # hyperlink normal: URI externa ou goto interno
         href = link[1] if link[0] == "uri" else (f"#{link[1]}" if link[1] else "")
         if href:
-            conteudo = f'<a href="{_e(href)}">{conteudo}</a>'
+            cls = ' class="ext"' if link[0] == "uri" else ""
+            conteudo = f'<a{cls} href="{_e(href)}">{conteudo}</a>'
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
