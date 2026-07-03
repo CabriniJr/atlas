@@ -4,6 +4,8 @@ from atlas.traducao.tipografia import (
     bloco_e_mono,
     clusters_titulo,
     converter_enfase,
+    familia_fonte,
+    fonte_seminegrito,
     nivel_titulo,
     taxa_abre_pagina,
 )
@@ -66,6 +68,38 @@ def test_clusters_titulo_max_niveis_configuravel():
     tamanhos = [28.0] * 3 + [25.0] * 3 + [20.0] * 3 + [16.0] * 3
     assert clusters_titulo(tamanhos, corpo_sz=10.5, max_niveis=4) == [28.0, 25.0, 20.0, 16.0]
     assert clusters_titulo(tamanhos, corpo_sz=10.5, max_niveis=2) == [28.0, 25.0]
+
+
+def test_familia_fonte_classifica_serif_sans_mono():
+    # corpo dos livros reais: serifada
+    assert familia_fonte("MinionPro-Regular") == "serif"
+    assert familia_fonte("NewBaskerville-Roman") == "serif"
+    assert familia_fonte("Times-Roman") == "serif"
+    # headings dos livros reais: sem serifa (O'Reilly Myriad, Manning Franklin)
+    assert familia_fonte("MyriadPro-SemiboldCond") == "sans"
+    assert familia_fonte("FranklinGothic-DemiItal") == "sans"
+    assert familia_fonte("FuturaTEE-Book") == "sans"
+    assert familia_fonte("ArialMT") == "sans"
+    # monoespaçada
+    assert familia_fonte("Courier-Bold") == "mono"
+    assert familia_fonte("UbuntuMono-Regular") == "mono"
+
+
+def test_familia_fonte_sem_pista_cai_em_serif():
+    # corpo de livro é serifado — default seguro quando o nome não dá pista.
+    assert familia_fonte("") == "serif"
+    assert familia_fonte("Wingdings2") == "serif"
+
+
+def test_fonte_seminegrito_detecta_peso_pelo_nome():
+    # PyMuPDF só marca a flag bold em fontes "Bold"; "Demi"/"Semibold" (peso do
+    # heading Manning/O'Reilly) passa batido — achado real (auditoria visual,
+    # Kubernetes in Action: heading de seção FranklinGothic-Demi saía leve).
+    assert fonte_seminegrito("FranklinGothic-DemiItal") is True
+    assert fonte_seminegrito("MyriadPro-SemiboldCond") is True
+    assert fonte_seminegrito("Helvetica-Black") is True
+    assert fonte_seminegrito("MinionPro-Regular") is False
+    assert fonte_seminegrito("NewBaskerville-Roman") is False
 
 
 def test_nivel_titulo_bate_no_cluster_mais_proximo():

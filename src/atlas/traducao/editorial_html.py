@@ -29,6 +29,8 @@ from atlas.traducao.tipografia import (
     clusters_titulo,
     converter_enfase,
     extrair_fontes,
+    familia_fonte,
+    fonte_seminegrito,
     gerar_font_faces,
     nivel_titulo,
     taxa_abre_pagina,
@@ -78,9 +80,13 @@ def _estilo(b) -> dict:
     # mesmo princípio de correção do _bold/_ital (peso de caractere), aplicado
     # à cor (ADR-0041 fix).
     cor_dom = max(cores, key=cores.get) if cores else 0
+    # peso "Demi"/"Semibold" vive só no NOME da fonte (o fitz não marca a flag
+    # bold nesses) — headings Manning/O'Reilly saíam leves sem isso (ADR-0041).
+    bold_flag = peso(_bold) > total / 2
+    bold_nome = bool(font_dom) and fonte_seminegrito(font_dom)
     return {
         "size": statistics.median([s.size for s in b.spans if s.size] or [11.0]),
-        "bold": peso(_bold) > total / 2,
+        "bold": bold_flag or bold_nome,
         "italic": peso(_ital) > total / 2,
         "mono": bloco_e_mono(b.spans),
         "color": cor_dom,
@@ -740,7 +746,22 @@ def _link_do_bloco(b, links: list[tuple]):
     return melhor if area > 0 else None
 
 
-_FALLBACK_FONTE = "'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif"
+_STACK_FONTE = {
+    "serif": "'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif",
+    "sans": "'Liberation Sans','DejaVu Sans','Helvetica Neue',Arial,sans-serif",
+    "mono": "'Liberation Mono','DejaVu Sans Mono',monospace",
+}
+
+
+def _fonte_css(font: str) -> str:
+    """``font-family`` do bloco: nomeia a fonte real do PDF (usada se estiver
+    embutida via @font-face) e cai numa pilha genérica da FAMÍLIA CERTA (serif/
+    sans/mono) — não num fallback serifado único. Sem isso o heading sem serifa
+    (Myriad/Franklin) saía serifado (ADR-0041)."""
+    if not font:
+        return ""
+    stack = _STACK_FONTE[familia_fonte(font)]
+    return f"font-family:'{_e(font)}',{stack};"
 
 
 def _elemento(
@@ -757,7 +778,7 @@ def _elemento(
     real (ADR-0041)."""
     cor = _cor_hex(est["color"])
     cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
-    fonte_css = f"font-family:'{_e(est['font'])}',{_FALLBACK_FONTE};" if est["font"] else ""
+    fonte_css = _fonte_css(est["font"])
     ida = f' id="{anchor}"' if anchor else ""
     # rótulo de capítulo/parte ("CHAPTER N"/"PART N", ADR-0041): força a
     # quebra de página NELE (seu tamanho não bate com nenhum cluster de

@@ -64,6 +64,87 @@ def clusters_titulo(
     return [c[0] for c in clusters[:max_niveis]]
 
 
+_TOKENS_MONO = ("mono", "courier", "consol", "menlo", "inconsolata", "source code")
+_TOKENS_SANS = (
+    "myriad",
+    "franklin",
+    "futura",
+    "helvetica",
+    "arial",
+    "frutiger",
+    "gotham",
+    "univers",
+    "avenir",
+    "calibri",
+    "segoe",
+    "roboto",
+    "tahoma",
+    "verdana",
+    "grotesk",
+    "gothic",
+    "sans",
+    "optima",
+    "akzidenz",
+    "proxima",
+    "interstate",
+)
+_TOKENS_SERIF = (
+    "minion",
+    "baskerville",
+    "times",
+    "georgia",
+    "garamond",
+    "caslon",
+    "palatino",
+    "sabon",
+    "janson",
+    "bembo",
+    "dante",
+    "miller",
+    "freight",
+    "warnock",
+    "utopia",
+    "century",
+    "cambria",
+    "constantia",
+    "serif",
+    "roman",
+    "goudy",
+    "plantin",
+    "scala",
+    "book antiqua",
+    "adobe garamond",
+    "chaparral",
+)
+_TOKENS_PESO = ("bold", "semibold", "demi", "black", "heavy", "ultra")
+
+
+def familia_fonte(font: str) -> str:
+    """Classifica o basefont extraído do PDF numa família CSS genérica:
+    ``"serif"`` | ``"sans"`` | ``"mono"``. As fontes reais dos livros quase nunca
+    são embutíveis (subset CFF/Type1) — sem isso, TODO texto cai num único
+    fallback serifado, e o heading sem serifa do O'Reilly (Myriad) / Manning
+    (Franklin Gothic) sai serifado, descaracterizando o miolo (achado real,
+    auditoria visual, Observability Engineering + Kubernetes in Action). Ordem
+    mono → sans → serif; default serif (corpo de livro é serifado)."""
+    f = font.lower()
+    if any(t in f for t in _TOKENS_MONO):
+        return "mono"
+    if any(t in f for t in _TOKENS_SANS):
+        return "sans"
+    if any(t in f for t in _TOKENS_SERIF):
+        return "serif"
+    return "serif"
+
+
+def fonte_seminegrito(font: str) -> bool:
+    """``True`` se o NOME da fonte indica peso forte (``Bold``/``Semibold``/
+    ``Demi``/``Black``…). O fitz só marca a flag bold em fontes "Bold" cravado —
+    "Demi"/"Semibold" (o peso dos headings Manning/O'Reilly) passa batido e o
+    heading sai leve (achado real, auditoria visual, Kubernetes in Action)."""
+    return any(t in font.lower() for t in _TOKENS_PESO)
+
+
 def nivel_titulo(sz: float, clusters: list[float], tol: float = 0.5) -> str | None:
     """``"h1"``/``"h2"``/``"h3"`` conforme o cluster mais próximo (dentro de
     ``tol``); ``None`` se não bater com nenhum (texto de corpo comum)."""
