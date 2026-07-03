@@ -401,7 +401,8 @@ def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
-        return f'<{nivel}{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{conteudo}</{nivel}>'
+        style = f'font-size:{sz:.1f}pt;{cor_css}{fonte_css}'
+        return f'<{nivel}{ida} style="{style}">{conteudo}</{nivel}>'
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
         bruto = texto.lstrip()
@@ -494,7 +495,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 continue
             b = obj
             est = _estilo(b)
-            # código/imutável e blocos sem tradução: cai no original — nunca descarta bloco (ADR-0041).
+            # código/imutável e sem tradução: cai no original — nunca descarta bloco (ADR-0041).
             texto = traducoes.get(b.id) or b.texto
             # sumário mesclado (bloco com ≥2 links internos): uma linha por entrada.
             if not est["mono"]:

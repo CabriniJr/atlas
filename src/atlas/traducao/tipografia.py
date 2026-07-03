@@ -51,7 +51,7 @@ def clusters_titulo(tamanhos: list[float], corpo_sz: float) -> list[float]:
 def nivel_titulo(sz: float, clusters: list[float], tol: float = 0.5) -> str | None:
     """``"h1"``/``"h2"``/``"h3"`` conforme o cluster mais próximo (dentro de
     ``tol``); ``None`` se não bater com nenhum (texto de corpo comum)."""
-    for nivel, ref in zip(("h1", "h2", "h3"), clusters):
+    for nivel, ref in zip(("h1", "h2", "h3"), clusters, strict=False):
         if abs(sz - ref) <= tol:
             return nivel
     return None

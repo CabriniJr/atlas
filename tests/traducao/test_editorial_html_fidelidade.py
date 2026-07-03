@@ -35,6 +35,7 @@ def test_tipo_lista_reconhece_numerado_e_alfabetico():
 
 def test_montar_html_nunca_descarta_bloco_sem_traducao(tmp_path):
     import fitz
+
     from atlas.traducao.editorial_html import _geometria, montar_html
     from atlas.traducao.extracao import extrair_pagina
 
@@ -71,13 +72,16 @@ def test_e_rodape_nativo_distingue_nota_de_folio():
 
 def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
     import fitz
+
     from atlas.traducao.editorial_html import _geometria, montar_html
     from atlas.traducao.extracao import extrair_pagina
 
     doc = fitz.open()
     page = doc.new_page()  # altura default ~792pt
-    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv", fontsize=12)
-    page.insert_text((72, 760), "1. Nota explicativa ao pé da página aqui.", fontname="helv", fontsize=8)
+    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv",
+                      fontsize=12)
+    page.insert_text((72, 760), "1. Nota explicativa ao pé da página aqui.", fontname="helv",
+                      fontsize=8)
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -112,6 +116,7 @@ def test_valor_folio_extrai_numero_arabico_e_romano():
 
 def test_montar_html_emite_marcador_de_folio_por_pagina(tmp_path):
     import fitz
+
     from atlas.traducao.editorial_html import _geometria, montar_html
     from atlas.traducao.extracao import extrair_pagina
 
@@ -153,6 +158,7 @@ def test_abre_pagina_primeiro_bloco_perto_do_topo_e_true():
 
 def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     import fitz
+
     from atlas.traducao.editorial_html import _geometria, montar_html
     from atlas.traducao.extracao import extrair_pagina
 
@@ -160,7 +166,8 @@ def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     for titulo in ("Capítulo Um", "Capítulo Dois", "Capítulo Três"):
         page = doc.new_page()
         page.insert_text((72, 70), titulo, fontname="helv", fontsize=24)  # heading grande
-        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv", fontsize=11)
+        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv",
+                          fontsize=11)
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -178,13 +185,16 @@ def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
 
 
 def test_montar_html_embute_font_face_real(tmp_path):
-    import fitz
-    from atlas.traducao.editorial_html import _geometria, montar_html
-    from atlas.traducao.extracao import extrair_pagina
     from pathlib import Path
 
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
     fonte_path = str(
-        Path(__file__).resolve().parents[2] / "src" / "atlas" / "traducao" / "fonts" / "LiberationSans-Regular.ttf"
+        Path(__file__).resolve().parents[2] / "src" / "atlas" / "traducao" / "fonts"
+        / "LiberationSans-Regular.ttf"
     )
     doc = fitz.open()
     page = doc.new_page()
@@ -207,3 +217,35 @@ def test_montar_html_embute_font_face_real(tmp_path):
 def test_css_nao_forca_cor_azul_no_link():
     from atlas.traducao.editorial_html import _CSS
     assert "#0645ad" not in _CSS
+
+
+def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import remontar_editorial_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "1. Primeiro item da lista numerada aqui.", fontname="helv",
+                      fontsize=11)
+    page.insert_text((72, 120), "2. Segundo item da lista numerada aqui.", fontname="helv",
+                      fontsize=11)
+    page.insert_text((72, 300), "Parágrafo comum de corpo bem no meio da página inteira.",
+                      fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}  # simula tradução = original
+    out = tmp_path / "out.pdf"
+    remontar_editorial_html(doc, {0: (blocos, traducoes)}, str(out))
+
+    out_doc = fitz.open(str(out))
+    texto_final = "".join(out_doc[i].get_text() for i in range(out_doc.page_count))
+    assert "Primeiro item" in texto_final
+    assert "Segundo item" in texto_final
+    assert "Parágrafo comum" in texto_final
+    out_doc.close()
