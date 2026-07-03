@@ -99,6 +99,33 @@ def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
     doc.close()
 
 
+def test_montar_html_converte_enfase_dentro_de_nota_de_rodape(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv",
+                      fontsize=12)
+    page.insert_text((72, 760), "1. Nota com termo **importante** aqui embaixo.",
+                      fontname="helv", fontsize=8)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "<b>importante</b>" in html
+    assert "**importante**" not in html
+    doc.close()
+
+
 def test_valor_folio_extrai_numero_arabico_e_romano():
     from atlas.traducao.editorial_html import _valor_folio
 

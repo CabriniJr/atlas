@@ -634,7 +634,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
 
     def flush_notas():
         if pendente_notas:
-            corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in pendente_notas)
+            corpo_notas = "".join(f"<p>{converter_enfase(t, _e)}</p>" for t in pendente_notas)
             partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
             pendente_notas.clear()
 
