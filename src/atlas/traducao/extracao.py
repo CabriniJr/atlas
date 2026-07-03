@@ -168,6 +168,49 @@ def _dividir_por_titulo_embutido(spans: list[Span]) -> tuple[list[Span], list[Sp
     return titulo, corpo
 
 
+_PALAVRAS_MAX_ROTULO_CAPITULO = 4  # "CHAPTER 2", "PART I" etc. — rótulo é curto
+_SALTO_MIN_TAMANHO_ROTULO = 3.0  # pt — título tem que ser NOTAVELMENTE maior que o rótulo
+
+
+def _dividir_por_rotulo_capitulo(spans: list[Span]) -> tuple[list[Span], list[Span]] | None:
+    """ "CHAPTER N"/"PART N" (rótulo pequeno) grudado ao título do capítulo
+    (fonte bem maior) no MESMO bloco do PyMuPDF, sem espaço entre eles (ex.:
+    "CHAPTER 2How Debugging Practices Differ..." — achado real, sistemático em
+    TODOS os 20 capítulos ao auditar Observability Engineering). Sem dividir,
+    o título nunca fica isolado com o tamanho de fonte correto: a mediana do
+    bloco fica contaminada pelo rótulo menor, o título não bate com o cluster
+    de tamanho dos OUTROS títulos de capítulo do documento, e — sem essa
+    consistência — o capítulo deixa de abrir página sozinho (``taxa_abre_pagina``
+    depende de um cluster de tamanho consistente pra cada nível de heading).
+    Detecta um prefixo de tamanho MENOR seguido de um resto de tamanho MAIOR
+    (uniforme, salto de pelo menos ``_SALTO_MIN_TAMANHO_ROTULO`` pt) — divide
+    em ``(spans_rotulo, spans_titulo)``. ``None`` se o bloco não tiver essa
+    forma (a esmagadora maioria dos blocos)."""
+    partes_validas = [s for s in spans if s.text.strip()]
+    if len(partes_validas) < 2:
+        return None
+    tam0 = partes_validas[0].size
+    corte = 0
+    for i, s in enumerate(partes_validas):
+        if abs(s.size - tam0) > 0.5:
+            corte = i
+            break
+    else:
+        return None  # bloco inteiro tem um tamanho só — não é rótulo+título
+    rotulo, titulo = partes_validas[:corte], partes_validas[corte:]
+    if not titulo:
+        return None
+    tam_titulo = titulo[0].size
+    if tam_titulo - tam0 < _SALTO_MIN_TAMANHO_ROTULO:
+        return None
+    if any(abs(s.size - tam_titulo) > 0.5 for s in titulo):
+        return None  # título tem que ser um tamanho só (senão pode não ser isso)
+    texto_rotulo = _juntar_spans(rotulo)
+    if len(texto_rotulo.split()) > _PALAVRAS_MAX_ROTULO_CAPITULO:
+        return None  # rótulo tem que ser curto — "CHAPTER 2", "PART I"
+    return rotulo, titulo
+
+
 def _bbox_uniao_spans(spans: list[Span]) -> tuple[float, float, float, float]:
     x0 = min(s.bbox[0] for s in spans)
     y0 = min(s.bbox[1] for s in spans)
@@ -267,7 +310,7 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                 linhas_spans.append(linha_atual)
         if not spans:
             continue
-        divisao = _dividir_por_titulo_embutido(spans)
+        divisao = _dividir_por_titulo_embutido(spans) or _dividir_por_rotulo_capitulo(spans)
         if divisao:
             for sub_spans in divisao:
                 blocos.append(
