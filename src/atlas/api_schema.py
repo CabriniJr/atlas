@@ -513,9 +513,10 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
                 "k": "motor",
                 "type": "select",
                 "label": "Motor do refino",
-                "opts": ["claude", "ollama"],
-                "hint": "claude = assinatura; ollama = local (grátis). Cai automaticamente para "
-                "o outro se o escolhido falhar (fallback bidirecional, ADR-0040)",
+                "opts": ["ollama", "claude"],
+                "hint": "ollama = local, grátis, padrão/prioridade; claude = assinatura. "
+                "Motor pedido é respeitado à risca — sem troca automática no meio do "
+                "lote (ADR-0045)",
             },
             {
                 "k": "modelo",

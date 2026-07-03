@@ -40,7 +40,7 @@ class ConfigTraducao:
     assunto: str = ""
     glossario: list[str] = field(default_factory=list)
     glossario_auto: bool = False
-    motor: str = "claude"
+    motor: str = "ollama"  # ADR-0045: ollama local é o padrão/prioridade para tradução
     modelo: str | None = None
     refino: bool = True  # ADR-0031: LLM refina o bruto (False = tradução puramente MT)
     timeout: int = 60  # timeout por chamada de refino
@@ -78,6 +78,12 @@ class CacheTraducao:
 
     def put(self, texto: str, cfg: ConfigTraducao, traducao: str) -> None:
         self._d[self._chave(texto, cfg)] = traducao
+
+    def remover(self, texto: str, cfg: ConfigTraducao) -> bool:
+        """Descarta só o refinado cacheado (mantém a MT bruta, namespace ``raw:``
+        separado) — usado por "re-refinar" (ADR-0045): força um novo passe de
+        refino (ex.: trocando de agente/modelo) sem repagar a MT bruta."""
+        return self._d.pop(self._chave(texto, cfg), None) is not None
 
     def get_bruto(self, texto: str, cfg: ConfigTraducao) -> str | None:
         return self._d.get(self._chave_bruto(texto, cfg))
@@ -136,7 +142,9 @@ def detectar_glossario(
         f"vírgula, sem explicações.\n\n{corpus}"
     )
     try:
-        resposta = invocar_fn(prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor)
+        resposta = invocar_fn(
+            prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor
+        )
     except Exception:  # noqa: BLE001 — detecção é best-effort; falha não derruba a tradução
         return []
 
@@ -194,11 +202,7 @@ def _parsear_mapa(resposta: str) -> dict[str, str]:
         return {}
     if not isinstance(bruto, dict):
         return {}
-    return {
-        str(k): str(v)
-        for k, v in bruto.items()
-        if k and v and str(k) != str(v)
-    }
+    return {str(k): str(v) for k, v in bruto.items() if k and v and str(k) != str(v)}
 
 
 def aplicar_unificacao(texto: str, mapa: dict[str, str]) -> str:
@@ -243,7 +247,9 @@ def traduzir_blocos(
     if pendentes:
         prompt = montar_prompt(pendentes, cfg)
         # cfg.modelo pode ser None → usa o padrão do motor (invocar não aceita None).
-        resposta = invocar_fn(prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor)
+        resposta = invocar_fn(
+            prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor
+        )
         traducoes = parsear_resposta(resposta, [b.id for b in pendentes])
         for b in pendentes:
             t = traducoes.get(b.id, b.texto)  # fallback: mantém original se IA falhou
@@ -252,9 +258,7 @@ def traduzir_blocos(
     return resultado
 
 
-def montar_prompt_refino(
-    pares: list[tuple[int, str, str]], cfg: ConfigTraducao
-) -> str:
+def montar_prompt_refino(pares: list[tuple[int, str, str]], cfg: ConfigTraducao) -> str:
     """Prompt de refino (ADR-0031): melhora a tradução BRUTA comparando com a origem.
 
     ``pares`` = lista de ``(id, origem, bruto)``. O LLM não traduz do zero: corrige o
@@ -265,9 +269,7 @@ def montar_prompt_refino(
     parser (``parsear_resposta``) depende dele.
     """
     glossario = ", ".join(cfg.glossario) if cfg.glossario else "(nenhum)"
-    corpo = "\n\n".join(
-        f"[[{i}]]\nORIGEM: {origem}\nBRUTO: {bruto}" for i, origem, bruto in pares
-    )
+    corpo = "\n\n".join(f"[[{i}]]\nORIGEM: {origem}\nBRUTO: {bruto}" for i, origem, bruto in pares)
     instrucao = cfg.instrucao_refino.strip() or (
         f"Você revisa a tradução de {cfg.idioma_origem} para {cfg.idioma_destino} de um "
         f"livro técnico sobre: {cfg.assunto or 'tecnologia'}.\n"
@@ -364,20 +366,36 @@ def refinar_blocos(
         try:
             resposta = invocar_fn(prompt, modelo=modelo, timeout=cfg.timeout, motor=cfg.motor)
         except Exception as exc:  # noqa: BLE001 — tokens/timeout: pausa e mantém resumível
-            _emitir(on_evento, {
-                "tipo": "refino_lote", "lote": lote_idx, "lotes": n_lotes,
-                "blocos": len(lote), "ms": int((time.monotonic() - t0) * 1000),
-                "ok": False, "modelo": modelo, "chars": sum(len(p[2]) for p in pares),
-                "erro": str(exc)[:200],
-            })
+            _emitir(
+                on_evento,
+                {
+                    "tipo": "refino_lote",
+                    "lote": lote_idx,
+                    "lotes": n_lotes,
+                    "blocos": len(lote),
+                    "ms": int((time.monotonic() - t0) * 1000),
+                    "ok": False,
+                    "modelo": modelo,
+                    "chars": sum(len(p[2]) for p in pares),
+                    "erro": str(exc)[:200],
+                },
+            )
             esgotou = True
             motivo = _classificar_erro(exc)
             break
-        _emitir(on_evento, {
-            "tipo": "refino_lote", "lote": lote_idx, "lotes": n_lotes,
-            "blocos": len(lote), "ms": int((time.monotonic() - t0) * 1000),
-            "ok": True, "modelo": modelo, "chars": sum(len(p[2]) for p in pares),
-        })
+        _emitir(
+            on_evento,
+            {
+                "tipo": "refino_lote",
+                "lote": lote_idx,
+                "lotes": n_lotes,
+                "blocos": len(lote),
+                "ms": int((time.monotonic() - t0) * 1000),
+                "ok": True,
+                "modelo": modelo,
+                "chars": sum(len(p[2]) for p in pares),
+            },
+        )
         refinados = parsear_resposta(resposta, [b.id for b in lote])
         for b in lote:
             t = refinados.get(b.id)

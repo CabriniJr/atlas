@@ -23,6 +23,17 @@ from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao, resolver_a
 _log = logging.getLogger(__name__)
 
 
+def _invocar_sem_fallback_de_motor(
+    prompt: str, modelo: str | None = None, timeout: int = 60, motor: str = "claude"
+) -> str:
+    """``invocar`` sem o fallback bidirecional (ADR-0045): tradução é um lote
+    longo (um livro inteiro) — trocar de motor no meio, mesmo como rede de
+    segurança, mistura estilo/tom entre blocos e (motor="ollama") queima cota
+    do Claude às escondidas. O motor pedido em ``Traducao.spec.motor`` é
+    respeitado à risca; falhas caem no mecanismo de retry/pausa (ADR-0039)."""
+    return invocar(prompt, modelo=modelo, timeout=timeout, motor=motor, fallback=False)
+
+
 def _saida_para(origem: str, idioma_destino: str) -> str:
     p = Path(origem)
     return str(p.with_suffix(f".{idioma_destino}.pdf"))
@@ -139,8 +150,13 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             "iniciado_em": iniciado,
             "atividade": "abrindo PDF e preparando a tradução…",
             "log": [_evento("▶ tradução iniciada")],
+            "pausar_solicitado": False,  # reseta um pedido de pausa de um run anterior
         },
     )
+
+    def checar_pausa() -> bool:
+        atual = store.get("Traducao", t.name).status or {}
+        return bool(atual.get("pausar_solicitado"))
 
     def on_progress(prog):
         atual = store.get("Traducao", t.name).status or {}
@@ -165,8 +181,10 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
                 "eta_seg": _eta(iniciado, pct),
             }
             # loga só marcos (1ª página, a cada 5, e a última) p/ não inflar o status
-            if prog.paginas_prontas == 1 or prog.paginas_prontas % 5 == 0 or (
-                prog.paginas_prontas == prog.paginas_total
+            if (
+                prog.paginas_prontas == 1
+                or prog.paginas_prontas % 5 == 0
+                or (prog.paginas_prontas == prog.paginas_total)
             ):
                 log.append(_evento(msg))
             if prog.glossario_auto and not atual.get("glossario_auto"):
@@ -182,9 +200,11 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         atual = store.get("Traducao", t.name).status or {}
         linhas = list(atual.get("log_ia") or [])
         seg = ev.get("ms", 0) / 1000
-        cab = (f"p.{ev.get('pagina', '?')} · lote {ev.get('lote')}/{ev.get('lotes')} · "
-               f"{ev.get('blocos')} blocos · {ev.get('chars', 0)} chars · {seg:.1f}s · "
-               f"{ev.get('modelo', '')}")
+        cab = (
+            f"p.{ev.get('pagina', '?')} · lote {ev.get('lote')}/{ev.get('lotes')} · "
+            f"{ev.get('blocos')} blocos · {ev.get('chars', 0)} chars · {seg:.1f}s · "
+            f"{ev.get('modelo', '')}"
+        )
         if not ev.get("ok"):
             cab += f" · ✗ {ev.get('erro', 'falhou')}"
         linhas.append({**_evento(cab), "ok": bool(ev.get("ok"))})
@@ -195,13 +215,14 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             origem,
             saida,
             cfg,
-            invocar_fn=invocar,
+            invocar_fn=_invocar_sem_fallback_de_motor,
             on_progress=on_progress,
             cache=cache,
             cache_path=cache_path,
             somente_render=_verdade(t.spec.get("somente_render", False)),
             on_evento=on_evento,
             paralelismo=pool_global.max_concorrente,  # ADR-0039: réplicas também dentro do job
+            checar_pausa=checar_pausa,  # ADR-0045: só honrado com paralelismo=1
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)
@@ -215,10 +236,16 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
     nova_tentativa = 0  # reseta por padrão (sucesso ou escassez confirmada — ADR-0039)
     if prog.parcial:
         retry_curto = (
-            prog.motivo_pausa == "timeout"
-            and tentativas_timeout + 1 <= cfg.max_tentativas_timeout
+            prog.motivo_pausa == "timeout" and tentativas_timeout + 1 <= cfg.max_tentativas_timeout
         )
-        if retry_curto:
+        if prog.motivo_pausa == "manual":
+            # pausa pedida pelo usuário (ADR-0045): sem retoma_em/retoma_collect —
+            # o loop de retomada automática (ADR-0035) nunca dispara sozinho aqui;
+            # só o botão "Retomar agora" (mesmo caminho de /_traduzir) continua.
+            pausa = {"fase": "pausado"}
+            msg = f"⏸ pausado manualmente — {prog.paginas_prontas} páginas prontas"
+            atividade = "pausado manualmente — clique em retomar quando quiser"
+        elif retry_curto:
             # timeout pontual: retry curto persistido (ADR-0039) — até
             # max_tentativas_timeout vezes antes de declarar escassez de verdade.
             nova_tentativa = tentativas_timeout + 1
@@ -243,7 +270,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
                 f"⏸ pausado por escassez — {prog.paginas_prontas} páginas; "
                 f"retoma sozinho às {quando} (continua de onde parou)"
             )
-            atividade = f"pausado (tokens acabaram) — retomada automática às {quando}"
+            atividade = f"pausado (falha em {cfg.motor}) — retomada automática às {quando}"
     else:
         msg = f"✓ concluído — {prog.paginas_prontas} páginas, {prog.blocos_traduzidos} blocos"
         atividade = "tradução concluída"
@@ -280,6 +307,74 @@ def _merge_status(store, name, agora, patch: dict) -> None:
     store.set_status("Traducao", name, novo, agora)
 
 
+def pausar_traducao(store, label: str, agora: datetime) -> tuple[bool, str]:
+    """Pede pausa manual (ADR-0045): só marca o pedido — o loop em curso é quem
+    para, entre páginas (``checar_pausa`` em ``collect``). Devolve
+    ``(ok, mensagem)``."""
+    t = store.get("Traducao", label)
+    if t is None:
+        return False, f"Traducao/{label} not found"
+    fase = (t.status or {}).get("fase")
+    if fase not in ("traduzindo", "preparando"):
+        return False, f"Traducao/{label} não está rodando (fase={fase!r})"
+    _merge_status(store, label, agora, {"pausar_solicitado": True})
+    return True, "pausa solicitada — para entre páginas"
+
+
+def reiniciar_traducao(store, label: str, agora: datetime) -> tuple[bool, str]:
+    """ "Recomeçar do zero" (ADR-0045): apaga o cache (MT bruta + refinado) do
+    ``Traducao``/label — o próximo ``/_traduzir`` paga tudo de novo. Não mexe
+    no PDF de origem. Devolve ``(ok, mensagem)``."""
+    t = store.get("Traducao", label)
+    if t is None:
+        return False, f"Traducao/{label} not found"
+    fase = (t.status or {}).get("fase")
+    if fase in ("traduzindo", "preparando", "fila"):
+        return False, f"Traducao/{label} está rodando (fase={fase!r}) — pause antes"
+    origem = (t.spec.get("origem") or "").strip()
+    if origem:
+        Path(_cache_para(origem, t.spec.get("idioma_destino", "pt-BR"))).unlink(missing_ok=True)
+    store.set_status("Traducao", label, {}, agora)
+    return True, "cache apagado — próxima tradução recomeça do zero"
+
+
+def re_refinar_traducao(store, label: str, agora: datetime) -> tuple[bool, str]:
+    """ "Re-refinar" (ADR-0045): descarta só o REFINADO cacheado (mantém a MT
+    bruta, que é a parte mais lenta/cara) — útil depois de trocar o
+    ``agente_refino``/modelo e querer um refino melhor sem repagar a MT.
+    Devolve ``(ok, mensagem)``."""
+    import fitz
+
+    from atlas.traducao.extracao import extrair_pagina
+
+    t = store.get("Traducao", label)
+    if t is None:
+        return False, f"Traducao/{label} not found"
+    fase = (t.status or {}).get("fase")
+    if fase in ("traduzindo", "preparando", "fila"):
+        return False, f"Traducao/{label} está rodando (fase={fase!r}) — pause antes"
+    origem = (t.spec.get("origem") or "").strip()
+    if not origem or not Path(origem).exists():
+        return False, f"origem inválida: {origem!r}"
+    idioma_destino = t.spec.get("idioma_destino", "pt-BR")
+    cache_path = _cache_para(origem, idioma_destino)
+    cache = CacheTraducao.carregar(cache_path)
+    cfg_chave = ConfigTraducao(
+        idioma_origem=t.spec.get("idioma_origem", "en"), idioma_destino=idioma_destino
+    )
+    doc = fitz.open(origem)
+    removidos = 0
+    for i in range(doc.page_count):
+        for b in extrair_pagina(doc[i], i):
+            if not b.skip and cache.remover(b.texto, cfg_chave):
+                removidos += 1
+    doc.close()
+    cache.salvar(cache_path)
+    novo_status = {**(t.status or {}), "fase": "parcial", "parcial": True}
+    store.set_status("Traducao", label, novo_status, agora)
+    return True, f"{removidos} bloco(s) refinado(s) descartado(s) — MT bruta preservada"
+
+
 def render_previa(store, label: str, agora: datetime) -> None:
     """Renderiza uma PRÉVIA do cache atual (parcial) → ``.previa.pdf``, sem tocar na
     ``fase`` da tradução em curso (E9: renderizar enquanto traduz). Zero IA; roda em
@@ -290,8 +385,9 @@ def render_previa(store, label: str, agora: datetime) -> None:
     origem = (t.spec.get("origem") or "").strip()
     idioma_destino = t.spec.get("idioma_destino", "pt-BR")
     if not origem or not Path(origem).exists():
-        _merge_status(store, label, agora,
-                      {"previa_gerando": False, "previa_erro": "origem inválida"})
+        _merge_status(
+            store, label, agora, {"previa_gerando": False, "previa_erro": "origem inválida"}
+        )
         return
     previa = _previa_para(origem, idioma_destino)
     cfg = ConfigTraducao(
@@ -309,14 +405,21 @@ def render_previa(store, label: str, agora: datetime) -> None:
     try:
         cache = CacheTraducao.carregar(_cache_para(origem, idioma_destino))
         traduzir_pdf(origem, previa, cfg, invocar_fn=_sem_ia, cache=cache, somente_render=True)
-        _merge_status(store, label, datetime.now(), {
-            "previa": previa, "previa_gerando": False,
-            "previa_em": datetime.now().isoformat(timespec="seconds"),
-        })
+        _merge_status(
+            store,
+            label,
+            datetime.now(),
+            {
+                "previa": previa,
+                "previa_gerando": False,
+                "previa_em": datetime.now().isoformat(timespec="seconds"),
+            },
+        )
     except Exception as exc:  # noqa: BLE001
         _log.exception("prévia de %s falhou", label)
-        _merge_status(store, label, datetime.now(),
-                      {"previa_gerando": False, "previa_erro": str(exc)})
+        _merge_status(
+            store, label, datetime.now(), {"previa_gerando": False, "previa_erro": str(exc)}
+        )
 
 
 def _status(store, t, ctx, patch: dict) -> None:
@@ -331,6 +434,11 @@ def _erro(store, t, ctx, msg: str) -> None:
         store,
         t,
         ctx,
-        {"fase": "erro", "progresso_pct": 0, "erro": msg,
-         "atividade": f"erro: {msg}", "log": log[-40:]},
+        {
+            "fase": "erro",
+            "progresso_pct": 0,
+            "erro": msg,
+            "atividade": f"erro: {msg}",
+            "log": log[-40:],
+        },
     )

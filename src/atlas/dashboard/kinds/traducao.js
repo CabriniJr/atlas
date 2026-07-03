@@ -14,7 +14,7 @@ function _trShell(r) {
   const origem = s.origem || '';
   const io = s.idioma_origem || 'en';
   const id = s.idioma_destino || 'pt-BR';
-  const motor = s.motor || 'claude';
+  const motor = s.motor || 'ollama';
   return `<div class="tr-wrap" style="padding:16px;max-width:720px">
     <div class="tr-header" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <span style="font-size:20px">📖</span>
@@ -40,6 +40,7 @@ function _trShell(r) {
       <button class="btn" id="tr-render" title="Re-renderiza o PDF a partir do cache já pago — não gasta IA" ${origem ? '' : 'disabled'}>🎨 Só re-renderizar (grátis)</button>
       <button class="btn" id="tr-previa" title="Renderiza uma prévia do que já foi traduzido, mesmo com a tradução rodando" ${origem ? '' : 'disabled'}>📸 Prévia agora</button>
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
+      <button class="btn" id="tr-pausar" title="Pausa entre páginas (ADR-0045) — retoma de onde parou" style="display:none;border-color:var(--yellow,#d9a441);color:var(--yellow,#d9a441)">⏸ Pausar</button>
     </div>
     <div id="tr-config" style="display:none">${_trConfig(s)}</div>
     <div id="tr-pool">${_trPoolPanel()}</div>
@@ -89,7 +90,7 @@ function _trConfig(s) {
   const chk = (id, on) => `<input type="checkbox" id="${id}" ${on ? 'checked' : ''}>`;
   return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Tradução (afeta a IA — mudar re-traduz)</div>
-    ${row('Motor', `<select id="cfg-motor" style="width:150px"><option ${v('motor','claude')==='claude'?'selected':''}>claude</option><option ${v('motor')==='ollama'?'selected':''}>ollama</option></select>`)}
+    ${row('Motor', `<select id="cfg-motor" style="width:150px"><option ${v('motor','ollama')==='ollama'?'selected':''}>ollama</option><option ${v('motor','ollama')==='claude'?'selected':''}>claude</option></select>`)}
     ${row('Modelo (refino)', inp('cfg-modelo', v('modelo',''), 'default'))}
     ${row('Refinar (LLM)', chk('cfg-refino', bool('refino', true)))}
     ${row('Blocos por lote', inp('cfg-lote', v('lote_refino', 60), '', 80))}
@@ -162,6 +163,34 @@ function _trExtras(st, name) {
   return _trPreviaBox(st, name) + _trLogIa(st);
 }
 
+// Controles reais (ADR-0045): recomeçar do zero (apaga cache) ou re-refinar
+// (mantém a MT bruta, descarta só o refinado — força um novo passe de IA).
+function _trBtnsControle(name) {
+  return `<button class="btn" title="Apaga o cache (MT bruta + refinado) e recomeça do zero"
+      onclick="trRecomecar('${escJs(name || '')}')">🔁 Recomeçar do zero</button>
+    <button class="btn" title="Descarta só o refinado (mantém a MT bruta); útil após trocar de agente/modelo"
+      onclick="trRerefinar('${escJs(name || '')}')">♻️ Re-refinar</button>`;
+}
+
+async function trRecomecar(name) {
+  if (!confirm(`Apagar todo o cache de "${name}" e recomeçar do zero?`)) return;
+  try {
+    await apiFetch(API + '/_traduzir_recomecar', { method: 'POST', body: JSON.stringify({ label: name }) });
+    await loadAndRender('Traducao', name);
+  } catch (err) {
+    alert('recomeçar falhou: ' + err.message);
+  }
+}
+
+async function trRerefinar(name) {
+  try {
+    await apiFetch(API + '/_traduzir_rerefinar', { method: 'POST', body: JSON.stringify({ label: name }) });
+    await loadAndRender('Traducao', name);
+  } catch (err) {
+    alert('re-refinar falhou: ' + err.message);
+  }
+}
+
 function _trProgresso(st, name) {
   const fase = st.fase;
   if (!fase) return '';
@@ -169,15 +198,19 @@ function _trProgresso(st, name) {
     return `<div style="color:var(--red);font-size:13px">⚠️ ${esc(st.erro || 'falhou')}</div>${_trLog(st)}`;
   }
   if (fase === 'pausado' || fase === 'retomando') {
+    const manual = fase === 'pausado' && !st.retoma_em;
     const hora = st.retoma_em ? new Date(st.retoma_em).toLocaleTimeString().slice(0, 5) : '';
     const pp = st.paginas_prontas != null ? st.paginas_prontas : '';
     const retomando = fase === 'retomando';
     const cabec = retomando
       ? `<div style="color:var(--blue);font-size:13px">🔄 retomando de onde parou…</div>`
+      : manual
+      ? `<div style="color:var(--yellow,#d9a441);font-size:13px">⏸ pausado manualmente — ${pp} pág prontas<br><span style="font-size:12px;color:var(--muted)">retome quando quiser.</span></div>`
       : `<div style="color:var(--yellow,#d9a441);font-size:13px">⏸ pausado por escassez de token — ${pp} pág prontas<br><span style="font-size:12px;color:var(--muted)">retoma sozinho${hora ? ' às ' + esc(hora) : ''} (ADR-0035); ou retome agora.</span></div>`;
     const btns = `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       ${retomando ? '' : `<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="document.getElementById('tr-traduzir').click()">▶ Retomar agora</button>`}
       ${st.saida ? `<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar (parcial)</button>` : ''}
+      ${retomando ? '' : _trBtnsControle(name)}
     </div>`;
     return `${cabec}${btns}${_trExtras(st, name)}${_trLog(st)}`;
   }
@@ -198,7 +231,7 @@ function _trProgresso(st, name) {
     return `${cabec}
       ${st.saida ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${btnContinuar}<button class="btn" style="border-color:var(--green);color:var(--green)" onclick="trDownload('${escJs(name || '')}')">⬇️ Baixar ${parcial ? '(bruto)' : 'tradução'}</button>
       <button class="btn" title="Exportar como Markdown" onclick="trExport('${escJs(name || '')}','md')">📝 .md</button>
-      <button class="btn" title="Exportar como EPUB (requer pandoc)" onclick="trExport('${escJs(name || '')}','epub')">📚 .epub</button></div>
+      <button class="btn" title="Exportar como EPUB (requer pandoc)" onclick="trExport('${escJs(name || '')}','epub')">📚 .epub</button>${_trBtnsControle(name)}</div>
       <div style="color:var(--muted);font-size:12px;margin-top:4px;word-break:break-all">💾 ${esc(st.saida)}</div>` : ''}${ga}${_trExtras(st, name)}${_trLog(st)}`;
   }
   // preparando (ex.: detectando glossário) ou traduzindo
@@ -262,6 +295,7 @@ function _trWire(name, container) {
   };
 
   const ATIVO = new Set(['preparando', 'traduzindo', 'retomando']);
+  const pausarBtn = container.querySelector('#tr-pausar');
   let polling = null;
   function _autoScrollLog() {
     const el = container.querySelector('#tr-log');
@@ -273,7 +307,13 @@ function _trWire(name, container) {
       const st = r.status || {};
       progBox.innerHTML = _trProgresso(st, name);
       _autoScrollLog();
-      if (!ATIVO.has(st.fase) && !st.previa_gerando) {
+      const ativo = ATIVO.has(st.fase);
+      if (pausarBtn) {
+        pausarBtn.style.display = (st.fase === 'traduzindo' || st.fase === 'preparando') ? '' : 'none';
+        pausarBtn.disabled = !!st.pausar_solicitado;
+        pausarBtn.textContent = st.pausar_solicitado ? '⏸ pausando…' : '⏸ Pausar';
+      }
+      if (!ativo && !st.previa_gerando) {
         clearInterval(polling); polling = null;
         if (trBtn) trBtn.disabled = false;
       }
@@ -325,6 +365,16 @@ function _trWire(name, container) {
   if (trBtn) trBtn.onclick = () => iniciar(false);
   const rBtn = container.querySelector('#tr-render');
   if (rBtn) rBtn.onclick = () => iniciar(true);
+
+  if (pausarBtn) pausarBtn.onclick = async () => {
+    pausarBtn.disabled = true;
+    try {
+      await apiFetch(API + '/_traduzir_pausar', { method: 'POST', body: JSON.stringify({ label: name }) });
+    } catch (err) {
+      alert('pausar falhou: ' + err.message);
+      pausarBtn.disabled = false;
+    }
+  };
 
   // Prévia agora: renderiza um snapshot do cache atual sem interromper a tradução.
   const pvBtn = container.querySelector('#tr-previa');

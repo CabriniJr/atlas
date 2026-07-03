@@ -566,6 +566,48 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(*_iniciar_traducao(label))
             return
 
+        # Controles em tempo real da tradução (ADR-0045): pausar entre páginas,
+        # recomeçar do zero (apaga cache) ou re-refinar (mantém MT bruta, refina
+        # de novo — útil depois de trocar de agente/modelo).
+        if path == _API_PREFIX + "/_traduzir_pausar":
+            label = body.get("label", "").strip()
+            if not label:
+                self._json(400, {"error": "label obrigatório"})
+                return
+            from atlas.rotinas.traduzir_pdf import pausar_traducao
+
+            ok, msg = pausar_traducao(_store, label, datetime.now())
+            self._json(202 if ok else 409, {"ok": ok, "mensagem": msg})
+            return
+
+        if path == _API_PREFIX + "/_traduzir_recomecar":
+            label = body.get("label", "").strip()
+            if not label:
+                self._json(400, {"error": "label obrigatório"})
+                return
+            from atlas.rotinas.traduzir_pdf import reiniciar_traducao
+
+            ok, msg = reiniciar_traducao(_store, label, datetime.now())
+            if not ok:
+                self._json(409, {"ok": False, "mensagem": msg})
+                return
+            self._json(*_iniciar_traducao(label))
+            return
+
+        if path == _API_PREFIX + "/_traduzir_rerefinar":
+            label = body.get("label", "").strip()
+            if not label:
+                self._json(400, {"error": "label obrigatório"})
+                return
+            from atlas.rotinas.traduzir_pdf import re_refinar_traducao
+
+            ok, msg = re_refinar_traducao(_store, label, datetime.now())
+            if not ok:
+                self._json(409, {"ok": False, "mensagem": msg})
+                return
+            self._json(*_iniciar_traducao(label))
+            return
+
         # Renderiza uma PRÉVIA do cache atual durante a tradução (E9): não bloqueia
         # o job em curso; gera .previa.pdf em background e grava status.previa.
         if path == _API_PREFIX + "/_previa":

@@ -108,6 +108,7 @@ def _render_final(doc, paginas, destino, cfg) -> None:
             return
         except Exception:  # noqa: BLE001 — fallback resiliente (ADR-0006)
             import logging
+
             logging.getLogger(__name__).exception("render editorial falhou; caindo p/ pymupdf")
     remontar_documento(doc, paginas, min_fonte_pct=cfg.min_fonte_pct)
     doc.save(destino, garbage=4, deflate=True)
@@ -138,15 +139,33 @@ def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoT
 
 
 def _processar_paginas_sequencial(
-    doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento, detectados
+    doc,
+    total,
+    cfg,
+    cache,
+    invocar_fn,
+    bruto_fn,
+    cache_path,
+    on_progress,
+    on_evento,
+    detectados,
+    checar_pausa=None,
 ):
     """Loop original (paralelismo=1): página a página, na ordem. Devolve
-    ``(render_paginas, blocos_traduzidos, esgotado, motivo_pausa)``."""
+    ``(render_paginas, blocos_traduzidos, esgotado, motivo_pausa)``.
+
+    ``checar_pausa`` (ADR-0045, opcional): checado entre páginas; se devolver
+    ``True``, para o loop AGORA (``motivo_pausa="manual"``) — mesma forma
+    resumível de uma pausa por escassez, só que pedida pelo usuário."""
     blocos_traduzidos = 0
     esgotado = False
     motivo_pausa: str | None = None
     render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
     for i in range(total):
+        if checar_pausa is not None and checar_pausa():
+            esgotado = True
+            motivo_pausa = "manual"
+            break
         page = doc[i]
         blocos = extrair_pagina(page, i)
         traduziveis = [b for b in blocos if not b.skip]
@@ -162,15 +181,26 @@ def _processar_paginas_sequencial(
         if cache_path:
             cache.salvar(cache_path)  # checkpoint por página ⇒ resume real (ADR-0031)
         if on_progress:
-            on_progress(ProgressoTraducao(
-                total, i + 1, blocos_traduzidos, detectados, fase="traduzindo", parcial=esgotado
-            ))
+            on_progress(
+                ProgressoTraducao(
+                    total, i + 1, blocos_traduzidos, detectados, fase="traduzindo", parcial=esgotado
+                )
+            )
     return render_paginas, blocos_traduzidos, esgotado, motivo_pausa
 
 
 def _processar_paginas_paralelo(
-    doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento,
-    detectados, paralelismo,
+    doc,
+    total,
+    cfg,
+    cache,
+    invocar_fn,
+    bruto_fn,
+    cache_path,
+    on_progress,
+    on_evento,
+    detectados,
+    paralelismo,
 ):
     """Distribui as páginas entre até ``paralelismo`` workers (ADR-0039) — o
     mesmo dial de "réplicas" do pool entre jobs (ADR-0038) vale pra páginas de
@@ -204,16 +234,25 @@ def _processar_paginas_paralelo(
             if cache_path:
                 cache.salvar(cache_path)
             if on_progress:
-                on_progress(ProgressoTraducao(
-                    total, estado["paginas_prontas"], estado["blocos_traduzidos"], detectados,
-                    fase="traduzindo", parcial=esgotado_evt.is_set(),
-                ))
+                on_progress(
+                    ProgressoTraducao(
+                        total,
+                        estado["paginas_prontas"],
+                        estado["blocos_traduzidos"],
+                        detectados,
+                        fase="traduzindo",
+                        parcial=esgotado_evt.is_set(),
+                    )
+                )
 
     with ThreadPoolExecutor(max_workers=max(1, paralelismo)) as ex:
         list(ex.map(processar, range(total)))
 
     return (
-        render_paginas, estado["blocos_traduzidos"], esgotado_evt.is_set(), estado["motivo_pausa"]
+        render_paginas,
+        estado["blocos_traduzidos"],
+        esgotado_evt.is_set(),
+        estado["motivo_pausa"],
     )
 
 
@@ -229,13 +268,17 @@ def traduzir_pdf(
     somente_render: bool = False,
     on_evento=None,
     paralelismo: int = 1,
+    checar_pausa=None,
 ) -> ProgressoTraducao:
     """Traduz um PDF (ADR-0030/0031) ou, com ``somente_render=True``, apenas
     **re-renderiza** a partir do cache já pago — zero IA (E9-05). É o que permite
     iterar o layout (``spec.render``) sem repagar a tradução (``spec.traducao``).
 
     ``paralelismo`` > 1 distribui as páginas restantes entre workers concorrentes
-    (ADR-0039) — default 1 preserva o loop sequencial original."""
+    (ADR-0039) — default 1 preserva o loop sequencial original.
+
+    ``checar_pausa`` (ADR-0045): pausa manual pedida pelo usuário — só honrada
+    no loop sequencial (``paralelismo=1``); pendência para o modo paralelo."""
     bruto_fn = bruto_fn or traduzir_bruto
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
@@ -253,13 +296,34 @@ def traduzir_pdf(
         if detectados:
             cfg.glossario = _mesclar_glossario(cfg.glossario, detectados)
 
-    processar = _processar_paginas_paralelo if paralelismo > 1 else _processar_paginas_sequencial
-    args = (
-        doc, total, cfg, cache, invocar_fn, bruto_fn, cache_path, on_progress, on_evento, detectados
-    )
     if paralelismo > 1:
-        args = (*args, paralelismo)
-    render_paginas, blocos_traduzidos, esgotado, motivo_pausa = processar(*args)
+        render_paginas, blocos_traduzidos, esgotado, motivo_pausa = _processar_paginas_paralelo(
+            doc,
+            total,
+            cfg,
+            cache,
+            invocar_fn,
+            bruto_fn,
+            cache_path,
+            on_progress,
+            on_evento,
+            detectados,
+            paralelismo,
+        )
+    else:
+        render_paginas, blocos_traduzidos, esgotado, motivo_pausa = _processar_paginas_sequencial(
+            doc,
+            total,
+            cfg,
+            cache,
+            invocar_fn,
+            bruto_fn,
+            cache_path,
+            on_progress,
+            on_evento,
+            detectados,
+            checar_pausa,
+        )
 
     # Comparador de consistência (ADR-0034): opt-in e só quando concluiu. Unifica
     # termos/nomes divergentes via mapa determinístico aplicado antes do render.

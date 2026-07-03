@@ -160,6 +160,7 @@ def invocar(
     modelo: str | None = None,
     timeout: int = _TIMEOUT_PADRAO,
     motor: str = "claude",
+    fallback: bool = True,
 ) -> str:
     """Envia *prompt* ao motor selecionado e devolve a resposta.
 
@@ -168,6 +169,11 @@ def invocar(
         modelo: vazio ⇒ default do *motor* pedido (``modelo_padrao``) — nunca
             mistura o default de um motor com o adapter do outro (nem no
             pedido original, nem no fallback).
+        fallback: ``True`` (default) mantém o comportamento bidirecional abaixo.
+            ``False`` desliga a troca de motor: uma falha do motor pedido
+            propaga direto, sem tentar o outro (ADR-0045 — jobs que pedem um
+            motor explícito, como tradução, não devem trocar de motor às
+            escondidas no meio de um lote).
 
     Fallback bidirecional (plug-and-play — rede de segurança nos dois sentidos):
         - ``motor="ollama"`` e o endpoint está fora do ar ⇒ tenta ``claude``.
@@ -177,13 +183,15 @@ def invocar(
         falham, propaga o erro do **fallback** (é a última tentativa real).
 
     Raises:
-        InvocarErro: falha do motor pedido e do fallback.
+        InvocarErro: falha do motor pedido (e do fallback, se ``fallback=True``).
     """
-    primario, fallback = (
+    primario, secundario = (
         (_chamar_ollama, _chamar_claude) if motor == "ollama" else (_chamar_claude, _chamar_ollama)
     )
     try:
         return primario(prompt, modelo, timeout)
     except InvocarErro as exc:
+        if not fallback:
+            raise
         _log.warning("motor=%s indisponível (%s); caindo para o outro motor", motor, exc)
-        return fallback(prompt, None, timeout)
+        return secundario(prompt, None, timeout)

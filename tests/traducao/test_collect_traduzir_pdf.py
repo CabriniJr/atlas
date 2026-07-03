@@ -45,7 +45,7 @@ def test_collect_traduz_e_atualiza_status(tmp_path, monkeypatch):
         agora,
     )
 
-    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude"):
+    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude", **_):
         ids = re.findall(r"\[\[(\d+)\]\]", prompt)
         return "\n".join(f"[[{i}]] O contêiner reinicia." for i in ids)
 
@@ -76,9 +76,7 @@ def test_collect_status_tem_log_e_atividade(tmp_path, monkeypatch):
 
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)
-    store.apply(
-        Resource(kind="Traducao", name="livro", spec={"origem": str(src)}), agora
-    )
+    store.apply(Resource(kind="Traducao", name="livro", spec={"origem": str(src)}), agora)
     monkeypatch.setattr(mod, "invocar", lambda p, **k: "[[0]] O contêiner reinicia.")
 
     ctx = SimpleNamespace(
@@ -101,7 +99,9 @@ def test_collect_status_tem_log_e_atividade(tmp_path, monkeypatch):
 def test_collect_glossario_auto_loga_deteccao(tmp_path, monkeypatch):
     src = tmp_path / "g.pdf"
     doc = fitz.open()
-    doc.new_page().insert_text((72, 100), "The kubectl command scales pods.", fontname="helv", fontsize=12)
+    doc.new_page().insert_text(
+        (72, 100), "The kubectl command scales pods.", fontname="helv", fontsize=12
+    )
     doc.save(src)
     doc.close()
 
@@ -141,8 +141,7 @@ def test_collect_parcial_pausa_e_agenda_retomada(tmp_path, monkeypatch):
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)
     store.apply(
-        Resource(kind="Traducao", name="p",
-                 spec={"origem": str(src), "janela_retomada_seg": 3600}),
+        Resource(kind="Traducao", name="p", spec={"origem": str(src), "janela_retomada_seg": 3600}),
         agora,
     )
 
@@ -178,9 +177,7 @@ def test_collect_timeout_faz_retry_curto_persistido(tmp_path, monkeypatch):
 
     store = ResourceStore(":memory:")
     agora = datetime.now(timezone.utc)
-    store.apply(
-        Resource(kind="Traducao", name="p", spec={"origem": str(src)}), agora
-    )
+    store.apply(Resource(kind="Traducao", name="p", spec={"origem": str(src)}), agora)
 
     def timeout_fn(prompt, **k):
         raise RuntimeError("timeout após 60s invocando IA")
@@ -214,7 +211,8 @@ def test_collect_timeout_apos_max_tentativas_vira_escassez_longa(tmp_path, monke
     agora = datetime.now(timezone.utc)
     store.apply(
         Resource(
-            kind="Traducao", name="p",
+            kind="Traducao",
+            name="p",
             spec={"origem": str(src), "janela_retomada_seg": 3600},
         ),
         agora,
@@ -249,7 +247,7 @@ def test_collect_sucesso_reseta_tentativas_timeout(tmp_path, monkeypatch):
     store.apply(Resource(kind="Traducao", name="p", spec={"origem": str(src)}), agora)
     store.set_status("Traducao", "p", {"tentativas_timeout": 3}, agora)
 
-    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude"):
+    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude", **_):
         ids = re.findall(r"\[\[(\d+)\]\]", prompt)
         return "\n".join(f"[[{i}]] O pod reinicia." for i in ids)
 
@@ -325,7 +323,7 @@ def test_collect_usa_agente_refino_quando_configurado(tmp_path, monkeypatch):
 
     vistos = []
 
-    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude"):
+    def fake_invocar(prompt, modelo=None, timeout=60, motor="claude", **_):
         vistos.append((motor, modelo, prompt))
         ids = re.findall(r"\[\[(\d+)\]\]", prompt)
         return "\n".join(f"[[{i}]] O contêiner reinicia." for i in ids)

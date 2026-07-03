@@ -20,6 +20,7 @@ atualizado-em: 2026-06-26
 | 1.4    | 2026-07-02 | Tech Lead | E9-01..E9-12 concluídos (render editorial HTML/WeasyPrint, TOC/hyperlinks/folio, fallback claude↔ollama). Nova frente **E9-13** (ADR-0041, fidelidade tipográfica + paginação adaptativa) iniciada — 2/12 tarefas feitas | — |
 | 1.5    | 2026-07-02 | Tech Lead | **Agente modo `code` via Ollama nativo** (ADR-0042/E7-45, pedido do PO, prioridade máxima) e **recuperação de órfãos no boot + serialização de chamadas Ollama** (ADR-0043/E9-14) — ambos commitados em `main`; não fazem parte do E9-13 | — |
 | 1.6    | 2026-07-02 | Tech Lead | **Qualidade/auto mode do Agente via Ollama** (ADR-0044/E7-46): grep/glob reais, CLAUDE.md injetado, `max_turnos`, `POST /_self_restart`, aba 🤖 Auto. `atlas-builder` passou a usar `provider=ollama-local` (gemma4) | — |
+| 1.7    | 2026-07-02 | Tech Lead | Instância caiu (crash-loop, WIP quebrado não commitado — revertido). Achado e corrigido: `ia.invocar` trocava de motor ollama→claude **às escondidas** na tradução, queimando cota do Claude; agora `fallback=False` na tradução (ADR-0045/E9-15). Ollama virou motor padrão; controle real (pausar/recomeçar/re-refinar) na UI de `Traducao` | — |
 
 ---
 
@@ -161,7 +162,9 @@ ir a produção: merge em `main` (o CD aplica em ≤5 min). Instalação do CD: 
   motor/modelo/endpoint a partir do `LLMProvider` (ou campos do Agente).
 - **Endpoints especiais** (em `api.py`, `do_POST`/`do_GET`): `/_run`, `/_cmd`,
   `/_chat`, `/_insight`, `/_agent_run` (+ `/stream`), `/_status`, `/_schema`, `/_complete`,
-  `/_self_restart` (admin-only, ADR-0044 — reinício destacado do processo local).
+  `/_self_restart` (admin-only, ADR-0044 — reinício destacado do processo local),
+  `/_traduzir_pausar`/`_recomecar`/`_rerefinar` (ADR-0045 — controle real do job
+  de tradução em andamento).
 
 ## 4. O agente que constrói (atlas-builder)
 

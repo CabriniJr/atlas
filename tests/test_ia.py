@@ -226,14 +226,29 @@ def test_invocar_motor_ollama_falha_do_claude_no_fallback_propaga(monkeypatch):
         invocar("teste", motor="ollama")
 
 
+def test_invocar_fallback_false_propaga_erro_sem_tentar_outro_motor(monkeypatch):
+    """ADR-0045: jobs que pedem fallback=False (ex.: tradução) não trocam de
+    motor às escondidas — a falha do motor pedido propaga direto."""
+
+    def fake_invocar_ollama(prompt, modelo, endpoint, timeout=60):
+        raise InvocarErro("ollama: connection refused")
+
+    monkeypatch.setattr("atlas.ia.invocar_ollama", fake_invocar_ollama)
+    chamadas_claude = []
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: chamadas_claude.append(a) or MagicMock()
+    )
+    with pytest.raises(InvocarErro, match="connection refused"):
+        invocar("teste", motor="ollama", fallback=False)
+    assert not chamadas_claude  # nunca chegou a chamar o claude
+
+
 def test_invocar_motor_claude_bate_limite_cai_para_ollama(monkeypatch):
     """Fallback no sentido oposto: claude bateu limite/sessão ⇒ tenta ollama."""
     monkeypatch.setattr(
         subprocess,
         "run",
-        lambda *a, **kw: MagicMock(
-            returncode=1, stdout="", stderr="You've hit your session limit"
-        ),
+        lambda *a, **kw: MagicMock(returncode=1, stdout="", stderr="You've hit your session limit"),
     )
     chamadas = []
 
