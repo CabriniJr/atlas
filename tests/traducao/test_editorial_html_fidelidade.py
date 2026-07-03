@@ -5,14 +5,21 @@ from atlas.traducao.extracao import BlocoTraducao, Span
 
 
 def _bloco(texto, size=11.0, bold=False, italic=False, font="Times"):
-    span = Span(text=texto, bbox=(72, 100, 400, 116), font=font, size=size, color=0,
-                flags=(1 << 4 if bold else 0) | (1 << 1 if italic else 0))
+    span = Span(
+        text=texto,
+        bbox=(72, 100, 400, 116),
+        font=font,
+        size=size,
+        color=0,
+        flags=(1 << 4 if bold else 0) | (1 << 1 if italic else 0),
+    )
     return BlocoTraducao(id=1, pagina=0, bbox=span.bbox, texto=texto, spans=[span])
 
 
 def test_elemento_converte_marcador_de_enfase_inline():
     b = _bloco("Original com **muito** destaque.")
     from atlas.traducao.editorial_html import _estilo
+
     est = _estilo(b)
     html = _elemento(b, "Tradução com **muito** destaque.", est, body_sz=11.0, clusters=[])
     assert "<b>muito</b>" in html
@@ -21,6 +28,7 @@ def test_elemento_converte_marcador_de_enfase_inline():
 def test_elemento_usa_fonte_real_do_span():
     b = _bloco("Texto qualquer.", font="MinhaFonteCustom")
     from atlas.traducao.editorial_html import _estilo
+
     est = _estilo(b)
     assert est["font"] == "MinhaFonteCustom"
     html = _elemento(b, "Texto qualquer.", est, body_sz=11.0, clusters=[])
@@ -29,6 +37,7 @@ def test_elemento_usa_fonte_real_do_span():
 
 def test_tipo_lista_reconhece_numerado_e_alfabetico():
     from atlas.traducao.editorial_html import _tipo_lista
+
     assert _tipo_lista("1. Primeiro item") == "ol"
     assert _tipo_lista("a) Item alfabético") == "ol"
     assert _tipo_lista("• Item com bullet") == "ul"
@@ -72,6 +81,34 @@ def test_e_rodape_nativo_distingue_nota_de_folio():
     assert _e_rodape_nativo(Folio(), ph=842.0) is False
 
 
+def test_e_rodape_nativo_nao_confunde_paragrafo_normal_no_fim_da_pagina():
+    """Achado real (auditoria visual, Observability Engineering): o último
+    parágrafo de uma seção às vezes cai na faixa inferior da página (ainda mais
+    fácil na tradução, que cresce e empurra o texto pra baixo) — mas é prosa
+    normal, MESMO tamanho de fonte do corpo, não uma nota de rodapé de verdade.
+    Nota real é tipograficamente menor que o corpo (ex.: 8pt vs. 10.5pt no
+    Observability Engineering) — esse é o sinal que faltava."""
+    from atlas.traducao.editorial_html import _e_rodape_nativo
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    def _bloco_bottom(texto, size):
+        span = Span(text=texto, bbox=(72, 600, 400, 616), font="Times", size=size, color=0, flags=0)
+        return BlocoTraducao(
+            id=1, pagina=0, bbox=(72.0, 600.0, 400.0, 616.0), texto=texto, spans=[span]
+        )
+
+    ultimo_paragrafo = _bloco_bottom(
+        "Este livro busca apresentar as diversas considerações associadas.", size=10.5
+    )
+    nota_de_verdade = _bloco_bottom("1. Uma nota explicativa de verdade aqui.", size=8.0)
+
+    assert _e_rodape_nativo(ultimo_paragrafo, ph=842.0, body_sz=10.5) is False
+    assert _e_rodape_nativo(nota_de_verdade, ph=842.0, body_sz=10.5) is True
+    # sem body_sz (chamador não informou) preserva a heurística antiga — nunca
+    # regride quem já usa a função sem esse argumento.
+    assert _e_rodape_nativo(ultimo_paragrafo, ph=842.0) is True
+
+
 def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
     import fitz
 
@@ -80,10 +117,10 @@ def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
 
     doc = fitz.open()
     page = doc.new_page()  # altura default ~792pt
-    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv",
-                      fontsize=12)
-    page.insert_text((72, 760), "1. Nota explicativa ao pé da página aqui.", fontname="helv",
-                      fontsize=8)
+    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv", fontsize=12)
+    page.insert_text(
+        (72, 760), "1. Nota explicativa ao pé da página aqui.", fontname="helv", fontsize=8
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -107,10 +144,10 @@ def test_montar_html_converte_enfase_dentro_de_nota_de_rodape(tmp_path):
 
     doc = fitz.open()
     page = doc.new_page()
-    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv",
-                      fontsize=12)
-    page.insert_text((72, 760), "1. Nota com termo **importante** aqui embaixo.",
-                      fontname="helv", fontsize=8)
+    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv", fontsize=12)
+    page.insert_text(
+        (72, 760), "1. Nota com termo **importante** aqui embaixo.", fontname="helv", fontsize=8
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -215,8 +252,9 @@ def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     for titulo in ("Capítulo Um", "Capítulo Dois", "Capítulo Três"):
         page = doc.new_page()
         page.insert_text((72, 70), titulo, fontname="helv", fontsize=24)  # heading grande
-        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv",
-                          fontsize=11)
+        page.insert_text(
+            (72, 150), "Parágrafo de corpo normal desta página.", fontname="helv", fontsize=11
+        )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -252,8 +290,9 @@ def test_montar_html_gruda_titulo_de_capitulo_quebrado_em_duas_linhas(tmp_path):
         page = doc.new_page()
         page.insert_text((72, 70), linha1, fontname="helv", fontsize=24)
         page.insert_text((72, 100), linha2, fontname="helv", fontsize=24)
-        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv",
-                          fontsize=11)
+        page.insert_text(
+            (72, 150), "Parágrafo de corpo normal desta página.", fontname="helv", fontsize=11
+        )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -280,7 +319,11 @@ def test_montar_html_embute_font_face_real(tmp_path):
     from atlas.traducao.extracao import extrair_pagina
 
     fonte_path = str(
-        Path(__file__).resolve().parents[2] / "src" / "atlas" / "traducao" / "fonts"
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "atlas"
+        / "traducao"
+        / "fonts"
         / "LiberationSans-Regular.ttf"
     )
     doc = fitz.open()
@@ -303,6 +346,7 @@ def test_montar_html_embute_font_face_real(tmp_path):
 
 def test_css_nao_forca_cor_azul_no_link():
     from atlas.traducao.editorial_html import _CSS
+
     assert "#0645ad" not in _CSS
 
 
@@ -324,8 +368,9 @@ def test_regioes_diagrama_agrupa_desenho_vetorial_com_rotulos(tmp_path):
     page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
     page.insert_text((150, 160), "App B", fontname="helv", fontsize=9)
     # parágrafo comum, bem longe do diagrama — não deve entrar na região.
-    page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
-                      fontname="helv", fontsize=11)
+    page.insert_text(
+        (72, 400), "Este é um parágrafo comum de texto na página.", fontname="helv", fontsize=11
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -470,8 +515,9 @@ def test_montar_html_rasteriza_diagrama_em_vez_de_paragrafos_soltos(tmp_path):
     page.draw_line((100, 140), (150, 140))
     page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
     page.insert_text((150, 160), "App B", fontname="helv", fontsize=9)
-    page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
-                      fontname="helv", fontsize=11)
+    page.insert_text(
+        (72, 400), "Este é um parágrafo comum de texto na página.", fontname="helv", fontsize=11
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -499,10 +545,18 @@ def test_regioes_destaque_detecta_caixa_com_fundo_e_prosa(tmp_path):
     page = doc.new_page()
     page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), fill=(0.92, 0.92, 0.92), width=1)
     page.insert_text((80, 120), "DICA", fontname="helv", fontsize=10)
-    page.insert_text((80, 140), "Este e um paragrafo de dica com bastante texto explicativo aqui.",
-                      fontname="helv", fontsize=9)
-    page.insert_text((72, 400), "Paragrafo comum de corpo, bem longe da caixa de destaque.",
-                      fontname="helv", fontsize=11)
+    page.insert_text(
+        (80, 140),
+        "Este e um paragrafo de dica com bastante texto explicativo aqui.",
+        fontname="helv",
+        fontsize=9,
+    )
+    page.insert_text(
+        (72, 400),
+        "Paragrafo comum de corpo, bem longe da caixa de destaque.",
+        fontname="helv",
+        fontsize=11,
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -527,8 +581,12 @@ def test_regioes_destaque_ignora_caixa_sem_preenchimento(tmp_path):
     doc = fitz.open()
     page = doc.new_page()
     page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), width=1)  # sem fill
-    page.insert_text((80, 140), "Este e um paragrafo qualquer com bastante texto aqui dentro.",
-                      fontname="helv", fontsize=9)
+    page.insert_text(
+        (80, 140),
+        "Este e um paragrafo qualquer com bastante texto aqui dentro.",
+        fontname="helv",
+        fontsize=9,
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -560,8 +618,9 @@ def test_regioes_destaque_ignora_regua_fina_perto_de_fundo_decorativo(tmp_path):
     page.draw_rect(fitz.Rect(394, 65, 506, 220), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
     # régua fina colorida logo abaixo do título — preenchida, mas fina.
     page.draw_rect(fitz.Rect(180, 185.5, 474, 186), color=(0, 0, 0), fill=(0.3, 0.4, 0.5), width=0)
-    page.insert_text((183, 150), "Volumes: attaching disk storage to containers",
-                      fontname="helv", fontsize=24)
+    page.insert_text(
+        (183, 150), "Volumes: attaching disk storage to containers", fontname="helv", fontsize=24
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -582,10 +641,18 @@ def test_montar_html_envolve_caixa_de_destaque_em_div(tmp_path):
     doc = fitz.open()
     page = doc.new_page()
     page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), fill=(0.92, 0.92, 0.92), width=1)
-    page.insert_text((80, 140), "Este e um paragrafo de dica com bastante texto explicativo aqui.",
-                      fontname="helv", fontsize=9)
-    page.insert_text((72, 400), "Paragrafo comum de corpo, bem longe da caixa de destaque.",
-                      fontname="helv", fontsize=11)
+    page.insert_text(
+        (80, 140),
+        "Este e um paragrafo de dica com bastante texto explicativo aqui.",
+        fontname="helv",
+        fontsize=9,
+    )
+    page.insert_text(
+        (72, 400),
+        "Paragrafo comum de corpo, bem longe da caixa de destaque.",
+        fontname="helv",
+        fontsize=11,
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -648,8 +715,7 @@ def test_montar_html_gruda_continuacao_de_item_de_lista_dentro_de_destaque(tmp_p
     html = montar_html(doc, paginas, geo)
     assert html.count("<li") == 2
     assert (
-        "Understanding how software development and deployment has changed over the years"
-        in html
+        "Understanding how software development and deployment has changed over the years" in html
     )
     doc.close()
 
@@ -710,17 +776,24 @@ def test_montar_html_gruda_continuacao_de_nota_na_pagina_seguinte(tmp_path):
 
     doc = fitz.open()
     p0 = doc.new_page()  # altura default ~792pt
-    p0.insert_text((72, 100), "Corpo do texto principal da primeira página.", fontname="helv",
-                   fontsize=12)
-    p0.insert_text((72, 760), "1. Nota explicativa que estoura pra proxima pagina e",
-                   fontname="helv", fontsize=8)
+    p0.insert_text(
+        (72, 100), "Corpo do texto principal da primeira página.", fontname="helv", fontsize=12
+    )
+    p0.insert_text(
+        (72, 760),
+        "1. Nota explicativa que estoura pra proxima pagina e",
+        fontname="helv",
+        fontsize=8,
+    )
     p1 = doc.new_page()
     # continuação da nota: primeiro bloco da página, começa com minúscula,
     # longe da margem (não seria pego por _e_rodape_nativo sozinho).
-    p1.insert_text((72, 90), "continua aqui no topo da pagina seguinte.", fontname="helv",
-                   fontsize=8)
-    p1.insert_text((72, 150), "Parágrafo comum de corpo da segunda página.", fontname="helv",
-                   fontsize=12)
+    p1.insert_text(
+        (72, 90), "continua aqui no topo da pagina seguinte.", fontname="helv", fontsize=8
+    )
+    p1.insert_text(
+        (72, 150), "Parágrafo comum de corpo da segunda página.", fontname="helv", fontsize=12
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()
@@ -747,12 +820,18 @@ def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):
 
     doc = fitz.open()
     page = doc.new_page()
-    page.insert_text((72, 100), "1. Primeiro item da lista numerada aqui.", fontname="helv",
-                      fontsize=11)
-    page.insert_text((72, 120), "2. Segundo item da lista numerada aqui.", fontname="helv",
-                      fontsize=11)
-    page.insert_text((72, 300), "Parágrafo comum de corpo bem no meio da página inteira.",
-                      fontname="helv", fontsize=11)
+    page.insert_text(
+        (72, 100), "1. Primeiro item da lista numerada aqui.", fontname="helv", fontsize=11
+    )
+    page.insert_text(
+        (72, 120), "2. Segundo item da lista numerada aqui.", fontname="helv", fontsize=11
+    )
+    page.insert_text(
+        (72, 300),
+        "Parágrafo comum de corpo bem no meio da página inteira.",
+        fontname="helv",
+        fontsize=11,
+    )
     p = tmp_path / "s.pdf"
     doc.save(str(p))
     doc.close()

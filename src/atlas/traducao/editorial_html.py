@@ -438,6 +438,7 @@ p.toc a::after {{ content: leader('.') ' ' target-counter(attr(href url), page);
 .tocnum::before {{ content: leader('.') ' '; }}
 """
 
+
 def _e_folio(b, ph: float) -> bool:
     """Bloco de margem (cabeça de página / número de página): linha curta na faixa
     superior/inferior. Não entra no corpo — vira elemento de margem repetido no CSS."""
@@ -478,16 +479,32 @@ def _valor_folio(b) -> str | None:
     return m.group(0) if m else None
 
 
-def _e_rodape_nativo(b, ph: float) -> bool:
+_RAZAO_MAX_TAMANHO_RODAPE = 0.9  # nota de rodapé é tipograficamente menor que o corpo
+
+
+def _e_rodape_nativo(b, ph: float, body_sz: float | None = None) -> bool:
     """Nota de rodapé do próprio PDF (não fólio): frase de várias palavras na
     faixa inferior da página, acima da faixa mais estreita onde o fólio mora
-    (ADR-0041). Fólio é um rótulo curto (`_e_folio`); nota é prosa."""
+    (ADR-0041). Fólio é um rótulo curto (`_e_folio`); nota é prosa.
+
+    ``body_sz`` (ADR-0041 fix, achado ao auditar Observability Engineering):
+    sem checar o tamanho da fonte, o ÚLTIMO PARÁGRAFO normal de uma seção —
+    que a tradução, ao crescer, empurra pra faixa inferior da página com
+    facilidade — é confundido com nota de rodapé (ganha régua + estilo de
+    rodapé por engano). Nota de rodapé de verdade é tipograficamente MENOR que
+    o corpo (ex.: 8pt vs. 10.5pt nesse livro); texto do mesmo tamanho do corpo
+    não é nota, é só o final de um parágrafo comum. ``None`` (chamador não
+    informou o tamanho do corpo) preserva a heurística antiga só por posição."""
     if not b.bbox or not b.texto:
         return False
     y1 = b.bbox[3]
     na_faixa_inferior = ph * 0.70 < y1 <= ph * 0.92
     tem_frase = len(b.texto.split()) >= 4
-    return na_faixa_inferior and tem_frase and not _e_folio(b, ph)
+    if not (na_faixa_inferior and tem_frase and not _e_folio(b, ph)):
+        return False
+    if body_sz is None or not getattr(b, "spans", None):
+        return True
+    return _estilo(b)["size"] < body_sz * _RAZAO_MAX_TAMANHO_RODAPE
 
 
 def _comeca_minuscula(texto: str) -> bool:
@@ -641,8 +658,9 @@ def _link_do_bloco(b, links: list[tuple]):
 _FALLBACK_FONTE = "'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif"
 
 
-def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
-              anchor: str = "", link=None) -> str:
+def _elemento(
+    b, texto: str, est: dict, body_sz: float, clusters: list[float], anchor: str = "", link=None
+) -> str:
     """HTML de um bloco conforme papel/estilo, com âncora, hyperlink e fonte
     real (ADR-0041)."""
     cor = _cor_hex(est["color"])
@@ -650,7 +668,7 @@ def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
     fonte_css = f"font-family:'{_e(est['font'])}',{_FALLBACK_FONTE};" if est["font"] else ""
     ida = f' id="{anchor}"' if anchor else ""
     if est["mono"]:
-        return f'<pre{ida}>{_e(b.texto)}</pre>'  # código: original, verbatim
+        return f"<pre{ida}>{_e(b.texto)}</pre>"  # código: original, verbatim
     # sumário: link interno + linha terminando em nº de página → regenera a página.
     if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
         rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
@@ -667,7 +685,7 @@ def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
-        style = f'font-size:{sz:.1f}pt;{cor_css}{fonte_css}'
+        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}"
         return f'<{nivel}{ida} style="{style}">{conteudo}</{nivel}>'
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
@@ -804,7 +822,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 continue
             if _e_folio(b, ph):
                 continue
-            if not _estilo(b)["mono"] and _e_rodape_nativo(b, ph):
+            if not _estilo(b)["mono"] and _e_rodape_nativo(b, ph, body_sz):
                 pendente_notas.append(traducoes.get(b.id) or b.texto)
                 continue
             itens.append((b.bbox[1] if b.bbox else 0.0, "b", b))
@@ -934,8 +952,10 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     }
     css = _CSS.format(**geo_css)
     corpo = "\n".join(partes)
-    return f'<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">' \
-           f"<style>{css}</style></head><body>{corpo}</body></html>"
+    return (
+        f'<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">'
+        f"<style>{css}</style></head><body>{corpo}</body></html>"
+    )
 
 
 def remontar_editorial_html(doc, paginas: dict, destino: str, cfg=None) -> None:
