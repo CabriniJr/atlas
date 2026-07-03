@@ -24,7 +24,7 @@ import statistics
 
 import fitz
 
-from atlas.traducao.tipografia import converter_enfase, nivel_titulo
+from atlas.traducao.tipografia import clusters_titulo, converter_enfase, nivel_titulo, taxa_abre_pagina
 
 # fim de linha de sumário: leaders (pontos) + número de página do original (que a
 # repaginação invalida — o CSS regenera via target-counter).
@@ -176,8 +176,11 @@ body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
 p {{ margin: 0 0 .45em 0; orphans: 3; widows: 3; }}
 h1,h2,h3 {{ text-align: left; font-weight: bold; margin: .7em 0 .28em; line-height: 1.2;
             page-break-after: avoid; break-after: avoid; }}
-/* o título de capítulo (h1) vira a cabeça de página corrente */
-h1 {{ string-set: cap content(); page-break-before: auto; }}
+/* o título de capítulo (h1) vira a cabeça de página corrente; quebra por nível
+   é calculada por documento (ADR-0041) — não é uma regra fixa. */
+h1 {{ string-set: cap content(); break-before: {h1_break}; }}
+h2 {{ break-before: {h2_break}; }}
+h3 {{ break-before: {h3_break}; }}
 ul {{ margin: .3em 0 .55em 1.3em; padding: 0; }}
 li {{ margin: .12em 0; }}
 pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space: pre-wrap;
@@ -208,6 +211,17 @@ def _e_folio(b, ph: float) -> bool:
     uma_linha = (y1 - y0) < 26
     na_margem = y0 < ph * 0.075 or y1 > ph * 0.925
     return curto and uma_linha and na_margem
+
+
+def _abre_pagina(b, blocos: list, ph: float) -> bool:
+    """``True`` se ``b`` é o primeiro bloco de conteúdo (não-fólio) da página,
+    perto do topo — usado pra medir se um nível de heading tende a abrir página
+    nova no documento original (ADR-0041)."""
+    uteis = [x for x in blocos if x.bbox and not _e_folio(x, ph)]
+    if not uteis:
+        return False
+    primeiro = min(uteis, key=lambda x: x.bbox[1])
+    return primeiro.bbox == b.bbox and b.bbox[1] <= ph * 0.18
 
 
 _RE_FOLIO_NUM = re.compile(r"\b\d+\b")
@@ -410,6 +424,24 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 sizes.append(_estilo(b)["size"])
     body_sz = statistics.median(sizes) if sizes else 11.0
 
+    tamanhos_doc = [
+        _estilo(b)["size"]
+        for _idx, (blocos, _tr) in paginas.items()
+        for b in blocos
+        if b.bbox and not b.skip and not _e_folio(b, ph)
+    ]
+    clusters = clusters_titulo(tamanhos_doc, body_sz)
+
+    ocorrencias: dict[str, list[bool]] = {"h1": [], "h2": [], "h3": []}
+    for _idx, (blocos, _tr) in paginas.items():
+        for b in blocos:
+            if not b.bbox or b.skip or _e_folio(b, ph):
+                continue
+            nivel = nivel_titulo(_estilo(b)["size"], clusters)
+            if nivel and len(b.texto.split()) <= 14:
+                ocorrencias[nivel].append(_abre_pagina(b, blocos, ph))
+    quebra = taxa_abre_pagina(ocorrencias)
+
     partes: list[str] = []
     lista_aberta: str | None = None
 
@@ -470,7 +502,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 alvo = _alvo_goto(paginas, destpage, pt)
                 link = ("goto", alvo) if alvo else None
             tipo_li = _tipo_lista(b.texto) if not est["mono"] else None
-            el = _elemento(b, texto, est, body_sz, [], anchor=_anchor(idx, b.id), link=link)
+            el = _elemento(b, texto, est, body_sz, clusters, anchor=_anchor(idx, b.id), link=link)
             if tipo_li and el.startswith("<li"):
                 if lista_aberta and lista_aberta != tipo_li:
                     fecha_lista()
@@ -486,7 +518,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in notas_pag)
             partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
 
-    css = _CSS.format(**geo)
+    geo_css = {
+        **geo,
+        "h1_break": "page" if quebra.get("h1") else "auto",
+        "h2_break": "page" if quebra.get("h2") else "auto",
+        "h3_break": "page" if quebra.get("h3") else "auto",
+    }
+    css = _CSS.format(**geo_css)
     corpo = "\n".join(partes)
     return f'<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">' \
            f"<style>{css}</style></head><body>{corpo}</body></html>"

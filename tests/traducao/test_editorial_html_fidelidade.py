@@ -131,3 +131,47 @@ def test_montar_html_emite_marcador_de_folio_por_pagina(tmp_path):
     html = montar_html(doc, paginas, geo)
     assert "string-set: folio '42'" in html
     doc.close()
+
+
+def test_abre_pagina_primeiro_bloco_perto_do_topo_e_true():
+    from atlas.traducao.editorial_html import _abre_pagina
+
+    class Titulo:
+        bbox = (72.0, 70.0, 300.0, 90.0)
+        texto = "Capítulo 1"
+        skip = False
+
+    class Corpo:
+        bbox = (72.0, 200.0, 500.0, 400.0)
+        texto = "Parágrafo qualquer bem no meio da página, bem longo mesmo."
+        skip = False
+
+    blocos = [Titulo(), Corpo()]
+    assert _abre_pagina(Titulo(), blocos, ph=792.0) is True
+    assert _abre_pagina(Corpo(), blocos, ph=792.0) is False
+
+
+def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
+    import fitz
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    for titulo in ("Capítulo Um", "Capítulo Dois", "Capítulo Três"):
+        page = doc.new_page()
+        page.insert_text((72, 70), titulo, fontname="helv", fontsize=24)  # heading grande
+        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    paginas = {}
+    for i in range(doc.page_count):
+        blocos = extrair_pagina(doc[i], i)
+        traducoes = {b.id: b.texto for b in blocos if not b.skip}
+        paginas[i] = (blocos, traducoes)
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "break-before: page" in html  # aplicado no h1 (título sempre abre página)
+    doc.close()
