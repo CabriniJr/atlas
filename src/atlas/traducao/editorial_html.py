@@ -24,6 +24,8 @@ import statistics
 
 import fitz
 
+from atlas.traducao.tipografia import converter_enfase, nivel_titulo
+
 # fim de linha de sumário: leaders (pontos) + número de página do original (que a
 # repaginação invalida — o CSS regenera via target-counter).
 _RE_TOC_FIM = re.compile(r"[\s.·•…\-–—]*\d+\s*$")
@@ -56,15 +58,20 @@ def _mono_span(s) -> bool:
 def _estilo(b) -> dict:
     """Estilo dominante do bloco (por soma de caracteres em cada estilo)."""
     if not b.spans:
-        return {"size": 11.0, "bold": False, "italic": False, "mono": False, "color": 0}
+        return {"size": 11.0, "bold": False, "italic": False, "mono": False, "color": 0, "font": ""}
     total = sum(max(1, len(s.text)) for s in b.spans)
     peso = lambda pred: sum(len(s.text) for s in b.spans if pred(s))  # noqa: E731
+    fontes: dict[str, int] = {}
+    for s in b.spans:
+        fontes[s.font] = fontes.get(s.font, 0) + len(s.text)
+    font_dom = max(fontes, key=fontes.get) if fontes else ""
     return {
         "size": statistics.median([s.size for s in b.spans if s.size] or [11.0]),
         "bold": peso(_bold) > total / 2,
         "italic": peso(_ital) > total / 2,
         "mono": any(_mono_span(s) for s in b.spans),
         "color": b.spans[0].color or 0,
+        "font": font_dom,
     }
 
 
@@ -301,10 +308,16 @@ def _link_do_bloco(b, links: list[tuple]):
     return melhor if area > 0 else None
 
 
-def _elemento(b, texto: str, est: dict, body_sz: float, anchor: str = "", link=None) -> str:
-    """HTML de um bloco conforme papel/estilo, com âncora e hyperlink (E9-09)."""
+_FALLBACK_FONTE = "'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif"
+
+
+def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
+              anchor: str = "", link=None) -> str:
+    """HTML de um bloco conforme papel/estilo, com âncora, hyperlink e fonte
+    real (ADR-0041)."""
     cor = _cor_hex(est["color"])
     cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
+    fonte_css = f"font-family:'{_e(est['font'])}',{_FALLBACK_FONTE};" if est["font"] else ""
     ida = f' id="{anchor}"' if anchor else ""
     if est["mono"]:
         return f'<pre{ida}>{_e(b.texto)}</pre>'  # código: original, verbatim
@@ -312,7 +325,7 @@ def _elemento(b, texto: str, est: dict, body_sz: float, anchor: str = "", link=N
     if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
         rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
         return f'<p class="toc"{ida}><a href="#{link[1]}">{rotulo}</a></p>'
-    conteudo = _e(texto)
+    conteudo = converter_enfase(texto, _e)
     if est["bold"]:
         conteudo = f'<span class="bd">{conteudo}</span>'
     if est["italic"]:
@@ -322,15 +335,15 @@ def _elemento(b, texto: str, est: dict, body_sz: float, anchor: str = "", link=N
         if href:
             conteudo = f'<a href="{_e(href)}">{conteudo}</a>'
     sz = est["size"]
-    if sz >= body_sz * 1.18 and len(texto.split()) <= 14:
-        nivel = "h1" if sz >= body_sz * 1.6 else "h2"
-        return f'<{nivel}{ida} style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</{nivel}>'
+    nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
+    if nivel:
+        return f'<{nivel}{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{conteudo}</{nivel}>'
     if _e_lista(b.texto):
-        item = _e(texto.lstrip()[1:].lstrip())
+        item = converter_enfase(texto.lstrip()[1:].lstrip(), _e)
         if est["italic"]:
             item = f'<span class="it">{item}</span>'
-        return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}">{item}</li>'
-    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}">{conteudo}</p>'
+        return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
+    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{conteudo}</p>'
 
 
 def montar_html(doc, paginas: dict, geo: dict) -> str:
@@ -393,7 +406,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 destpage, pt = link[1]
                 alvo = _alvo_goto(paginas, destpage, pt)
                 link = ("goto", alvo) if alvo else None
-            el = _elemento(b, texto, est, body_sz, anchor=_anchor(idx, b.id), link=link)
+            el = _elemento(b, texto, est, body_sz, [], anchor=_anchor(idx, b.id), link=link)
             if el.startswith("<li"):
                 if not aberto_ul:
                     partes.append("<ul>")
