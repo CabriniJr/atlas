@@ -337,6 +337,19 @@ def test_glue_continuacao_de_item_de_lista_quebrado_em_2_blocos(tmp_path):
     doc.close()
 
 
+def test_elemento_toc_converte_enfase_no_titulo():
+    """Achado real (auditoria visual, Kubernetes in Action): o numeral do
+    capítulo é itálico no original ("*1* Introducing Kubernetes") — a
+    extração marca isso como "_1_ Apresentando o Kubernetes", mas
+    _elemento_toc não convertia o marcador, vazando "_1_" literal no
+    sumário em vez de um "1" em itálico."""
+    from atlas.traducao.editorial_html import _elemento_toc
+
+    html = _elemento_toc("_1_ Apresentando o Kubernetes 34", anchors=[])
+    assert "<i>1</i>" in html
+    assert "_1_" not in html
+
+
 def test_parece_sumario_mesclado_reconhece_toc_de_verdade():
     from atlas.traducao.editorial_html import _parece_sumario_mesclado
 

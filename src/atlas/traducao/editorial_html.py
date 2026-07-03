@@ -691,15 +691,21 @@ def _parece_sumario_mesclado(texto_original: str) -> bool:
 
 def _elemento_toc(texto: str, anchors: list) -> str:
     """Um bloco de sumário mesclado → uma linha por entrada, com link + página
-    recalculada (target-counter). Fallback: mostra o número original (E9-09)."""
+    recalculada (target-counter). Fallback: mostra o número original (E9-09).
+
+    Passa o título por ``converter_enfase`` (achado real, auditoria visual,
+    Kubernetes in Action): sem isso, um marcador ``**bold**``/``_itálico_``
+    vindo da extração (ex.: numeral de capítulo em itálico no original)
+    vazava LITERAL no sumário — "_1_" em vez de um "1" em itálico."""
     linhas = []
     for i, (titulo, num) in enumerate(_entradas_toc(texto)):
         alvo = anchors[i] if i < len(anchors) else None
+        titulo_html = converter_enfase(titulo, _e)
         if alvo:
-            linhas.append(f'<p class="toc"><a href="#{alvo}">{_e(titulo)}</a></p>')
+            linhas.append(f'<p class="toc"><a href="#{alvo}">{titulo_html}</a></p>')
         else:
             n = f' <span class="tocnum">{_e(num)}</span>' if num else ""
-            linhas.append(f'<p class="toc">{_e(titulo)}{n}</p>')
+            linhas.append(f'<p class="toc">{titulo_html}{n}</p>')
     return "\n".join(linhas)
 
 
