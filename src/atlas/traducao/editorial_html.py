@@ -237,6 +237,26 @@ def _regioes_diagrama(page, blocos: list) -> list[tuple]:
     return out
 
 
+def _injetar_string_set(html_el: str, valor: str) -> str:
+    """Injeta ``string-set: folio '<valor>'`` no PRIMEIRO elemento renderizado da
+    página, em vez de um `<span>` vazio separado. Um `<span>` vazio, quando a
+    página anterior já está 100% cheia, pode ser empurrado sozinho pra uma nova
+    página pelo WeasyPrint — e a quebra forçada do heading seguinte (h1/h2/h3
+    por nível, ADR-0041) então empurra o conteúdo real por MAIS uma página,
+    deixando uma página quase em branco entre elas (bug real, achado por
+    amostragem visual do Observability Engineering, ADR-0041 fix). Anexar a
+    própria declaração ao elemento com conteúdo real elimina essa página
+    fantasma, porque o elemento nunca fica "sozinho" — ele sempre carrega
+    conteúdo visível junto."""
+    decl = f"string-set: folio '{valor}';"
+    if 'style="' in html_el:
+        return html_el.replace('style="', f'style="{decl}', 1)
+    m = re.match(r"^(<[a-zA-Z][a-zA-Z0-9]*)", html_el)
+    if not m:
+        return html_el
+    return html_el[: m.end()] + f' style="{decl}"' + html_el[m.end() :]
+
+
 def _renderizar_diagrama(page, regiao: fitz.Rect) -> str:
     """Rasteriza a região do diagrama como PNG (data URI) — preserva o desenho
     vetorial (caixas/setas/rótulos) tal como no original; a legenda ao redor
@@ -604,11 +624,11 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         page = doc[idx]
         links = _links_pagina(page)
         folio_blocos = [b for b in blocos if b.bbox and _e_folio(b, ph)]
+        valor_folio_pagina = None
         if folio_blocos:
             alvo = max(folio_blocos, key=lambda b: b.bbox[3])  # mais perto do fundo
-            valor = _valor_folio(alvo)
-            if valor:
-                partes.append(f"<span style=\"string-set: folio '{_e(valor)}'\"></span>")
+            valor_folio_pagina = _valor_folio(alvo)
+        marca_pagina = len(partes)  # 1º elemento desta página (p/ injetar o fólio, ADR-0041)
         # diagramas vetoriais (caixas/setas + rótulos, sem imagem raster): a
         # região inteira vira UMA imagem rasterizada — evita despejar os rótulos
         # como parágrafos soltos e sem estrutura (ADR-0041 fix).
@@ -712,6 +732,8 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         if notas_pag:
             corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in notas_pag)
             partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
+        if valor_folio_pagina and len(partes) > marca_pagina:
+            partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))
 
     fontes = extrair_fontes(doc)
     geo_css = {

@@ -402,6 +402,22 @@ def test_link_do_bloco_aceita_link_que_cobre_a_maior_parte_do_bloco():
     assert _link_do_bloco(bloco, links) == ("uri", "http://example.com")
 
 
+def test_injetar_string_set_em_elemento_com_style_existente():
+    from atlas.traducao.editorial_html import _injetar_string_set
+
+    el = '<p id="u1_2" style="font-size:11.0pt;">Texto aqui</p>'
+    out = _injetar_string_set(el, "42")
+    assert out == '<p id="u1_2" style="string-set: folio \'42\';font-size:11.0pt;">Texto aqui</p>'
+
+
+def test_injetar_string_set_em_elemento_sem_style():
+    from atlas.traducao.editorial_html import _injetar_string_set
+
+    el = "<pre>codigo aqui</pre>"
+    out = _injetar_string_set(el, "42")
+    assert out == "<pre style=\"string-set: folio '42';\">codigo aqui</pre>"
+
+
 def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):
     import fitz
 
