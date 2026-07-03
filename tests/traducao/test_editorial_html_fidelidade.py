@@ -35,18 +35,34 @@ def test_elemento_usa_fonte_real_do_span():
     assert "MinhaFonteCustom" in html
 
 
-def test_elemento_rotulo_capitulo_ganha_break_after_avoid():
-    """Achado real (auditoria visual, Observability Engineering): mesmo
-    depois de o título de capítulo/parte voltar a abrir página sozinho, o
-    RÓTULO ("CHAPTER N"/"PART N", seu próprio bloco) ficava órfão sozinho no
-    fim da página anterior — rótulo e título têm que viajar juntos."""
+def test_elemento_rotulo_capitulo_forca_break_before_no_proprio_rotulo():
+    """Achado real (auditoria visual, Observability Engineering): o RÓTULO
+    ("CHAPTER N"/"PART N") ficava órfão sozinho no fim da página anterior
+    enquanto o título pulava pra próxima. ``break-after:avoid`` no rótulo NÃO
+    resolve — testado empiricamente que o WeasyPrint não puxa um elemento
+    anterior pra frente através do break-before:always de outro; a única
+    forma confiável é forçar a quebra no PRÓPRIO rótulo."""
     b = _bloco("CHAPTER 2", size=16.8)
     b.papel = "rotulo_capitulo"
     from atlas.traducao.editorial_html import _estilo
 
     est = _estilo(b)
     html = _elemento(b, "CAPÍTULO 2", est, body_sz=10.5, clusters=[])
-    assert "break-after:avoid" in html
+    assert "break-before:always" in html
+
+
+def test_elemento_apos_rotulo_suprime_o_proprio_break_before():
+    """O título logo após o rótulo não pode ter SEU PRÓPRIO break-before de
+    nível de heading — o rótulo já abriu a página; um segundo break deixaria
+    o rótulo sozinho na página anterior de novo."""
+    b = _bloco("O que é observabilidade?", size=25.2)
+    from atlas.traducao.editorial_html import _estilo
+
+    est = _estilo(b)
+    html = _elemento(
+        b, "O que é observabilidade?", est, body_sz=10.5, clusters=[25.2], apos_rotulo=True
+    )
+    assert "break-before:avoid" in html
 
 
 def test_estilo_cor_por_maioria_nao_pelo_primeiro_span():

@@ -727,7 +727,14 @@ _FALLBACK_FONTE = "'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,s
 
 
 def _elemento(
-    b, texto: str, est: dict, body_sz: float, clusters: list[float], anchor: str = "", link=None
+    b,
+    texto: str,
+    est: dict,
+    body_sz: float,
+    clusters: list[float],
+    anchor: str = "",
+    link=None,
+    apos_rotulo: bool = False,
 ) -> str:
     """HTML de um bloco conforme papel/estilo, com âncora, hyperlink e fonte
     real (ADR-0041)."""
@@ -735,15 +742,22 @@ def _elemento(
     cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
     fonte_css = f"font-family:'{_e(est['font'])}',{_FALLBACK_FONTE};" if est["font"] else ""
     ida = f' id="{anchor}"' if anchor else ""
-    # rótulo de capítulo/parte ("CHAPTER N"/"PART N", ADR-0041): nunca pode
-    # ficar sozinho no fim de uma página enquanto o título (que abre página
-    # sozinho) pula pra próxima — viajam juntos, ou o rótulo fica órfão
-    # (achado real, auditoria visual, Observability Engineering).
+    # rótulo de capítulo/parte ("CHAPTER N"/"PART N", ADR-0041): força a
+    # quebra de página NELE (seu tamanho não bate com nenhum cluster de
+    # heading, então nunca ganharia break-before sozinho) — WeasyPrint NÃO
+    # honra break-after:avoid puxando um bloco anterior pra frente através de
+    # um break-before:always de outro elemento (testado empiricamente); a
+    # única forma confiável é forçar a quebra no PRÓPRIO rótulo (achado real,
+    # auditoria visual, Observability Engineering).
     rotulo_css = (
-        "break-after:avoid;page-break-after:avoid;"
+        "break-before:always;page-break-before:always;"
         if getattr(b, "papel", None) == "rotulo_capitulo"
         else ""
     )
+    # título logo depois do rótulo: o rótulo JÁ abriu a página — se o título
+    # também tiver seu próprio break-before (nível de heading), abriria uma
+    # SEGUNDA página, deixando o rótulo sozinho na primeira. Suprime.
+    pos_rotulo_css = "break-before:avoid;page-break-before:avoid;" if apos_rotulo else ""
     if est["mono"]:
         return f"<pre{ida}>{_e(b.texto)}</pre>"  # código: original, verbatim
     # sumário: link interno + linha terminando em nº de página → regenera a página.
@@ -762,7 +776,7 @@ def _elemento(
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
-        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}"
+        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}{pos_rotulo_css}"
         return f'<{nivel}{ida} style="{style}">{conteudo}</{nivel}>'
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
@@ -779,7 +793,10 @@ def _elemento(
         if est["italic"]:
             item = f'<span class="it">{item}</span>'
         return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
-    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}">{conteudo}</p>'
+    return (
+        f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}'
+        f'{pos_rotulo_css}">{conteudo}</p>'
+    )
 
 
 def montar_html(doc, paginas: dict, geo: dict) -> str:
@@ -826,6 +843,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     lista_indent_texto: float | None = None
     pendente_notas: list[str] = []
     heading_aberto: str | None = None
+    rotulo_capitulo_anterior = False  # ADR-0041: título logo após o rótulo não quebra de novo
 
     def _tag_heading(el: str) -> str | None:
         for tag in ("h1", "h2", "h3"):
@@ -992,7 +1010,17 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 alvo = _alvo_goto(paginas, destpage, pt)
                 link = ("goto", alvo) if alvo else None
             tipo_li = _tipo_lista(b.texto) if not est["mono"] else None
-            el = _elemento(b, texto, est, body_sz, clusters, anchor=_anchor(idx, b.id), link=link)
+            el = _elemento(
+                b,
+                texto,
+                est,
+                body_sz,
+                clusters,
+                anchor=_anchor(idx, b.id),
+                link=link,
+                apos_rotulo=rotulo_capitulo_anterior,
+            )
+            rotulo_capitulo_anterior = getattr(b, "papel", None) == "rotulo_capitulo"
             tag_atual = _tag_heading(el)
             # título de capítulo quebrado em 2+ linhas (cada linha um bloco próprio
             # no PDF) vira 1 <hN> por linha — a regra "esse nível SEMPRE abre
