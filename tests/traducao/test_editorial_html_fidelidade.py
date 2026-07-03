@@ -233,6 +233,44 @@ def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     doc.close()
 
 
+def test_montar_html_gruda_titulo_de_capitulo_quebrado_em_duas_linhas(tmp_path):
+    """Achado real ao auditar Kubernetes in Action: um título de capítulo
+    quebrado em 2 linhas no PDF original (ex. "First steps with Docker" /
+    "and Kubernetes", cada linha um bloco de texto próprio) virava 2
+    elementos `<h1>` separados — a regra "esse nível sempre abre página"
+    disparava em CADA um, deixando a 1ª linha sozinha numa página e
+    empurrando a 2ª linha (o resto do título) pra próxima. Uma linha de
+    heading adjacente ao MESMO nível (sem nada entre elas) agora gruda na
+    anterior em vez de virar um `<h1>` novo (ADR-0041 fix)."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    for linha1, linha2 in (("Capítulo Um", "continuação"), ("Capítulo Dois", "continuação")):
+        page = doc.new_page()
+        page.insert_text((72, 70), linha1, fontname="helv", fontsize=24)
+        page.insert_text((72, 100), linha2, fontname="helv", fontsize=24)
+        page.insert_text((72, 150), "Parágrafo de corpo normal desta página.", fontname="helv",
+                          fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    paginas = {}
+    for i in range(doc.page_count):
+        blocos = extrair_pagina(doc[i], i)
+        traducoes = {b.id: b.texto for b in blocos if not b.skip}
+        paginas[i] = (blocos, traducoes)
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert html.count("<h1") == 2  # 1 por página, não 1 por linha
+    assert "Capítulo Um continuação" in html
+    doc.close()
+
+
 def test_montar_html_embute_font_face_real(tmp_path):
     from pathlib import Path
 

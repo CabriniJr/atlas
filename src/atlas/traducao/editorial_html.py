@@ -721,6 +721,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     partes: list[str] = []
     lista_aberta: str | None = None
     pendente_notas: list[str] = []
+    heading_aberto: str | None = None
+
+    def _tag_heading(el: str) -> str | None:
+        for tag in ("h1", "h2", "h3"):
+            if el.startswith(f"<{tag}"):
+                return tag
+        return None
 
     def fecha_lista():
         nonlocal lista_aberta
@@ -807,10 +814,12 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 tw = geo["pw"] - geo["left"] - geo["right"]
                 pct = max(15, min(100, int(w / tw * 100))) if tw else 100
                 fecha_lista()
+                heading_aberto = None
                 partes.append(f'<figure><img src="{uri}" style="width:{pct}%"></figure>')
                 continue
             if tipo == "destaque":
                 fecha_lista()
+                heading_aberto = None
                 partes.append('<div class="destaque">')
                 lista_local: str | None = None
                 for cb in obj:
@@ -867,6 +876,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 ganchors = _goto_anchors(b, links, paginas)
                 if len(ganchors) >= 2:
                     fecha_lista()
+                    heading_aberto = None
                     partes.append(_elemento_toc(texto, ganchors))
                     continue
             link = _link_do_bloco(b, links)
@@ -876,7 +886,21 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 link = ("goto", alvo) if alvo else None
             tipo_li = _tipo_lista(b.texto) if not est["mono"] else None
             el = _elemento(b, texto, est, body_sz, clusters, anchor=_anchor(idx, b.id), link=link)
+            tag_atual = _tag_heading(el)
+            # título de capítulo quebrado em 2+ linhas (cada linha um bloco próprio
+            # no PDF) vira 1 <hN> por linha — a regra "esse nível SEMPRE abre
+            # página" (ADR-0041) então dispara em CADA linha, deixando a 1ª
+            # sozinha numa página e empurrando o resto do título pra próxima
+            # (achado real: "First steps with Docker" / "and Kubernetes" viravam
+            # 2 páginas). Linha de heading adjacente ao MESMO nível gruda na
+            # anterior em vez de virar um <hN> novo.
+            if tag_atual and tag_atual == heading_aberto:
+                fechamento = f"</{tag_atual}>"
+                conteudo_extra = el[el.index(">") + 1 : -len(fechamento)]
+                partes[-1] = partes[-1].removesuffix(fechamento) + " " + conteudo_extra + fechamento
+                continue
             if tipo_li and el.startswith("<li"):
+                heading_aberto = None
                 if lista_aberta and lista_aberta != tipo_li:
                     fecha_lista()
                 if not lista_aberta:
@@ -885,6 +909,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 partes.append(el)
             else:
                 fecha_lista()
+                heading_aberto = tag_atual
                 partes.append(el)
         fecha_lista()
         if valor_folio_pagina and len(partes) > marca_pagina:
