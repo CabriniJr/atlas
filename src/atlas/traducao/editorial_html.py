@@ -724,12 +724,22 @@ def _links_pagina(page) -> list[tuple]:
     return out
 
 
-def _alvo_goto(paginas: dict, pageidx: int, pt) -> str | None:
-    """Âncora do bloco mais próximo do destino de um link interno (na repaginação)."""
+def _alvo_goto(paginas: dict, pageidx: int, pt, ph: float = 0.0) -> str | None:
+    """Âncora do bloco mais próximo do destino de um link interno (na repaginação).
+
+    Exclui FÓLIOS: o bloco mais próximo do ponto de destino costuma ser o número
+    de página no rodapé, mas o fólio vira elemento de margem no render (sem id no
+    corpo) — a âncora apontava pra um id inexistente e o ``target-counter`` do
+    sumário não achava a página (o leader corria até a borda sem número —
+    achado real, auditoria visual, Observability Engineering, front matter)."""
     entry = paginas.get(pageidx)
     if not entry:
         return None
-    blocos = [b for b in entry[0] if b.bbox and (not b.skip or _estilo(b)["mono"])]
+    blocos = [
+        b
+        for b in entry[0]
+        if b.bbox and (not b.skip or _estilo(b)["mono"]) and not _e_folio(b, ph)
+    ]
     if not blocos:
         return None
     y = getattr(pt, "y", None)
@@ -737,7 +747,7 @@ def _alvo_goto(paginas: dict, pageidx: int, pt) -> str | None:
     return _anchor(pageidx, alvo.id)
 
 
-def _goto_anchors(b, links: list[tuple], paginas: dict) -> list:
+def _goto_anchors(b, links: list[tuple], paginas: dict, ph: float = 0.0) -> list:
     """Âncoras dos links internos que cobrem o bloco, em ordem de leitura (p/ TOC)."""
     if not b.bbox:
         return []
@@ -750,7 +760,7 @@ def _goto_anchors(b, links: list[tuple], paginas: dict) -> list:
         if not inter.is_empty and inter.width * inter.height > 0:
             gl.append((r.y0, alvo))
     gl.sort(key=lambda x: x[0])
-    return [_alvo_goto(paginas, pg, pt) for _y, (pg, pt) in gl]
+    return [_alvo_goto(paginas, pg, pt, ph) for _y, (pg, pt) in gl]
 
 
 def _entradas_toc(texto: str) -> list[tuple]:
@@ -1105,7 +1115,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         for b in blocos:
             if b.skip or not b.bbox or _e_folio(b, ph) or _estilo(b)["mono"]:
                 continue
-            ga = _goto_anchors(b, links_p, paginas)
+            ga = _goto_anchors(b, links_p, paginas, ph)
             if _e_entrada_toc(b, ga, tr.get(b.id) or b.texto):
                 toc_x0s.append(b.bbox[0])
     toc_niveis = agrupar_niveis(toc_x0s)
@@ -1223,7 +1233,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                     clink = _link_do_bloco(cb, links)
                     if clink and clink[0] == "goto":
                         destpage, pt = clink[1]
-                        alvo = _alvo_goto(paginas, destpage, pt)
+                        alvo = _alvo_goto(paginas, destpage, pt, ph)
                         clink = ("goto", alvo) if alvo else None
                     cel = _elemento(
                         cb, ctexto, cest, body_sz, clusters, anchor=_anchor(idx, cb.id), link=clink
@@ -1270,7 +1280,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             # não vale só ter 2 links: um parágrafo comum com 2 referências
             # cruzadas também tem 2 links, ADR-0041 fix): uma linha por entrada.
             if not est["mono"]:
-                ganchors = _goto_anchors(b, links, paginas)
+                ganchors = _goto_anchors(b, links, paginas, ph)
                 if _e_entrada_toc(b, ganchors, b.texto):
                     fecha_lista()
                     heading_aberto = None
@@ -1280,7 +1290,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             link = _link_do_bloco(b, links)
             if link and link[0] == "goto":  # resolve destino → âncora na repaginação
                 destpage, pt = link[1]
-                alvo = _alvo_goto(paginas, destpage, pt)
+                alvo = _alvo_goto(paginas, destpage, pt, ph)
                 link = ("goto", alvo) if alvo else None
             tipo_li = _tipo_lista(b.texto) if not est["mono"] else None
             el = _elemento(
