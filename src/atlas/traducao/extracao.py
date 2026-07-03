@@ -47,6 +47,27 @@ def _italic_span(s: Span) -> bool:
     return bool(s.flags & _FLAG_ITALIC) or "italic" in s.font.lower() or "oblique" in s.font.lower()
 
 
+def _juntar_spans(spans: list[Span]) -> str:
+    """Junta o texto dos spans preservando o espaçamento REAL do PDF: só insere
+    espaço entre dois spans quando havia uma folga visível entre eles (mesma
+    linha, gap no eixo x) ou quando estão em linhas diferentes. Spans
+    adjacentes token-a-token (comum em código com destaque de sintaxe — cada
+    token/cor um span) não ganham espaço artificial. Sem isso, ``" ".join``
+    simples quebrava código de verdade: ``"http" "." "server"`` virava
+    ``"http . server"`` em vez de ``"http.server"`` (ADR-0041 fix)."""
+    partes_validas = [s for s in spans if s.text.strip()]
+    if not partes_validas:
+        return ""
+    saida = [partes_validas[0].text.strip()]
+    for anterior, atual in zip(partes_validas, partes_validas[1:], strict=False):
+        mesma_linha = abs(atual.bbox[1] - anterior.bbox[1]) < 2.0
+        gap = atual.bbox[0] - anterior.bbox[2]
+        if (not mesma_linha) or gap > 1.0:
+            saida.append(" ")
+        saida.append(atual.text.strip())
+    return "".join(saida)
+
+
 def _marcar_enfase(spans: list[Span]) -> str:
     """Monta o texto do bloco marcando trechos que divergem do estilo dominante
     (negrito/itálico) com marcadores leves (``**b**``/``_i_``) — a tradução é
@@ -113,7 +134,7 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
         if not spans:
             continue
         mono = bloco_e_mono(spans)
-        texto_plano = " ".join(s.text.strip() for s in spans if s.text.strip())
+        texto_plano = _juntar_spans(spans)
         skip = mono or not _tem_letra(texto_plano)
         texto = texto_plano if skip else _marcar_enfase(spans)
         papel = classificar_papel(
