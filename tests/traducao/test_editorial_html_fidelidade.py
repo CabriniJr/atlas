@@ -23,3 +23,32 @@ def test_elemento_usa_fonte_real_do_span():
     assert est["font"] == "MinhaFonteCustom"
     html = _elemento(b, "Texto qualquer.", est, body_sz=11.0, clusters=[])
     assert "MinhaFonteCustom" in html
+
+
+def test_tipo_lista_reconhece_numerado_e_alfabetico():
+    from atlas.traducao.editorial_html import _tipo_lista
+    assert _tipo_lista("1. Primeiro item") == "ol"
+    assert _tipo_lista("a) Item alfabético") == "ol"
+    assert _tipo_lista("• Item com bullet") == "ul"
+    assert _tipo_lista("Parágrafo comum, sem marcador.") is None
+
+
+def test_montar_html_nunca_descarta_bloco_sem_traducao(tmp_path):
+    import fitz
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "This block never got translated.", fontname="helv", fontsize=12)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    paginas = {0: (blocos, {})}  # dict de traduções vazio — nenhum bloco traduzido
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "This block never got translated" in html
+    doc.close()

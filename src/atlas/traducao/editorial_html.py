@@ -208,11 +208,22 @@ def _e_folio(b, ph: float) -> bool:
 
 
 _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
+_RE_LISTA_NUM = re.compile(r"^\s*(\d+[.)]|[a-zA-Z][.)])\s+")
 
 
 def _e_lista(texto: str) -> bool:
     t = texto.lstrip()
     return t[:1] in _BULLETS and len(t) > 2 and t[1:2] in (" ", "\t")
+
+
+def _tipo_lista(texto: str) -> str | None:
+    """``"ul"``/``"ol"``/``None`` conforme o marcador do item (ADR-0041)."""
+    t = texto.lstrip()
+    if t[:1] in _BULLETS and len(t) > 2 and t[1:2] in (" ", "\t"):
+        return "ul"
+    if _RE_LISTA_NUM.match(texto):
+        return "ol"
+    return None
 
 
 def _anchor(pi: int, bid: int) -> str:
@@ -338,8 +349,18 @@ def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
         return f'<{nivel}{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{conteudo}</{nivel}>'
-    if _e_lista(b.texto):
-        item = converter_enfase(texto.lstrip()[1:].lstrip(), _e)
+    tipo_li = _tipo_lista(b.texto)
+    if tipo_li == "ul":
+        bruto = texto.lstrip()
+        if bruto[:1] in _BULLETS:
+            bruto = bruto[1:].lstrip()
+        item = converter_enfase(bruto, _e)
+        if est["italic"]:
+            item = f'<span class="it">{item}</span>'
+        return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
+    if tipo_li == "ol":
+        bruto = _RE_LISTA_NUM.sub("", texto.lstrip(), count=1)
+        item = converter_enfase(bruto, _e)
         if est["italic"]:
             item = f'<span class="it">{item}</span>'
         return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
@@ -358,13 +379,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     body_sz = statistics.median(sizes) if sizes else 11.0
 
     partes: list[str] = []
-    aberto_ul = False
+    lista_aberta: str | None = None
 
-    def fecha_ul():
-        nonlocal aberto_ul
-        if aberto_ul:
-            partes.append("</ul>")
-            aberto_ul = False
+    def fecha_lista():
+        nonlocal lista_aberta
+        if lista_aberta:
+            partes.append("</ol>" if lista_aberta == "ol" else "</ul>")
+            lista_aberta = None
 
     for idx in sorted(paginas):
         blocos, traducoes = paginas[idx]
@@ -385,20 +406,18 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 w, h, uri = obj
                 tw = geo["pw"] - geo["left"] - geo["right"]
                 pct = max(15, min(100, int(w / tw * 100))) if tw else 100
-                fecha_ul()
+                fecha_lista()
                 partes.append(f'<figure><img src="{uri}" style="width:{pct}%"></figure>')
                 continue
             b = obj
             est = _estilo(b)
-            # código/imutável: mantém o original; senão usa a tradução (ou o texto).
-            texto = traducoes.get(b.id) if not est["mono"] else b.texto
-            if texto is None:
-                continue
+            # código/imutável e blocos sem tradução: cai no original — nunca descarta bloco (ADR-0041).
+            texto = traducoes.get(b.id) or b.texto
             # sumário mesclado (bloco com ≥2 links internos): uma linha por entrada.
             if not est["mono"]:
                 ganchors = _goto_anchors(b, links, paginas)
                 if len(ganchors) >= 2:
-                    fecha_ul()
+                    fecha_lista()
                     partes.append(_elemento_toc(texto, ganchors))
                     continue
             link = _link_do_bloco(b, links)
@@ -406,16 +425,19 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 destpage, pt = link[1]
                 alvo = _alvo_goto(paginas, destpage, pt)
                 link = ("goto", alvo) if alvo else None
+            tipo_li = _tipo_lista(b.texto) if not est["mono"] else None
             el = _elemento(b, texto, est, body_sz, [], anchor=_anchor(idx, b.id), link=link)
-            if el.startswith("<li"):
-                if not aberto_ul:
-                    partes.append("<ul>")
-                    aberto_ul = True
+            if tipo_li and el.startswith("<li"):
+                if lista_aberta and lista_aberta != tipo_li:
+                    fecha_lista()
+                if not lista_aberta:
+                    partes.append("<ol>" if tipo_li == "ol" else "<ul>")
+                    lista_aberta = tipo_li
                 partes.append(el)
             else:
-                fecha_ul()
+                fecha_lista()
                 partes.append(el)
-        fecha_ul()
+        fecha_lista()
 
     css = _CSS.format(**geo)
     corpo = "\n".join(partes)
