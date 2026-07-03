@@ -539,6 +539,32 @@ def _e_lista(texto: str) -> bool:
     return len(t) > 2 and _e_marcador_bullet(t[0]) and t[1:2] in (" ", "\t")
 
 
+_TOLERANCIA_INDENT_CONTINUACAO = 2.0  # pt
+
+
+def _indent_texto_lista(b) -> float | None:
+    """x0 onde o TEXTO de um item de lista começa, depois do bullet — é onde
+    uma linha de CONTINUAÇÃO alinha (hanging indent). ``None`` se ``b`` não
+    for um item de lista ou não tiver spans."""
+    spans = [s for s in getattr(b, "spans", None) or [] if s.text.strip()]
+    if len(spans) < 2 or not _e_marcador_bullet(spans[0].text.strip()[:1]):
+        return None
+    return spans[1].bbox[0]
+
+
+def _e_continuacao_de_lista(b, indent_texto: float | None) -> bool:
+    """``True`` se ``b`` é a continuação de um item de lista quebrado em 2+
+    blocos pelo PyMuPDF (achado real: alguns PDFs tratam a 2ª linha+ de um item
+    de bullet com hanging indent como um bloco PRÓPRIO, sem marcador — a linha
+    some da lista e vira um `<p>` solto, sem indentação, cortando a frase ao
+    meio). Reconhecida pelo x0 igual ao do TEXTO (não do bullet) do item
+    anterior — mais robusto que checar minúscula: uma continuação pode começar
+    com maiúscula (nova frase dentro do mesmo item), ADR-0041 fix."""
+    if indent_texto is None or not b.bbox:
+        return False
+    return abs(b.bbox[0] - indent_texto) <= _TOLERANCIA_INDENT_CONTINUACAO
+
+
 def _tipo_lista(texto: str) -> str | None:
     """``"ul"``/``"ol"``/``None`` conforme o marcador do item (ADR-0041)."""
     t = texto.lstrip()
@@ -746,6 +772,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
 
     partes: list[str] = []
     lista_aberta: str | None = None
+    lista_indent_texto: float | None = None
     pendente_notas: list[str] = []
     heading_aberto: str | None = None
 
@@ -756,10 +783,11 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         return None
 
     def fecha_lista():
-        nonlocal lista_aberta
+        nonlocal lista_aberta, lista_indent_texto
         if lista_aberta:
             partes.append("</ol>" if lista_aberta == "ol" else "</ul>")
             lista_aberta = None
+            lista_indent_texto = None
 
     def flush_notas():
         if pendente_notas:
@@ -933,6 +961,21 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                     partes.append("<ol>" if tipo_li == "ol" else "<ul>")
                     lista_aberta = tipo_li
                 partes.append(el)
+                lista_indent_texto = _indent_texto_lista(b)
+            elif (
+                lista_aberta
+                and partes
+                and partes[-1].startswith("<li")
+                and _e_continuacao_de_lista(b, lista_indent_texto)
+            ):
+                # continuação de um item de lista quebrado em 2+ blocos pelo
+                # PyMuPDF (mesmo hanging indent do texto, sem bullet próprio) —
+                # gruda no <li> aberto em vez de virar um <p> solto, sem
+                # indentação, cortando a frase ao meio (achado real, ADR-0041).
+                extra = converter_enfase(texto, _e)
+                if est["italic"]:
+                    extra = f'<span class="it">{extra}</span>'
+                partes[-1] = partes[-1].removesuffix("</li>") + " " + extra + "</li>"
             else:
                 fecha_lista()
                 heading_aberto = tag_atual

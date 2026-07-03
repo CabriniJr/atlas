@@ -163,6 +163,92 @@ def test_montar_html_converte_enfase_dentro_de_nota_de_rodape(tmp_path):
     doc.close()
 
 
+def test_glue_continuacao_de_item_de_lista_quebrado_em_2_blocos(tmp_path):
+    """Achado real (auditoria visual, Kubernetes in Action): alguns PDFs criam
+    um bloco PRÓPRIO do PyMuPDF pra 2ª linha+ de um item de bullet com hanging
+    indent (sem marcador de bullet nessa 2ª linha) — sem grudar, ela vira um
+    <p> solto, sem indentação/bullet, cortando a frase da lista ao meio."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    doc.new_page()
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+    doc = fitz.open(str(p))
+
+    def _bloco(id_, texto, x0, y0, y1, x1=470.0):
+        span = Span(text=texto, bbox=(x0, y0, x1, y1), font="Times", size=11.0, color=0, flags=0)
+        return BlocoTraducao(id=id_, pagina=0, bbox=(x0, y0, x1, y1), texto=texto, spans=[span])
+
+    def _bloco_item_lista(id_, texto_apos_bullet, x0_bullet, x0_texto, y0, y1, x1=470.0):
+        # 3 spans, igual à forma real do PDF: bullet, espaço, texto (ver
+        # extração real do Kubernetes in Action) — não um span único mesclado.
+        spans = [
+            Span(
+                text="•",
+                bbox=(x0_bullet, y0, x0_bullet + 4, y1),
+                font="Times",
+                size=11.0,
+                color=0,
+                flags=0,
+            ),
+            Span(
+                text=" ",
+                bbox=(x0_bullet + 4, y0, x0_texto, y1),
+                font="Times",
+                size=11.0,
+                color=0,
+                flags=0,
+            ),
+            Span(
+                text=texto_apos_bullet,
+                bbox=(x0_texto, y0, x1, y1),
+                font="Times",
+                size=11.0,
+                color=0,
+                flags=0,
+            ),
+        ]
+        texto = f"• {texto_apos_bullet}"
+        return BlocoTraducao(
+            id=id_, pagina=0, bbox=(x0_bullet, y0, x1, y1), texto=texto, spans=spans
+        )
+
+    # y bem no meio da página (longe das faixas de margem/fólio, _e_folio).
+    item1 = _bloco_item_lista(
+        1,
+        "ReplicationControllers should be replaced with ReplicaSets,",
+        117.78,
+        129.78,
+        353.5,
+        363.5,
+    )
+    continuacao = _bloco(2, "which provide the same functionality.", 129.78, 366.5, 376.5)
+    item2 = _bloco_item_lista(
+        3, "ReplicationControllers schedule pods to random nodes.", 117.78, 129.78, 389.0, 399.0
+    )
+
+    blocos = [item1, continuacao, item2]
+    traducoes = {
+        1: "• Os ReplicationControllers devem ser substituídos por ReplicaSets,",
+        2: "que fornecem a mesma funcionalidade.",
+        3: "• ReplicationControllers agendam pods para nós aleatórios.",
+    }
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert html.count("<li") == 2
+    assert (
+        "Os ReplicationControllers devem ser substituídos por ReplicaSets, "
+        "que fornecem a mesma funcionalidade.</li>"
+    ) in html
+    doc.close()
+
+
 def test_valor_folio_extrai_numero_arabico_e_romano():
     from atlas.traducao.editorial_html import _valor_folio
 
