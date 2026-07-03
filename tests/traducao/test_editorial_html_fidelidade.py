@@ -175,3 +175,35 @@ def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     html = montar_html(doc, paginas, geo)
     assert "break-before: page" in html  # aplicado no h1 (título sempre abre página)
     doc.close()
+
+
+def test_montar_html_embute_font_face_real(tmp_path):
+    import fitz
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+    from pathlib import Path
+
+    fonte_path = str(
+        Path(__file__).resolve().parents[2] / "src" / "atlas" / "traducao" / "fonts" / "LiberationSans-Regular.ttf"
+    )
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_font(fontname="atlasteste", fontfile=fonte_path)
+    page.insert_text((72, 100), "Texto com fonte embutida.", fontname="atlasteste", fontsize=12)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "@font-face" in html
+    doc.close()
+
+
+def test_css_nao_forca_cor_azul_no_link():
+    from atlas.traducao.editorial_html import _CSS
+    assert "#0645ad" not in _CSS

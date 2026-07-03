@@ -24,7 +24,14 @@ import statistics
 
 import fitz
 
-from atlas.traducao.tipografia import clusters_titulo, converter_enfase, nivel_titulo, taxa_abre_pagina
+from atlas.traducao.tipografia import (
+    clusters_titulo,
+    converter_enfase,
+    extrair_fontes,
+    gerar_font_faces,
+    nivel_titulo,
+    taxa_abre_pagina,
+)
 
 # fim de linha de sumário: leaders (pontos) + número de página do original (que a
 # repaginação invalida — o CSS regenera via target-counter).
@@ -170,6 +177,7 @@ _CSS = """
                 @bottom-right {{ content: string(cap); }} }}
 @page :right {{ @bottom-left  {{ content: string(cap); }}
                 @bottom-right {{ content: string(folio); }} }}
+{font_faces}
 html {{ font-family: 'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif; }}
 body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
 /* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra */
@@ -192,8 +200,7 @@ img {{ max-width: 100%; }}
 .rodape-nativo {{ margin-top: 1.1em; padding-top: .3em; border-top: 0.6pt solid #999;
                   font-size: 8pt; line-height: 1.25; }}
 .rodape-nativo p {{ margin: .12em 0; }}
-a {{ color: #0645ad; text-decoration: none; }}
-h1 a, h2 a, h3 a {{ color: inherit; }}
+a {{ text-decoration: underline; }}
 /* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
 p.toc {{ text-align: left; margin: .12em 0; }}
 p.toc a {{ color: #000; }}
@@ -518,11 +525,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in notas_pag)
             partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
 
+    fontes = extrair_fontes(doc)
     geo_css = {
         **geo,
         "h1_break": "page" if quebra.get("h1") else "auto",
         "h2_break": "page" if quebra.get("h2") else "auto",
         "h3_break": "page" if quebra.get("h3") else "auto",
+        "font_faces": gerar_font_faces(fontes),
     }
     css = _CSS.format(**geo_css)
     corpo = "\n".join(partes)
