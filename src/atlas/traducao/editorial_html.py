@@ -202,6 +202,43 @@ def _fracao_contida(bbox, regiao: fitz.Rect) -> float:
 _AREA_MIN_DESENHO = 400.0  # ignora linhas finas/sublinhados (ADR-0041)
 _LARGURA_MIN_REGIAO = 80.0
 _ALTURA_MIN_REGIAO = 40.0
+_PALAVRAS_MIN_PROSA = 15  # bloco com >= isso é prosa (destaque), não rótulo de diagrama
+
+
+_ESPESSURA_MAX_REGRA = 2.0  # pt — "espessura" de uma linha/régua (não uma caixa)
+_FRACAO_MIN_REGRA_TOTAL = 0.85  # regra deve cobrir a maior parte da largura/altura da região
+_MIN_REGRAS_PARA_TABELA = 1  # 1+ régua INTERNA (não é a própria borda) = grade de tabela
+_TOLERANCIA_BORDA = 3.0  # pt — régua "colada" na borda da região é só o contorno da caixa
+
+
+def _parece_tabela(regiao: fitz.Rect, retangulos: list) -> bool:
+    """Uma tabela comum (mesmo com cabeçalho/linhas com fundo colorido, o que
+    também passa no filtro de "forma cheia" abaixo — achado real ao auditar
+    Kubernetes in Action: uma tabela de referência da API virou uma imagem
+    rasterizada em INGLÊS, perdendo a tradução inteira) tem réguas finas
+    (bordas de linha/coluna) que atravessam quase toda a largura ou altura da
+    região — um diagrama (caixas+setas) não tem: suas linhas finas (setas) são
+    curtas/locais, e caixas repetidas (ex. 3 pods lado a lado) têm dimensão
+    cheia nos dois eixos, não finas num deles. Só conta réguas INTERNAS (longe
+    da própria borda da região) — senão o contorno de uma caixa de destaque
+    simples (2 réguas H + 2 V = seu próprio retângulo) seria confundido com
+    tabela (achado real ao auditar Prometheus Up & Running, ADR-0041 fix)."""
+    for r in retangulos:
+        if not regiao.intersects(r):
+            continue
+        larga_o_bastante = regiao.width * _FRACAO_MIN_REGRA_TOTAL
+        alta_o_bastante = regiao.height * _FRACAO_MIN_REGRA_TOTAL
+        fina_h = r.height <= _ESPESSURA_MAX_REGRA and r.width >= larga_o_bastante
+        if fina_h and (
+            r.y0 - regiao.y0 > _TOLERANCIA_BORDA and regiao.y1 - r.y1 > _TOLERANCIA_BORDA
+        ):
+            return True
+        fina_v = r.width <= _ESPESSURA_MAX_REGRA and r.height >= alta_o_bastante
+        if fina_v and (
+            r.x0 - regiao.x0 > _TOLERANCIA_BORDA and regiao.x1 - r.x1 > _TOLERANCIA_BORDA
+        ):
+            return True
+    return False
 
 
 def _regioes_diagrama(page, blocos: list) -> list[tuple]:
@@ -224,14 +261,25 @@ def _regioes_diagrama(page, blocos: list) -> list[tuple]:
         if reg.width < _LARGURA_MIN_REGIAO or reg.height < _ALTURA_MIN_REGIAO:
             continue
         # exige ao menos UMA forma "cheia" (caixa/preenchimento) na região — o
-        # que distingue um diagrama (caixas+setas) de uma tabela comum (só
-        # bordas finas, sem forma robusta) — tabela não deve virar imagem.
+        # que distingue um diagrama (caixas+setas) de uma régua/sublinhado
+        # isolado (só linhas finas, sem forma robusta).
         maior_forma = max(
             (r.width * r.height for r in retangulos if reg.intersects(r)), default=0.0
         )
         if maior_forma < _AREA_MIN_DESENHO:
             continue
+        if _parece_tabela(reg, retangulos):
+            continue
         contidos = [b for b in blocos if b.bbox and _fracao_contida(b.bbox, reg) > 0.6]
+        # uma caixa de destaque (título + parágrafo de prosa) também passa nos
+        # filtros acima (fundo preenchido, >=2 blocos) — mas rótulos de
+        # diagrama são curtos (mesmo passos numerados, ex. "3. Docker pulls
+        # busybox image..."); um bloco de PROSA de verdade (frase longa)
+        # denuncia que é conteúdo textual, não um rótulo — deixa pra
+        # ``_regioes_destaque`` tratar e traduzir em vez de rasterizar em
+        # inglês (achado real ao auditar Prometheus Up & Running, ADR-0041 fix).
+        if any(len(b.texto.split()) >= _PALAVRAS_MIN_PROSA for b in contidos):
+            continue
         if len(contidos) >= 2:
             out.append((reg, contidos))
     return out

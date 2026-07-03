@@ -278,6 +278,74 @@ def test_regioes_diagrama_agrupa_desenho_vetorial_com_rotulos(tmp_path):
     doc.close()
 
 
+def test_regioes_diagrama_ignora_tabela_com_grade_interna(tmp_path):
+    """Achado real ao auditar Kubernetes in Action: uma tabela de referência
+    (cabeçalho com fundo cinza + linhas de grade internas) virou uma imagem
+    rasterizada em INGLÊS — a "forma cheia" do cabeçalho colorido passava no
+    filtro de diagrama. Uma grade de linhas finas internas (bordas de
+    linha/coluna) denuncia tabela, não diagrama."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_diagrama
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    # cabeçalho com fundo cinza (forma "cheia" >= 400 sq pt).
+    page.draw_rect(fitz.Rect(60, 100, 460, 122), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
+    # réguas internas finas (linhas de linha/coluna, com espessura real, como
+    # PyMuPDF reporta em PDFs de verdade) — sinal de grade de tabela.
+    page.draw_rect(fitz.Rect(60, 149.75, 460, 150.25), color=(0, 0, 0), fill=(0, 0, 0), width=0)
+    page.draw_rect(fitz.Rect(199.75, 100, 200.25, 300), color=(0, 0, 0), fill=(0, 0, 0), width=0)
+    page.insert_text((65, 115), "Header A", fontname="helv", fontsize=9)
+    page.insert_text((205, 115), "Header B", fontname="helv", fontsize=9)
+    page.insert_text((65, 140), "Row 1 A", fontname="helv", fontsize=9)
+    page.insert_text((205, 140), "Row 1 B", fontname="helv", fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_diagrama(doc[0], blocos)
+    assert regioes == []
+    doc.close()
+
+
+def test_regioes_diagrama_ignora_caixa_de_destaque_com_prosa(tmp_path):
+    """Achado real ao auditar Prometheus Up & Running: uma caixa de destaque
+    (título curto + parágrafo de prosa) tem >=2 blocos e uma forma cheia
+    (fundo colorido) — passava no filtro de diagrama antes de chegar em
+    ``_regioes_destaque`` (que exclui blocos já reclamados pelo diagrama),
+    perdendo a tradução do parágrafo (rasterizado em inglês). Um bloco de
+    prosa de verdade (frase longa) denuncia caixa de destaque, não diagrama."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_diagrama
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 460, 200), color=(0, 0, 0), fill=(0.95, 0.95, 0.95), width=0)
+    page.insert_text((80, 120), "TIP", fontname="helv", fontsize=10)
+    page.insert_text(
+        (80, 140),
+        "This is a long paragraph of real prose text that explains something "
+        "in detail across many words, not a short diagram label.",
+        fontname="helv",
+        fontsize=9,
+    )
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_diagrama(doc[0], blocos)
+    assert regioes == []
+    doc.close()
+
+
 def test_renderizar_diagrama_gera_data_uri_png(tmp_path):
     import fitz
 
