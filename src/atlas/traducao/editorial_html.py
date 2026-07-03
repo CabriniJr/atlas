@@ -166,10 +166,10 @@ _CSS = """
                           font: 600 8.5pt 'Liberation Sans Narrow','Liberation Sans',sans-serif;
                           color: #222; }} }}
 /* verso (par): nº à esquerda, capítulo à direita. recto (ímpar): o inverso. */
-@page :left  {{ @bottom-left  {{ content: counter(page); }}
+@page :left  {{ @bottom-left  {{ content: string(folio); }}
                 @bottom-right {{ content: string(cap); }} }}
 @page :right {{ @bottom-left  {{ content: string(cap); }}
-                @bottom-right {{ content: counter(page); }} }}
+                @bottom-right {{ content: string(folio); }} }}
 html {{ font-family: 'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif; }}
 body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
 /* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra */
@@ -208,6 +208,23 @@ def _e_folio(b, ph: float) -> bool:
     uma_linha = (y1 - y0) < 26
     na_margem = y0 < ph * 0.075 or y1 > ph * 0.925
     return curto and uma_linha and na_margem
+
+
+_RE_FOLIO_NUM = re.compile(r"\b\d+\b")
+_RE_FOLIO_ROMANO = re.compile(r"\b[ivxlcdm]+\b", re.IGNORECASE)
+
+
+def _valor_folio(b) -> str | None:
+    """Só o número (arábico ou romano) do bloco de fólio — não o rótulo de
+    capítulo/seção que o acompanha (esse já vira o cabeçalho corrente ``cap``,
+    E9-09). ``None`` se o bloco não tiver número (ADR-0041)."""
+    if not b.texto:
+        return None
+    m = _RE_FOLIO_NUM.search(b.texto)
+    if m:
+        return m.group(0)
+    m = _RE_FOLIO_ROMANO.search(b.texto)
+    return m.group(0) if m else None
 
 
 def _e_rodape_nativo(b, ph: float) -> bool:
@@ -406,6 +423,12 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         blocos, traducoes = paginas[idx]
         page = doc[idx]
         links = _links_pagina(page)
+        folio_blocos = [b for b in blocos if b.bbox and _e_folio(b, ph)]
+        if folio_blocos:
+            alvo = max(folio_blocos, key=lambda b: b.bbox[3])  # mais perto do fundo
+            valor = _valor_folio(alvo)
+            if valor:
+                partes.append(f"<span style=\"string-set: folio '{_e(valor)}'\"></span>")
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
         notas_pag: list[str] = []
         itens: list[tuple] = []

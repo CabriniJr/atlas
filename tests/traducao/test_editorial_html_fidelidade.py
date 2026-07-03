@@ -91,3 +91,43 @@ def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
     assert 'class="rodape-nativo"' in html
     assert "Nota explicativa" in html
     doc.close()
+
+
+def test_valor_folio_extrai_numero_arabico_e_romano():
+    from atlas.traducao.editorial_html import _valor_folio
+
+    class Arabico:
+        texto = "18 | Chapter 1: What Is Observability?"
+
+    class Romano:
+        texto = "xviii | Preface"
+
+    class SemNumero:
+        texto = "Chapter Title"
+
+    assert _valor_folio(Arabico()) == "18"
+    assert _valor_folio(Romano()) == "xviii"
+    assert _valor_folio(SemNumero()) is None
+
+
+def test_montar_html_emite_marcador_de_folio_por_pagina(tmp_path):
+    import fitz
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Corpo da página quarenta e dois.", fontname="helv", fontsize=12)
+    page.insert_text((300, 820), "42", fontname="helv", fontsize=9)  # fólio no rodapé
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "string-set: folio '42'" in html
+    doc.close()
