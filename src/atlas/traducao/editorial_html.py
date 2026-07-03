@@ -735,6 +735,15 @@ def _elemento(
     cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
     fonte_css = f"font-family:'{_e(est['font'])}',{_FALLBACK_FONTE};" if est["font"] else ""
     ida = f' id="{anchor}"' if anchor else ""
+    # rótulo de capítulo/parte ("CHAPTER N"/"PART N", ADR-0041): nunca pode
+    # ficar sozinho no fim de uma página enquanto o título (que abre página
+    # sozinho) pula pra próxima — viajam juntos, ou o rótulo fica órfão
+    # (achado real, auditoria visual, Observability Engineering).
+    rotulo_css = (
+        "break-after:avoid;page-break-after:avoid;"
+        if getattr(b, "papel", None) == "rotulo_capitulo"
+        else ""
+    )
     if est["mono"]:
         return f"<pre{ida}>{_e(b.texto)}</pre>"  # código: original, verbatim
     # sumário: link interno + linha terminando em nº de página → regenera a página.
@@ -753,7 +762,7 @@ def _elemento(
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
-        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}"
+        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}"
         return f'<{nivel}{ida} style="{style}">{conteudo}</{nivel}>'
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
@@ -770,7 +779,7 @@ def _elemento(
         if est["italic"]:
             item = f'<span class="it">{item}</span>'
         return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
-    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{conteudo}</p>'
+    return f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}">{conteudo}</p>'
 
 
 def montar_html(doc, paginas: dict, geo: dict) -> str:

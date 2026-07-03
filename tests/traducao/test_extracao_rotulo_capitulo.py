@@ -5,13 +5,69 @@ sistemático em TODOS os 20 capítulos ao auditar Observability Engineering
 abre página sozinho: o título fica com tamanho de fonte contaminado pelo
 rótulo, não bate com o cluster dos OUTROS títulos do documento."""
 
-from atlas.traducao.extracao import Span, _dividir_por_rotulo_capitulo
+from atlas.traducao.extracao import Span, _dividir_por_rotulo_capitulo, extrair_pagina
 
 
 def _span(texto, x0, x1, size, y0=100.0):
     return Span(
         text=texto, bbox=(x0, y0, x1, y0 + size), font="Helvetica", size=size, color=0, flags=0
     )
+
+
+class _PageFakeLinhas:
+    """Simula ``page.get_text('dict')`` com o rótulo e o título em LINHAS
+    separadas do MESMO bloco (forma real do PDF)."""
+
+    def __init__(self, linhas_spans):
+        self.rect = type("R", (), {"width": 600.0})()
+        self._linhas_spans = linhas_spans
+
+    def get_text(self, _modo):
+        bbox = [
+            min(s.bbox[0] for linha in self._linhas_spans for s in linha),
+            min(s.bbox[1] for linha in self._linhas_spans for s in linha),
+            max(s.bbox[2] for linha in self._linhas_spans for s in linha),
+            max(s.bbox[3] for linha in self._linhas_spans for s in linha),
+        ]
+        return {
+            "blocks": [
+                {
+                    "bbox": bbox,
+                    "lines": [
+                        {
+                            "spans": [
+                                {
+                                    "text": s.text,
+                                    "bbox": list(s.bbox),
+                                    "font": s.font,
+                                    "size": s.size,
+                                    "color": s.color,
+                                    "flags": s.flags,
+                                }
+                                for s in linha
+                            ]
+                        }
+                        for linha in self._linhas_spans
+                    ],
+                }
+            ]
+        }
+
+
+def test_extrair_pagina_marca_papel_rotulo_capitulo_no_bloco_do_rotulo():
+    """O bloco do RÓTULO ganha ``papel="rotulo_capitulo"`` — usado no render
+    pra impedir que ele fique órfão no fim da página anterior enquanto o
+    título (que abre página sozinho) pula pra próxima (ADR-0041 fix)."""
+    linhas = [
+        [_span("CHAPTER 2", 372.8, 432.0, size=16.8, y0=75.8)],
+        [_span("How Debugging Practices Differ", 248.1, 432.0, size=25.2, y0=97.8)],
+    ]
+    blocos = extrair_pagina(_PageFakeLinhas(linhas), pagina=0)
+    assert len(blocos) == 2
+    assert blocos[0].texto == "CHAPTER 2"
+    assert blocos[0].papel == "rotulo_capitulo"
+    assert blocos[1].texto == "How Debugging Practices Differ"
+    assert blocos[1].papel != "rotulo_capitulo"
 
 
 def test_divide_rotulo_capitulo_do_titulo_maior():

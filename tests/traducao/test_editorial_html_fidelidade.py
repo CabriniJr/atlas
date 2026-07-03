@@ -35,6 +35,20 @@ def test_elemento_usa_fonte_real_do_span():
     assert "MinhaFonteCustom" in html
 
 
+def test_elemento_rotulo_capitulo_ganha_break_after_avoid():
+    """Achado real (auditoria visual, Observability Engineering): mesmo
+    depois de o título de capítulo/parte voltar a abrir página sozinho, o
+    RÓTULO ("CHAPTER N"/"PART N", seu próprio bloco) ficava órfão sozinho no
+    fim da página anterior — rótulo e título têm que viajar juntos."""
+    b = _bloco("CHAPTER 2", size=16.8)
+    b.papel = "rotulo_capitulo"
+    from atlas.traducao.editorial_html import _estilo
+
+    est = _estilo(b)
+    html = _elemento(b, "CAPÍTULO 2", est, body_sz=10.5, clusters=[])
+    assert "break-after:avoid" in html
+
+
 def test_estilo_cor_por_maioria_nao_pelo_primeiro_span():
     """Achado real (auditoria visual, Observability Engineering): um link
     cruzado colorido curto ("Chapter 1") no INÍCIO de um parágrafo preto

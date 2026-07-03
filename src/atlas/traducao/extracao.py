@@ -310,7 +310,31 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                 linhas_spans.append(linha_atual)
         if not spans:
             continue
-        divisao = _dividir_por_titulo_embutido(spans) or _dividir_por_rotulo_capitulo(spans)
+        divisao_rotulo = _dividir_por_rotulo_capitulo(spans)
+        if divisao_rotulo:
+            rotulo_spans, titulo_spans = divisao_rotulo
+            bloco_rotulo = _montar_bloco(
+                prox_id, pagina, _bbox_uniao_spans(rotulo_spans), rotulo_spans, 1, page.rect.width
+            )
+            # marca o rótulo pra nunca ficar sozinho no fim da página anterior
+            # quando o título (que abre página sozinho, ADR-0041) pula pra
+            # próxima — rótulo e título têm que viajar juntos (ver _elemento).
+            bloco_rotulo.papel = "rotulo_capitulo"
+            blocos.append(bloco_rotulo)
+            prox_id += 1
+            blocos.append(
+                _montar_bloco(
+                    prox_id,
+                    pagina,
+                    _bbox_uniao_spans(titulo_spans),
+                    titulo_spans,
+                    1,
+                    page.rect.width,
+                )
+            )
+            prox_id += 1
+            continue
+        divisao = _dividir_por_titulo_embutido(spans)
         if divisao:
             for sub_spans in divisao:
                 blocos.append(
