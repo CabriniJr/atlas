@@ -152,6 +152,68 @@ def _geometria(doc, paginas) -> dict:
     return {"pw": pw, "ph": ph, "left": left, "right": right, "top": top, "bottom": bottom}
 
 
+_NUMERAL_CINZA_DELTA = 0.06  # r≈g≈b (cinza)
+
+
+def _rasterizar_drawing(d) -> str | None:
+    """Redesenha SÓ os traços de um vetor num canvas transparente e devolve um
+    data-URI PNG. Redesenhar (em vez de recortar a página) evita capturar o
+    texto que passa por cima do numeral (ex.: o título do capítulo sobre o "1"
+    decorativo — achado real, Kubernetes in Action)."""
+    rc = d["rect"]
+    off = fitz.Point(rc.x0, rc.y0)
+    try:
+        nd = fitz.open()
+        npg = nd.new_page(width=rc.width, height=rc.height)
+        sh = npg.new_shape()
+        for it in d["items"]:
+            op = it[0]
+            if op == "l":
+                sh.draw_line(it[1] - off, it[2] - off)
+            elif op == "c":
+                sh.draw_bezier(it[1] - off, it[2] - off, it[3] - off, it[4] - off)
+            elif op == "re":
+                r0 = it[1]
+                sh.draw_rect(fitz.Rect(r0.x0 - rc.x0, r0.y0 - rc.y0, r0.x1 - rc.x0, r0.y1 - rc.y0))
+            elif op == "qu":
+                q = it[1]
+                sh.draw_quad(fitz.Quad(q.ul - off, q.ur - off, q.ll - off, q.lr - off))
+        sh.finish(fill=d["fill"], color=d["fill"], width=0)
+        sh.commit()
+        pix = npg.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=True)
+        return "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
+    except Exception:  # noqa: BLE001 — decorativo é best-effort; falha ⇒ sem numeral
+        return None
+
+
+def _numeral_decorativo(page) -> str | None:
+    """Data-URI do grande numeral decorativo cinza do abre-capítulo (Manning),
+    ou ``None``. É arte vetorial (não texto/imagem): um glifo grande, cinza claro
+    e ALTO no topo da página. Discriminadores (verificado no livro inteiro, 0
+    falso-positivo no O'Reilly): cinza (r≈g≈b), alto (>= 18% da página), estreito
+    (< 35% da largura), no topo (y0 < 45%), mais alto que largo, e glifo COMPLEXO
+    (>= 5 traços — distingue do retângulo de fundo de um box/caixa, que tem 1)."""
+    pw, ph = page.rect.width, page.rect.height
+    for d in page.get_drawings():
+        f = d.get("fill")
+        if not f or d.get("type") not in ("f", "fs"):
+            continue
+        r, g, b = f[:3]
+        if max(abs(r - g), abs(r - b), abs(g - b)) >= _NUMERAL_CINZA_DELTA or not 0.30 <= r <= 0.95:
+            continue
+        rc = d["rect"]
+        if (
+            rc.height >= ph * 0.18
+            and rc.width < pw * 0.35
+            and rc.width > 6
+            and rc.y0 < ph * 0.45
+            and rc.height > rc.width
+            and len(d.get("items", [])) >= 5
+        ):
+            return _rasterizar_drawing(d)
+    return None
+
+
 def _imagens(doc, page) -> list[tuple]:
     """(y0, largura_pt, altura_pt, data_uri) de cada imagem da página (preservadas)."""
     out = []
@@ -448,6 +510,9 @@ pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space:
        text-align: left; line-height: 1.3; page-break-inside: avoid; }}
 figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
+/* numeral decorativo do abre-capítulo (Manning): grande, cinza claro, flutua no
+   topo à direita; a margem negativa o alinha ao lado do título (ADR-0041). */
+.cap-numeral {{ float: right; width: 78pt; margin: -0.6em 0 .2em 1em; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
 /* versalete: cabeçalho run-in / rótulo que era CAIXA ALTA no original — o texto
    fica em caixa-baixa (nada de maiúscula literal) e o glifo maiúsculo vem do
@@ -736,9 +801,7 @@ def _alvo_goto(paginas: dict, pageidx: int, pt, ph: float = 0.0) -> str | None:
     if not entry:
         return None
     blocos = [
-        b
-        for b in entry[0]
-        if b.bbox and (not b.skip or _estilo(b)["mono"]) and not _e_folio(b, ph)
+        b for b in entry[0] if b.bbox and (not b.skip or _estilo(b)["mono"]) and not _e_folio(b, ph)
     ]
     if not blocos:
         return None
@@ -1347,6 +1410,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         fecha_lista()
         if valor_folio_pagina and len(partes) > marca_pagina:
             partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))
+        # numeral decorativo do abre-capítulo (Manning): entra flutuando à direita
+        # LOGO APÓS o 1º elemento da página (o título), pra ficar ao lado dele no
+        # topo — depois da quebra de página do título, sem interferir na quebra.
+        if len(partes) > marca_pagina:
+            numeral = _numeral_decorativo(page)
+            if numeral:
+                partes.insert(marca_pagina + 1, f'<img class="cap-numeral" src="{numeral}" alt="">')
     flush_notas()  # nota(s) pendente(s) da última página (ADR-0041)
 
     fontes = extrair_fontes(doc)
