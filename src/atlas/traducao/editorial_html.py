@@ -160,6 +160,94 @@ def _imagens(doc, page) -> list[tuple]:
     return out
 
 
+def _uniao_rect(a: fitz.Rect, b: fitz.Rect) -> fitz.Rect:
+    return fitz.Rect(min(a.x0, b.x0), min(a.y0, b.y0), max(a.x1, b.x1), max(a.y1, b.y1))
+
+
+def _mesclar_retangulos(rects: list, folga: float = 6.0) -> list:
+    """Agrupa retângulos que se tocam/sobrepõem (com uma folga em pt) em clusters,
+    devolvendo o bounding box de cada cluster — usado p/ juntar os muitos
+    fragmentos de um desenho vetorial (linhas, setas, caixas) numa única região
+    (ADR-0041 fix: diagramas)."""
+    pendentes = list(rects)
+    saida: list = []
+    while pendentes:
+        atual = pendentes.pop()
+        mudou = True
+        while mudou:
+            mudou = False
+            i = 0
+            while i < len(pendentes):
+                expandido = fitz.Rect(
+                    atual.x0 - folga, atual.y0 - folga, atual.x1 + folga, atual.y1 + folga
+                )
+                if expandido.intersects(pendentes[i]):
+                    atual = _uniao_rect(atual, pendentes[i])
+                    pendentes.pop(i)
+                    mudou = True
+                else:
+                    i += 1
+        saida.append(atual)
+    return saida
+
+
+def _fracao_contida(bbox, regiao: fitz.Rect) -> float:
+    """Fração da área de ``bbox`` que cai dentro de ``regiao`` (0.0–1.0)."""
+    b = fitz.Rect(bbox)
+    area_b = b.width * b.height
+    if area_b <= 0:
+        return 0.0
+    inter = b & regiao
+    area_i = max(0.0, inter.width) * max(0.0, inter.height)
+    return area_i / area_b
+
+
+_AREA_MIN_DESENHO = 400.0  # ignora linhas finas/sublinhados (ADR-0041)
+_LARGURA_MIN_REGIAO = 80.0
+_ALTURA_MIN_REGIAO = 40.0
+
+
+def _regioes_diagrama(page, blocos: list) -> list[tuple]:
+    """Detecta regiões de desenho vetorial que contêm vários blocos de texto
+    curtos — um diagrama (caixas/setas/rótulos) desenhado com operadores de
+    path, não uma imagem raster (``_imagens`` não o vê). Devolve
+    ``[(regiao, [blocos_contidos]), ...]``: cada região com >=2 blocos
+    majoritariamente dentro dela vira UMA imagem rasterizada no render, em vez
+    de uma lista de parágrafos soltos e sem estrutura (ADR-0041 fix)."""
+    try:
+        desenhos = page.get_drawings()
+    except Exception:  # noqa: BLE001
+        return []
+    retangulos = [fitz.Rect(d["rect"]) for d in desenhos if d.get("rect") is not None]
+    if not retangulos:
+        return []
+    regioes = _mesclar_retangulos(retangulos)
+    out = []
+    for reg in regioes:
+        if reg.width < _LARGURA_MIN_REGIAO or reg.height < _ALTURA_MIN_REGIAO:
+            continue
+        # exige ao menos UMA forma "cheia" (caixa/preenchimento) na região — o
+        # que distingue um diagrama (caixas+setas) de uma tabela comum (só
+        # bordas finas, sem forma robusta) — tabela não deve virar imagem.
+        maior_forma = max(
+            (r.width * r.height for r in retangulos if reg.intersects(r)), default=0.0
+        )
+        if maior_forma < _AREA_MIN_DESENHO:
+            continue
+        contidos = [b for b in blocos if b.bbox and _fracao_contida(b.bbox, reg) > 0.6]
+        if len(contidos) >= 2:
+            out.append((reg, contidos))
+    return out
+
+
+def _renderizar_diagrama(page, regiao: fitz.Rect) -> str:
+    """Rasteriza a região do diagrama como PNG (data URI) — preserva o desenho
+    vetorial (caixas/setas/rótulos) tal como no original; a legenda ao redor
+    segue traduzida normalmente como texto (ADR-0041 fix)."""
+    pix = page.get_pixmap(clip=regiao, matrix=fitz.Matrix(2, 2))
+    return "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
+
+
 _CSS = """
 /* folio do original: régua fina no rodapé + "página | capítulo" (nº na borda
    externa, alternando recto/verso) — o "chartzinho" com capítulo + página. */
@@ -469,10 +557,18 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             valor = _valor_folio(alvo)
             if valor:
                 partes.append(f"<span style=\"string-set: folio '{_e(valor)}'\"></span>")
+        # diagramas vetoriais (caixas/setas + rótulos, sem imagem raster): a
+        # região inteira vira UMA imagem rasterizada — evita despejar os rótulos
+        # como parágrafos soltos e sem estrutura (ADR-0041 fix).
+        diagramas = _regioes_diagrama(page, blocos)
+        blocos_em_diagrama = {b.id for _reg, contidos in diagramas for b in contidos}
+
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
         notas_pag: list[str] = []
         itens: list[tuple] = []
         for b in blocos:
+            if b.id in blocos_em_diagrama:
+                continue
             if not (not b.skip or _estilo(b)["mono"]):
                 continue
             if _e_folio(b, ph):
@@ -483,6 +579,8 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             itens.append((b.bbox[1] if b.bbox else 0.0, "b", b))
         for y0, w, h, uri in _imagens(doc, page):
             itens.append((y0, "img", (w, h, uri)))
+        for reg, _contidos in diagramas:
+            itens.append((reg.y0, "img", (reg.width, reg.height, _renderizar_diagrama(page, reg))))
         itens.sort(key=lambda it: it[0])
 
         for _y, tipo, obj in itens:

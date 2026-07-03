@@ -219,6 +219,85 @@ def test_css_nao_forca_cor_azul_no_link():
     assert "#0645ad" not in _CSS
 
 
+def test_regioes_diagrama_agrupa_desenho_vetorial_com_rotulos(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_diagrama
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    # "diagrama": duas caixas conectadas por uma linha, com rótulos curtos dentro.
+    page.draw_rect(fitz.Rect(72, 100, 200, 180), color=(0, 0, 0), width=1)
+    page.draw_line((100, 140), (150, 140))
+    page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
+    page.insert_text((80, 160), "App B", fontname="helv", fontsize=9)
+    # parágrafo comum, bem longe do diagrama — não deve entrar na região.
+    page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
+                      fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_diagrama(doc[0], blocos)
+    assert len(regioes) == 1
+    regiao, contidos = regioes[0]
+    textos_contidos = {b.texto for b in contidos}
+    assert textos_contidos == {"App A", "App B"}
+    doc.close()
+
+
+def test_renderizar_diagrama_gera_data_uri_png(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _renderizar_diagrama
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 200, 140), color=(0, 0, 0), width=1)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    uri = _renderizar_diagrama(doc[0], fitz.Rect(72, 100, 200, 140))
+    assert uri.startswith("data:image/png;base64,")
+    doc.close()
+
+
+def test_montar_html_rasteriza_diagrama_em_vez_de_paragrafos_soltos(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 200, 180), color=(0, 0, 0), width=1)
+    page.draw_line((100, 140), (150, 140))
+    page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
+    page.insert_text((80, 160), "App B", fontname="helv", fontsize=9)
+    page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
+                      fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "<img" in html
+    assert "App A" not in html  # rótulo do diagrama não vira <p> solto
+    assert "App B" not in html
+    assert "Este é um parágrafo comum" in html  # texto normal continua intacto
+    doc.close()
+
+
 def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):
     import fitz
 
