@@ -185,6 +185,26 @@ def test_abre_pagina_primeiro_bloco_perto_do_topo_e_true():
     assert _abre_pagina(Corpo(), blocos, ph=792.0) is False
 
 
+def test_abre_pagina_reconhece_titulo_de_capitulo_com_espaco_decorativo_acima():
+    """Achado real ao auditar Kubernetes in Action: TODOS os 18 títulos de
+    capítulo do livro ficam a y0=120.6pt (frac=0.181 de ph=666pt) — um pouco
+    abaixo do limiar antigo de 0.18 (espaço reservado pro numeral decorativo
+    "fantasma" do capítulo, acima do título). Isso fazia ``_abre_pagina``
+    devolver ``False`` para TODAS as ocorrências, e o motor concluía (taxa de
+    abertura baixa) que esse nível de heading não deveria forçar quebra de
+    página — títulos de capítulo passavam a fluir no meio da página anterior
+    em vez de abrir uma nova (ADR-0041 fix)."""
+    from atlas.traducao.editorial_html import _abre_pagina
+
+    class TituloCapitulo:
+        bbox = (201.78, 120.6, 474.2, 150.6)
+        texto = "Introducing Kubernetes"
+        skip = False
+
+    blocos = [TituloCapitulo()]
+    assert _abre_pagina(TituloCapitulo(), blocos, ph=666.0) is True
+
+
 def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):
     import fitz
 
@@ -256,11 +276,15 @@ def test_regioes_diagrama_agrupa_desenho_vetorial_com_rotulos(tmp_path):
 
     doc = fitz.open()
     page = doc.new_page()
-    # "diagrama": duas caixas conectadas por uma linha, com rótulos curtos dentro.
-    page.draw_rect(fitz.Rect(72, 100, 200, 180), color=(0, 0, 0), width=1)
+    # "diagrama": duas caixas DISTINTAS conectadas por uma linha, com rótulos
+    # curtos dentro — >=1 subforma além do contêiner da região é o que
+    # distingue de uma caixa de destaque simples (só 1 retângulo preenchido,
+    # ADR-0041 fix real).
+    page.draw_rect(fitz.Rect(72, 100, 130, 140), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
+    page.draw_rect(fitz.Rect(140, 140, 200, 180), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
     page.draw_line((100, 140), (150, 140))
     page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
-    page.insert_text((80, 160), "App B", fontname="helv", fontsize=9)
+    page.insert_text((150, 160), "App B", fontname="helv", fontsize=9)
     # parágrafo comum, bem longe do diagrama — não deve entrar na região.
     page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
                       fontname="helv", fontsize=11)
@@ -346,6 +370,37 @@ def test_regioes_diagrama_ignora_caixa_de_destaque_com_prosa(tmp_path):
     doc.close()
 
 
+def test_regioes_diagrama_ignora_caixa_unica_com_lista_de_topicos(tmp_path):
+    """Achado real ao auditar Kubernetes in Action: o quadro de abertura de
+    capítulo "This chapter covers" (título + itens de lista, cada um curto —
+    não passa no filtro de prosa longa) é desenhado como UM único retângulo
+    preenchido, sem nenhuma subforma — mas tinha >=2 blocos e uma "forma
+    cheia", passando no filtro de diagrama e virando uma imagem rasterizada em
+    INGLÊS. Uma subforma distinta do próprio contêiner da região (>=2 caixas,
+    como um diagrama de verdade) agora é exigida (ADR-0041 fix)."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_diagrama
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 330, 240), color=(0, 0, 0), fill=(0.97, 0.96, 0.91), width=0)
+    page.insert_text((80, 120), "This chapter covers", fontname="helv", fontsize=11)
+    page.insert_text((80, 140), "Understanding containers", fontname="helv", fontsize=9)
+    page.insert_text((80, 155), "Isolating applications", fontname="helv", fontsize=9)
+    page.insert_text((80, 170), "Making jobs easier", fontname="helv", fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_diagrama(doc[0], blocos)
+    assert regioes == []
+    doc.close()
+
+
 def test_renderizar_diagrama_gera_data_uri_png(tmp_path):
     import fitz
 
@@ -372,10 +427,11 @@ def test_montar_html_rasteriza_diagrama_em_vez_de_paragrafos_soltos(tmp_path):
 
     doc = fitz.open()
     page = doc.new_page()
-    page.draw_rect(fitz.Rect(72, 100, 200, 180), color=(0, 0, 0), width=1)
+    page.draw_rect(fitz.Rect(72, 100, 130, 140), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
+    page.draw_rect(fitz.Rect(140, 140, 200, 180), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
     page.draw_line((100, 140), (150, 140))
     page.insert_text((80, 120), "App A", fontname="helv", fontsize=9)
-    page.insert_text((80, 160), "App B", fontname="helv", fontsize=9)
+    page.insert_text((150, 160), "App B", fontname="helv", fontsize=9)
     page.insert_text((72, 400), "Este é um parágrafo comum de texto na página.",
                       fontname="helv", fontsize=11)
     p = tmp_path / "s.pdf"

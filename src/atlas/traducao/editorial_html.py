@@ -241,6 +241,31 @@ def _parece_tabela(regiao: fitz.Rect, retangulos: list) -> bool:
     return False
 
 
+_TOLERANCIA_CONTAINER = 3.0  # pt — forma igual à região inteira (contêiner) não conta como subforma
+
+
+def _tem_subformas(regiao: fitz.Rect, retangulos: list) -> bool:
+    """Um diagrama de verdade (caixas+setas) tem >=1 forma "cheia" DISTINTA do
+    retângulo-contêiner da região inteira — várias caixas internas conectadas.
+    Uma caixa de destaque simples (ex. quadro "This chapter covers" com uma
+    lista, achado real ao auditar Kubernetes in Action) é desenhada como UM
+    único retângulo preenchido do tamanho exato da região — sem subformas —
+    mesmo tendo vários blocos de texto curtos dentro (título + itens de
+    lista), o que por si só não basta pra distinguir de um diagrama."""
+    for r in retangulos:
+        if not regiao.intersects(r) or r.width * r.height < _AREA_MIN_DESENHO:
+            continue
+        eh_o_proprio_container = (
+            abs(r.x0 - regiao.x0) <= _TOLERANCIA_CONTAINER
+            and abs(r.y0 - regiao.y0) <= _TOLERANCIA_CONTAINER
+            and abs(r.x1 - regiao.x1) <= _TOLERANCIA_CONTAINER
+            and abs(r.y1 - regiao.y1) <= _TOLERANCIA_CONTAINER
+        )
+        if not eh_o_proprio_container:
+            return True
+    return False
+
+
 def _regioes_diagrama(page, blocos: list) -> list[tuple]:
     """Detecta regiões de desenho vetorial que contêm vários blocos de texto
     curtos — um diagrama (caixas/setas/rótulos) desenhado com operadores de
@@ -267,6 +292,8 @@ def _regioes_diagrama(page, blocos: list) -> list[tuple]:
             (r.width * r.height for r in retangulos if reg.intersects(r)), default=0.0
         )
         if maior_forma < _AREA_MIN_DESENHO:
+            continue
+        if not _tem_subformas(reg, retangulos):
             continue
         if _parece_tabela(reg, retangulos):
             continue
@@ -423,7 +450,7 @@ def _abre_pagina(b, blocos: list, ph: float) -> bool:
     if not uteis:
         return False
     primeiro = min(uteis, key=lambda x: x.bbox[1])
-    return primeiro.bbox == b.bbox and b.bbox[1] <= ph * 0.18
+    return primeiro.bbox == b.bbox and b.bbox[1] <= ph * 0.20
 
 
 _RE_FOLIO_NUM = re.compile(r"\b\d+\b")
@@ -662,12 +689,22 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
 
     ocorrencias: dict[str, list[bool]] = {"h1": [], "h2": [], "h3": []}
     for _idx, (blocos, _tr) in paginas.items():
-        for b in blocos:
-            if not b.bbox or b.skip or _e_folio(b, ph):
-                continue
+        nivel_anterior: str | None = None
+        for b in sorted(
+            (x for x in blocos if x.bbox and not x.skip and not _e_folio(x, ph)),
+            key=lambda x: x.bbox[1],
+        ):
             nivel = nivel_titulo(_estilo(b)["size"], clusters)
-            if nivel and len(b.texto.split()) <= 14:
+            eh_titulo = nivel and len(b.texto.split()) <= 14
+            # título longo quebrado em várias linhas (cada linha = 1 bloco) conta
+            # como UMA única ocorrência (a primeira) — senão a taxa de abertura
+            # de página é diluída pela metade+ em qualquer título com 2+ linhas,
+            # e o nível nunca atinge o limiar de quebra forçada (achado real:
+            # Kubernetes in Action tem 18 capítulos, boa parte com título de
+            # 2-3 linhas, ADR-0041 fix).
+            if eh_titulo and nivel != nivel_anterior:
                 ocorrencias[nivel].append(_abre_pagina(b, blocos, ph))
+            nivel_anterior = nivel if eh_titulo else None
     quebra = taxa_abre_pagina(ocorrencias)
 
     partes: list[str] = []
