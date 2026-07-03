@@ -421,8 +421,12 @@ _CSS = """
 {font_faces}
 html {{ font-family: 'Liberation Serif','DejaVu Serif','Times New Roman',Georgia,serif; }}
 body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
-/* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra */
-p {{ margin: 0 0 .45em 0; orphans: 3; widows: 3; }}
+/* orphans/widows 3: um parágrafo nunca começa/termina com 1 linha solta na quebra.
+   estilo de parágrafo detectado do original (ADR-0041): "bloco" (O'Reilly:
+   espaço entre parágrafos, sem recuo) ou "recuo" (Manning/tradicional: 1ª linha
+   recuada, sem espaço entre parágrafos). No recuo, o 1º parágrafo depois de um
+   heading/box/lista/figura NÃO recua (convenção editorial). */
+{p_estilo}
 h1,h2,h3 {{ text-align: left; font-weight: bold; margin: .7em 0 .28em; line-height: 1.2;
             page-break-after: avoid; break-after: avoid; }}
 /* cabeça de página corrente (folio) segue o heading mais recente, seja qual
@@ -481,6 +485,57 @@ def _e_folio(b, ph: float) -> bool:
     uma_linha = (y1 - y0) < 26
     na_margem = y0 < ph * 0.075 or y1 > ph * 0.925
     return curto and uma_linha and na_margem
+
+
+# estilo de parágrafo: "bloco" (O'Reilly, sem recuo) vs "recuo" (Manning/
+# tradicional). Detectado pela fração de parágrafos multi-linha cuja 1ª linha
+# começa recuada em relação às linhas de continuação. Limiar folgado: o O'Reilly
+# (bloco) fica ~0.07 e o Manning (recuo) ~0.34 — 0.18 separa com margem, sem
+# risco de recuar o livro O'Reilly (que o usuário aprova). ADR-0041.
+_LIMIAR_RECUO_PARAGRAFO = 0.18
+_MIN_AMOSTRA_RECUO = 12  # poucos parágrafos multi-linha ⇒ default bloco (seguro)
+_MIN_RECUO_PT = 6.0  # abaixo disso é ruído de alinhamento, não recuo intencional
+
+_CSS_P_BLOCO = "p { margin: 0 0 .45em 0; orphans: 3; widows: 3; }"
+_CSS_P_RECUO = (
+    "p { margin: 0; text-indent: 1.3em; orphans: 3; widows: 3; }\n"
+    "h1+p, h2+p, h3+p, ul+p, ol+p, figure+p, pre+p, .destaque+p,\n"
+    ".rodape-nativo+p, blockquote+p, body>p:first-child { text-indent: 0; }"
+)
+
+
+def _linhas_x0(b) -> list[float]:
+    """x0 (esquerda) de cada linha do bloco — spans agrupados por y0."""
+    linhas: dict[int, float] = {}
+    for s in b.spans:
+        y = round(s.bbox[1])
+        linhas[y] = min(linhas.get(y, s.bbox[0]), s.bbox[0])
+    return [linhas[y] for y in sorted(linhas)]
+
+
+def _documento_recua_paragrafo(paginas: dict, ph: float) -> bool:
+    """``True`` se o documento usa recuo de 1ª linha (estilo tradicional/Manning)
+    em vez de parágrafo-bloco (O'Reilly). Mede a fração de parágrafos de prosa
+    multi-linha cuja 1ª linha começa recuada (>= ``_MIN_RECUO_PT``) em relação às
+    linhas de continuação. Amostra pequena ⇒ ``False`` (bloco, default seguro)."""
+    recuados = alinhados = 0
+    for _idx, (blocos, _tr) in paginas.items():
+        for b in blocos:
+            if b.skip or not b.bbox or _e_folio(b, ph) or _estilo(b)["mono"]:
+                continue
+            if len(b.texto) < 150:  # precisa ser multi-linha de verdade
+                continue
+            xs = _linhas_x0(b)
+            if len(xs) < 2:
+                continue
+            if xs[0] - min(xs[1:]) >= _MIN_RECUO_PT:
+                recuados += 1
+            else:
+                alinhados += 1
+    total = recuados + alinhados
+    if total < _MIN_AMOSTRA_RECUO:
+        return False
+    return recuados / total >= _LIMIAR_RECUO_PARAGRAFO
 
 
 _INDICE_MAX_ABRE_PAGINA = 1  # tolera o rótulo ("CHAPTER N"/"PART N") antes do título
@@ -1112,12 +1167,14 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     flush_notas()  # nota(s) pendente(s) da última página (ADR-0041)
 
     fontes = extrair_fontes(doc)
+    p_estilo = _CSS_P_RECUO if _documento_recua_paragrafo(paginas, ph) else _CSS_P_BLOCO
     geo_css = {
         **geo,
         "h1_break": "page" if quebra.get("h1") else "auto",
         "h2_break": "page" if quebra.get("h2") else "auto",
         "h3_break": "page" if quebra.get("h3") else "auto",
         "font_faces": gerar_font_faces(fontes),
+        "p_estilo": p_estilo,
     }
     css = _CSS.format(**geo_css)
     corpo = "\n".join(partes)

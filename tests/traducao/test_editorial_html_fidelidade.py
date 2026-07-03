@@ -123,6 +123,59 @@ def test_estilo_cor_por_maioria_nao_pelo_primeiro_span():
     assert _estilo(b)["color"] == preto
 
 
+def _bloco_multilinha(x0_linha1, x0_cont, y0=100.0, n_cont=3, size=10.0):
+    """Bloco de prosa com 1ª linha em ``x0_linha1`` e linhas de continuação em
+    ``x0_cont`` (spans agrupados por y)."""
+    spans = [
+        Span(
+            text="P" * 40,
+            bbox=(x0_linha1, y0, 400, y0 + 12),
+            font="Times",
+            size=size,
+            color=0,
+            flags=0,
+        )
+    ]
+    for i in range(n_cont):
+        yy = y0 + 14 * (i + 1)
+        spans.append(
+            Span(
+                text="c" * 40,
+                bbox=(x0_cont, yy, 400, yy + 12),
+                font="Times",
+                size=size,
+                color=0,
+                flags=0,
+            )
+        )
+    texto = "P" * 40 + " " + "c" * 40 * n_cont
+    return BlocoTraducao(id=1, pagina=0, bbox=(x0_cont, y0, 400, y0 + 60), texto=texto, spans=spans)
+
+
+def test_documento_recua_paragrafo_estilo_tradicional():
+    # Manning: 1ª linha recuada ~18pt em relação à continuação → estilo recuo.
+    from atlas.traducao.editorial_html import _documento_recua_paragrafo
+
+    paginas = {i: ([_bloco_multilinha(x0_linha1=90.0, x0_cont=72.0)], {}) for i in range(14)}
+    assert _documento_recua_paragrafo(paginas, ph=792.0) is True
+
+
+def test_documento_recua_paragrafo_estilo_bloco():
+    # O'Reilly: 1ª linha alinhada à continuação (sem recuo) → estilo bloco.
+    from atlas.traducao.editorial_html import _documento_recua_paragrafo
+
+    paginas = {i: ([_bloco_multilinha(x0_linha1=72.0, x0_cont=72.0)], {}) for i in range(14)}
+    assert _documento_recua_paragrafo(paginas, ph=792.0) is False
+
+
+def test_documento_recua_paragrafo_amostra_pequena_e_bloco():
+    # poucos parágrafos multi-linha → não decide por recuo (default bloco, seguro).
+    from atlas.traducao.editorial_html import _documento_recua_paragrafo
+
+    paginas = {0: ([_bloco_multilinha(x0_linha1=90.0, x0_cont=72.0)], {})}
+    assert _documento_recua_paragrafo(paginas, ph=792.0) is False
+
+
 def test_tipo_lista_reconhece_numerado_e_alfabetico():
     from atlas.traducao.editorial_html import _tipo_lista
 
