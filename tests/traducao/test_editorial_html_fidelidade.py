@@ -35,6 +35,39 @@ def test_elemento_usa_fonte_real_do_span():
     assert "MinhaFonteCustom" in html
 
 
+def test_estilo_cor_por_maioria_nao_pelo_primeiro_span():
+    """Achado real (auditoria visual, Observability Engineering): um link
+    cruzado colorido curto ("Chapter 1") no INÍCIO de um parágrafo preto
+    normal pintava o parágrafo INTEIRO da cor do link, porque _estilo() usava
+    spans[0].color — o primeiro span, não o dominante."""
+    from atlas.traducao.editorial_html import _estilo
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    vermelho = 0xAA2222
+    preto = 0
+    spans = [
+        Span(
+            text="Chapter 1",
+            bbox=(72, 100, 120, 116),
+            font="Times",
+            size=10.5,
+            color=vermelho,
+            flags=0,
+        ),
+        Span(
+            text=" examines the roots of the term and provides concrete "
+            "questions you can ask yourself about your system.",
+            bbox=(120, 100, 400, 116),
+            font="Times",
+            size=10.5,
+            color=preto,
+            flags=0,
+        ),
+    ]
+    b = BlocoTraducao(id=1, pagina=0, bbox=(72, 100, 400, 116), texto="", spans=spans)
+    assert _estilo(b)["color"] == preto
+
+
 def test_tipo_lista_reconhece_numerado_e_alfabetico():
     from atlas.traducao.editorial_html import _tipo_lista
 

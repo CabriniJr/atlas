@@ -66,15 +66,24 @@ def _estilo(b) -> dict:
     total = sum(max(1, len(s.text)) for s in b.spans)
     peso = lambda pred: sum(len(s.text) for s in b.spans if pred(s))  # noqa: E731
     fontes: dict[str, int] = {}
+    cores: dict[int, int] = {}
     for s in b.spans:
         fontes[s.font] = fontes.get(s.font, 0) + len(s.text)
+        cores[s.color] = cores.get(s.color, 0) + len(s.text)
     font_dom = max(fontes, key=fontes.get) if fontes else ""
+    # cor por MAIORIA de caractere, não spans[0] — achado real (auditoria
+    # visual, Observability Engineering): um link cruzado colorido curto
+    # ("Chapter 1") no INÍCIO de um parágrafo preto normal pintava o parágrafo
+    # INTEIRO da cor do link (spans[0] é só o primeiro span, não o dominante) —
+    # mesmo princípio de correção do _bold/_ital (peso de caractere), aplicado
+    # à cor (ADR-0041 fix).
+    cor_dom = max(cores, key=cores.get) if cores else 0
     return {
         "size": statistics.median([s.size for s in b.spans if s.size] or [11.0]),
         "bold": peso(_bold) > total / 2,
         "italic": peso(_ital) > total / 2,
         "mono": bloco_e_mono(b.spans),
-        "color": b.spans[0].color or 0,
+        "color": cor_dom,
         "font": font_dom,
     }
 
