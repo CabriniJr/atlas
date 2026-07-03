@@ -498,15 +498,26 @@ _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
 _RE_LISTA_NUM = re.compile(r"^\s*(\d+[.)]|[a-zA-Z][.)])\s+")
 
 
+def _e_marcador_bullet(ch: str) -> bool:
+    """Um marcador de item de lista: bullet Unicode comum OU um glifo de fonte
+    de ícone (Wingdings/Symbol, ex. ````) — área de Uso Privado
+    (U+E000–U+F8FF). Editoras (Manning, entre outras) usam glifos PUA pro
+    "quadrado" de bullet em caixas como "This chapter covers"; sem isso o
+    item nunca vira ``<li>`` — fica um `<p>` solto com o glifo cru, sem
+    marcador visível (achado real ao auditar Kubernetes in Action, ADR-0041
+    fix)."""
+    return ch in _BULLETS or 0xE000 <= ord(ch) <= 0xF8FF
+
+
 def _e_lista(texto: str) -> bool:
     t = texto.lstrip()
-    return t[:1] in _BULLETS and len(t) > 2 and t[1:2] in (" ", "\t")
+    return len(t) > 2 and _e_marcador_bullet(t[0]) and t[1:2] in (" ", "\t")
 
 
 def _tipo_lista(texto: str) -> str | None:
     """``"ul"``/``"ol"``/``None`` conforme o marcador do item (ADR-0041)."""
     t = texto.lstrip()
-    if t[:1] in _BULLETS and len(t) > 2 and t[1:2] in (" ", "\t"):
+    if len(t) > 2 and _e_marcador_bullet(t[0]) and t[1:2] in (" ", "\t"):
         return "ul"
     if _RE_LISTA_NUM.match(texto):
         return "ol"
@@ -653,7 +664,7 @@ def _elemento(b, texto: str, est: dict, body_sz: float, clusters: list[float],
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
         bruto = texto.lstrip()
-        if bruto[:1] in _BULLETS:
+        if bruto[:1] and _e_marcador_bullet(bruto[0]):
             bruto = bruto[1:].lstrip()
         item = converter_enfase(bruto, _e)
         if est["italic"]:
@@ -814,6 +825,24 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                         cb, ctexto, cest, body_sz, clusters, anchor=_anchor(idx, cb.id), link=clink
                     )
                     ctipo_li = _tipo_lista(cb.texto) if not cest["mono"] else None
+                    # continuação de um item de lista quebrado em 2+ linhas (cada
+                    # linha é um bloco próprio): a linha de continuação não tem
+                    # marcador de bullet — gruda no <li> anterior em vez de virar
+                    # um <p> solto (que perdia o estilo/indentação da lista e
+                    # quebrava a frase ao meio, achado real ao auditar Kubernetes
+                    # in Action, ADR-0041 fix).
+                    if (
+                        not ctipo_li
+                        and lista_local
+                        and partes
+                        and partes[-1].startswith("<li")
+                        and _comeca_minuscula(ctexto)
+                    ):
+                        extra = converter_enfase(ctexto, _e)
+                        if cest["italic"]:
+                            extra = f'<span class="it">{extra}</span>'
+                        partes[-1] = partes[-1].removesuffix("</li>") + " " + extra + "</li>"
+                        continue
                     if ctipo_li and cel.startswith("<li"):
                         if lista_local and lista_local != ctipo_li:
                             partes.append("</ol>" if lista_local == "ol" else "</ul>")

@@ -531,6 +531,58 @@ def test_montar_html_envolve_caixa_de_destaque_em_div(tmp_path):
     doc.close()
 
 
+def test_tipo_lista_reconhece_glifo_pua_de_fonte_icone():
+    """Achado real ao auditar Kubernetes in Action: o quadro "This chapter
+    covers" usa um glifo de fonte de ícone (Wingdings/Symbol, área de Uso
+    Privado U+E000-U+F8FF) como marcador de bullet — não estava na lista de
+    bullets Unicode comuns, então o item nunca virava ``<li>`` (ficava um
+    ``<p>`` solto com o glifo cru, sem marcador visível, ADR-0041 fix)."""
+    from atlas.traducao.editorial_html import _tipo_lista
+
+    assert _tipo_lista(" Understanding how containers work") == "ul"
+
+
+def test_montar_html_gruda_continuacao_de_item_de_lista_dentro_de_destaque(tmp_path):
+    """Achado real ao auditar Kubernetes in Action: um item de lista quebrado
+    em 2 linhas (cada linha um bloco de texto próprio no PDF) virava DOIS
+    elementos — o primeiro um `<li>`, o segundo um `<p>` solto sem marcador
+    nem indentação, cortando a frase ao meio visualmente. A linha de
+    continuação (sem marcador de bullet, começando em minúscula) agora gruda
+    no `<li>` anterior (ADR-0041 fix)."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 330, 240), color=(0, 0, 0), fill=(0.97, 0.96, 0.91), width=0)
+    page.insert_text((80, 120), "This chapter covers", fontname="helv", fontsize=11)
+    page.insert_text(
+        (80, 140), "- Understanding how software development", fontname="helv", fontsize=9
+    )
+    page.insert_text(
+        (80, 155), "and deployment has changed over the years", fontname="helv", fontsize=9
+    )
+    page.insert_text((80, 175), "- Isolating applications", fontname="helv", fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert html.count("<li") == 2
+    assert (
+        "Understanding how software development and deployment has changed over the years"
+        in html
+    )
+    doc.close()
+
+
 def test_link_do_bloco_ignora_url_que_cobre_so_uma_fracao_pequena():
     from atlas.traducao.editorial_html import _link_do_bloco
     from atlas.traducao.extracao import BlocoTraducao
