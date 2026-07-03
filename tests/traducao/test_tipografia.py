@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 
 from atlas.traducao.tipografia import (
+    agrupar_niveis,
     bloco_e_mono,
     clusters_titulo,
     converter_enfase,
     dividir_versalete,
     familia_fonte,
     fonte_seminegrito,
+    nivel_indent,
     nivel_titulo,
     taxa_abre_pagina,
 )
@@ -101,6 +103,20 @@ def test_fonte_seminegrito_detecta_peso_pelo_nome():
     assert fonte_seminegrito("Helvetica-Black") is True
     assert fonte_seminegrito("MinionPro-Regular") is False
     assert fonte_seminegrito("NewBaskerville-Roman") is False
+
+
+def test_agrupar_niveis_agrupa_x0_por_proximidade():
+    # x0 das entradas do sumário (K8S): 66 (parte/cap), 148/150 (seção),
+    # 186 (sub-seção) → 3 níveis de indentação.
+    assert agrupar_niveis([66.2, 147.9, 150.2, 186.2, 66.2, 147.9]) == [66.2, 147.9, 186.2]
+
+
+def test_nivel_indent_mapeia_x0_no_nivel_mais_proximo():
+    niveis = [66.2, 147.9, 186.2]
+    assert nivel_indent(66.2, niveis) == 0
+    assert nivel_indent(148.0, niveis) == 1  # dentro da tolerância de 147.9
+    assert nivel_indent(186.5, niveis) == 2
+    assert nivel_indent(200.0, niveis) == 2  # além do último cai no mais próximo
 
 
 def test_dividir_versalete_separa_cabecalho_run_in_colado():

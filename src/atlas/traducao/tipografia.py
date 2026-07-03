@@ -137,6 +137,33 @@ def familia_fonte(font: str) -> str:
     return "serif"
 
 
+def agrupar_niveis(valores: list[float], gap: float = 8.0) -> list[float]:
+    """Agrupa posições x0 (esquerda) por proximidade em NÍVEIS de indentação, do
+    menor pro maior (gap <= ``gap`` cai no mesmo nível). Usado pra reconstruir a
+    hierarquia do sumário — cada nível de indentação do original é uma tier
+    (parte > capítulo > seção > sub-seção)."""
+    distintos = sorted({round(v, 1) for v in valores})
+    if not distintos:
+        return []
+    niveis = [distintos[0]]
+    for v in distintos[1:]:
+        if v - niveis[-1] > gap:
+            niveis.append(v)
+    return niveis
+
+
+def nivel_indent(x0: float, niveis: list[float], tol: float = 6.0) -> int:
+    """Índice do nível de indentação (0 = mais à esquerda) cujo x0 é o mais
+    próximo de ``x0``. ``niveis`` vem de ``agrupar_niveis`` (crescente)."""
+    if not niveis:
+        return 0
+    melhor = min(range(len(niveis)), key=lambda i: abs(niveis[i] - x0))
+    # x0 bem à direita do último nível ainda cai no último (sub-entrada solta)
+    if x0 > niveis[-1] + tol:
+        return len(niveis) - 1
+    return melhor
+
+
 _RE_PALAVRA_CAPS = r"[A-ZÀ-Þ][A-ZÀ-Þ0-9'’.\-/&]*(?![a-zà-þ])"
 _RE_RUN_CAPS = re.compile(rf"^({_RE_PALAVRA_CAPS}(?:\s+{_RE_PALAVRA_CAPS})*)\s*")
 _ADMOESTACOES = {

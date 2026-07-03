@@ -25,6 +25,7 @@ import statistics
 import fitz
 
 from atlas.traducao.tipografia import (
+    agrupar_niveis,
     bloco_e_mono,
     clusters_titulo,
     converter_enfase,
@@ -33,6 +34,7 @@ from atlas.traducao.tipografia import (
     familia_fonte,
     fonte_seminegrito,
     gerar_font_faces,
+    nivel_indent,
     nivel_titulo,
     taxa_abre_pagina,
 )
@@ -472,11 +474,29 @@ img {{ max-width: 100%; }}
    navegador, o original nunca sublinha referência cruzada). */
 a {{ text-decoration: none; }}
 a.ext {{ text-decoration: underline; }}
-/* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
-p.toc {{ text-align: left; margin: .12em 0; }}
-p.toc a {{ color: #000; }}
-p.toc a::after {{ content: leader('.') ' ' target-counter(attr(href url), page); color: #000; }}
+/* sumário hierárquico (ADR-0041): reproduz as tiers do original (parte >
+   capítulo > seção > sub-seção) com indentação, em vez da lista chapada e
+   pontilhada ("sumário arcaico"). Página recalculada por target-counter. */
+p.toc, .toc-lin, .toc-cap, .toc-sub, .toc-parte {{ text-align: left; hyphens: none; }}
+p.toc, .toc-lin, .toc-cap {{ margin: .12em 0; text-indent: 0; }}
+p.toc a, .toc-lin a, .toc-cap a {{ color: #000; text-decoration: none; }}
+p.toc a::after, .toc-lin a::after, .toc-cap a::after {{
+    content: leader('.') ' ' target-counter(attr(href url), page); color: #000; }}
+/* cabeçalho de capítulo: peso forte, um respiro acima */
+.toc-cap {{ font-weight: bold; margin: .5em 0 .12em; }}
+/* cabeçalho de parte: versalete, destacado, bom respiro */
+.toc-parte {{ font-weight: bold; font-variant: small-caps; letter-spacing: .04em;
+    font-size: 1.1em; margin: 1.2em 0 .4em; text-indent: 0; }}
+/* sub-lista de seções: itálico, compacta, inline, separada por • (como o
+   original) — nunca explode em linhas pontilhadas */
+.toc-sub {{ font-style: italic; font-size: .95em; color: #333; margin: .05em 0 .4em;
+    line-height: 1.3; text-indent: 0; }}
+.toc-sub a {{ color: #333; text-decoration: none; }}
+.toc-sub a::after {{ content: ' ' target-counter(attr(href url), page);
+    font-size: .85em; color: #777; }}
+.toc-sub .toc-sep {{ color: #999; font-style: normal; padding: 0 .15em; }}
 .tocnum::before {{ content: leader('.') ' '; }}
+.pg::before {{ content: ' '; }} .pg {{ color: #777; font-size: .9em; }}
 """
 
 
@@ -765,24 +785,145 @@ def _parece_sumario_mesclado(texto_original: str) -> bool:
     return all(len(titulo.split()) <= _PALAVRAS_MAX_ENTRADA_TOC for titulo, _num in entradas)
 
 
-def _elemento_toc(texto: str, anchors: list) -> str:
-    """Um bloco de sumário mesclado → uma linha por entrada, com link + página
-    recalculada (target-counter). Fallback: mostra o número original (E9-09).
+# leader de pontos LITERAL embutido no texto do original (O'Reilly:
+# "Foreword. . . . . . xi") — exige 5+ grupos ponto/espaço: leader de sumário
+# real tem dezenas de pontos, então não confunde com reticências ("...", 3
+# pontos) nem um "etc. " de prosa comum (achado real, evita falso-positivo).
+_RE_LEADER_TOC = re.compile(r"\s*(?:[.·•]\s*){5,}")
+# rótulo de parte no início da entrada ("Part I", "PARTE 1", "P ART 1" versalete).
+_RE_PARTE_TOC = re.compile(r"^\s*(P\s?ART[E]?|PARTE)\b[.:]?\s*[\dIVXLCM]*", re.IGNORECASE)
+# número de página no fim (arábico ou romano) — descartado quando há âncora
+# (o target-counter regenera a página certa na repaginação).
+_RE_PAGINA_FIM = re.compile(r"\s+[\divxlcmIVXLCM]+\s*$")
+# versalete quebra a 1ª letra num span próprio ("P ART" em vez de "PART") — junta
+# letra-capital solta + resto em caixa-alta de volta (achado real, TOC K8S).
+_RE_VERSALETE_SPLIT = re.compile(r"(?<![A-Za-zÀ-þ])([A-ZÀ-Þ]) ([A-ZÀ-Þ]{2,})")
+# parte + 1º capítulo grudados num bloco só ("PART 1 OVERVIEW 1 Introducing
+# Kubernetes 1"): separa o rótulo da parte (PART n NOME em caixa-alta) do
+# capítulo (n Título ... página).
+_RE_PARTE_CAP = re.compile(r"^(PARTE?\s+[\dIVXLCM]+\s+[A-ZÀ-Þ][A-ZÀ-Þ ]*[A-ZÀ-Þ])\s+(\d+\s+.+)$")
 
-    Passa o título por ``converter_enfase`` (achado real, auditoria visual,
-    Kubernetes in Action): sem isso, um marcador ``**bold**``/``_itálico_``
-    vindo da extração (ex.: numeral de capítulo em itálico no original)
-    vazava LITERAL no sumário — "_1_" em vez de um "1" em itálico."""
-    linhas = []
-    for i, (titulo, num) in enumerate(_entradas_toc(texto)):
-        alvo = anchors[i] if i < len(anchors) else None
-        titulo_html = converter_enfase(titulo, _e)
+
+def _juntar_versalete_split(texto: str) -> str:
+    return _RE_VERSALETE_SPLIT.sub(r"\1\2", texto)
+
+
+def _limpar_toc(texto: str) -> str:
+    """Remove o leader de pontos literal do original (E9-09)."""
+    return _RE_LEADER_TOC.sub(" ", texto).strip()
+
+
+# entrada que começa com número de capítulo ("1.", "2 ", "10.") — usado pra
+# separar o capítulo da sua sub-lista num bloco mesclado (O'Reilly).
+_RE_CAP_NUM = re.compile(r"^\s*\d+[.\s]")
+
+
+def _toc_sublista_inline(entradas: list, anchors: list) -> str:
+    """Sub-lista de seções inline, entradas separadas por • (com página de cada
+    uma) — como no original, compacta, nunca explodida em linhas pontilhadas."""
+    partes = [
+        _entrada_toc_link(t, anchors[i] if i < len(anchors) and anchors[i] else None, n)
+        for i, (t, n) in enumerate(entradas)
+    ]
+    return ' <span class="toc-sep">•</span> '.join(partes)
+
+
+def _entrada_toc_link(titulo: str, alvo: str | None, num: str | None) -> str:
+    """``<a>título</a>`` (âncora → página via target-counter) ou título +
+    número original quando não há link (fallback E9-09)."""
+    titulo_html = converter_enfase(titulo.strip(), _e)
+    if alvo:
+        return f'<a href="#{alvo}">{titulo_html}</a>'
+    n = f' <span class="pg">{_e(num)}</span>' if num else ""
+    return f"{titulo_html}{n}"
+
+
+def _render_toc_bloco(texto: str, nivel: int, anchors: list, est: dict) -> str:
+    """Renderiza um bloco de sumário conforme seu NÍVEL de indentação (ADR-0041):
+    reproduz a hierarquia do original (parte > capítulo > seção > sub-seção) em
+    vez de despejar tudo numa lista chapada com dot-leaders (o "sumário arcaico"
+    que o usuário apontou). Cabeçalho de parte ganha destaque; sub-lista itálica
+    fica inline com bullets (•), como no original; entrada comum leva leader +
+    página regenerada."""
+    indent = f"margin-left:{nivel * 1.5:.1f}em;"
+    limpo = _limpar_toc(texto)
+
+    # cabeçalho de PARTE: versalete, com respiro (nunca inline com bullets).
+    if _RE_PARTE_TOC.match(limpo):
+        juntado = _juntar_versalete_split(limpo)
+        m = _RE_PARTE_CAP.match(juntado)
+        if m:  # parte + 1º capítulo grudados → duas linhas (rótulo + capítulo)
+            rotulo, capitulo = m.group(1), m.group(2)
+            html_parte = f'<p class="toc-parte" style="{indent}">{converter_enfase(rotulo, _e)}</p>'
+            alvo = anchors[-1] if anchors else None
+            cap_txt = _RE_PAGINA_FIM.sub("", capitulo) if alvo else capitulo
+            miolo = converter_enfase(cap_txt.strip(), _e)
+            if alvo:
+                html_cap = f'<p class="toc-cap"><a href="#{alvo}">{miolo}</a></p>'
+            else:
+                html_cap = f'<p class="toc-cap">{miolo}</p>'
+            return html_parte + "\n" + html_cap
+        return f'<p class="toc-parte" style="{indent}">{converter_enfase(juntado, _e)}</p>'
+
+    entradas = _entradas_toc(limpo)
+
+    # sub-lista de seções (itálico, várias entradas): UMA linha, entradas
+    # separadas por • — o original mantém isso compacto e inline, não explode
+    # numa lista pontilhada (achado real, auditoria visual, Kubernetes in Action).
+    if est.get("italic") and len(entradas) >= 2:
+        return f'<p class="toc-sub" style="{indent}">{_toc_sublista_inline(entradas, anchors)}</p>'
+
+    # capítulo + sua sub-lista mesclados num bloco (O'Reilly: "1. What Is
+    # Observability? 3 The Mathematical Definition 4 Applying... 4 ..."): 1ª
+    # entrada é o capítulo (nº + título), o resto é a sub-lista inline.
+    if len(entradas) >= 2 and _RE_CAP_NUM.match(entradas[0][0]):
+        cap_t, cap_n = entradas[0]
+        alvo = anchors[0] if anchors and anchors[0] else None
+        cap_miolo = _entrada_toc_link(cap_t, alvo, cap_n)
+        cap = f'<p class="toc-cap" style="{indent}">{cap_miolo}</p>'
+        sub = _toc_sublista_inline(entradas[1:], anchors[1:])
+        return f'{cap}\n<p class="toc-sub" style="{indent}">{sub}</p>'
+
+    # entrada única (capítulo/seção): leader + página regenerada.
+    if len(entradas) <= 1:
+        alvo = anchors[0] if anchors and anchors[0] else None
+        titulo = _RE_PAGINA_FIM.sub("", limpo) if alvo else (entradas[0][0] if entradas else limpo)
+        classe = "toc-cap" if est.get("bold") else "toc-lin"
+        conteudo = converter_enfase(titulo.strip(), _e)
         if alvo:
-            linhas.append(f'<p class="toc"><a href="#{alvo}">{titulo_html}</a></p>')
-        else:
-            n = f' <span class="tocnum">{_e(num)}</span>' if num else ""
-            linhas.append(f'<p class="toc">{titulo_html}{n}</p>')
+            return f'<p class="{classe}" style="{indent}"><a href="#{alvo}">{conteudo}</a></p>'
+        num = entradas[0][1] if entradas else None
+        pg = f' <span class="tocnum">{_e(num)}</span>' if num else ""
+        return f'<p class="{classe}" style="{indent}">{conteudo}{pg}</p>'
+
+    # várias entradas não-itálicas (ex.: front matter mesclado): uma linha cada.
+    linhas = [
+        f'<p class="toc-lin" style="{indent}">'
+        f"{_entrada_toc_link(t, anchors[i] if i < len(anchors) else None, n)}</p>"
+        for i, (t, n) in enumerate(entradas)
+    ]
     return "\n".join(linhas)
+
+
+def _e_entrada_toc(b, ganchors: list, texto: str) -> bool:
+    """``True`` se o bloco é uma entrada de sumário: tem link(s) interno(s) e cara
+    de TOC (termina em nº de página, é sumário mesclado, ou é cabeçalho de parte).
+    Guarda contra falso-positivo: uma entrada de TOC é CURTA (título), não um
+    parágrafo de prosa que por acaso tem um link cruzado e termina em número."""
+    limpo = _limpar_toc(texto)
+    if _RE_PARTE_TOC.match(limpo) and len(limpo.split()) <= 8:
+        return True
+    # leader de pontos LITERAL no original é sinal forte de sumário — cobre o
+    # front matter com página romana ("Foreword. . . . xi") e o capítulo O'Reilly
+    # com sub-lista mesclada, que o _RE_TOC_FIM (só arábico) não pegava.
+    if _RE_LEADER_TOC.search(texto):
+        return True
+    if not ganchors:
+        return False
+    if _parece_sumario_mesclado(texto):
+        return True
+    # entrada única: link interno + termina em nº de página + título curto.
+    return bool(_RE_TOC_FIM.search(limpo)) and len(limpo.split()) <= 18
 
 
 _FRACAO_MIN_LINK = 0.5  # ADR-0041 fix: ver docstring de _link_do_bloco
@@ -951,6 +1092,20 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             nivel_anterior = nivel if eh_titulo else None
     quebra = taxa_abre_pagina(ocorrencias)
 
+    # níveis de indentação do sumário (pré-passo): x0 de todas as entradas de TOC,
+    # agrupados por proximidade, viram as tiers de indentação (parte > capítulo >
+    # seção > sub-seção) que o render reproduz (ADR-0041).
+    toc_x0s: list[float] = []
+    for _idx, (blocos, tr) in paginas.items():
+        links_p = _links_pagina(doc[_idx])
+        for b in blocos:
+            if b.skip or not b.bbox or _e_folio(b, ph) or _estilo(b)["mono"]:
+                continue
+            ga = _goto_anchors(b, links_p, paginas)
+            if _e_entrada_toc(b, ga, tr.get(b.id) or b.texto):
+                toc_x0s.append(b.bbox[0])
+    toc_niveis = agrupar_niveis(toc_x0s)
+
     partes: list[str] = []
     lista_aberta: str | None = None
     lista_indent_texto: float | None = None
@@ -1112,10 +1267,11 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             # cruzadas também tem 2 links, ADR-0041 fix): uma linha por entrada.
             if not est["mono"]:
                 ganchors = _goto_anchors(b, links, paginas)
-                if len(ganchors) >= 2 and _parece_sumario_mesclado(b.texto):
+                if _e_entrada_toc(b, ganchors, b.texto):
                     fecha_lista()
                     heading_aberto = None
-                    partes.append(_elemento_toc(texto, ganchors))
+                    nivel_ind = nivel_indent(b.bbox[0], toc_niveis)
+                    partes.append(_render_toc_bloco(texto, nivel_ind, ganchors, est))
                     continue
             link = _link_do_bloco(b, links)
             if link and link[0] == "goto":  # resolve destino → âncora na repaginação

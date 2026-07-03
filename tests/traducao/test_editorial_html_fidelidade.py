@@ -390,17 +390,64 @@ def test_glue_continuacao_de_item_de_lista_quebrado_em_2_blocos(tmp_path):
     doc.close()
 
 
-def test_elemento_toc_converte_enfase_no_titulo():
+def test_render_toc_bloco_converte_enfase_no_titulo():
     """Achado real (auditoria visual, Kubernetes in Action): o numeral do
     capítulo é itálico no original ("*1* Introducing Kubernetes") — a
-    extração marca isso como "_1_ Apresentando o Kubernetes", mas
-    _elemento_toc não convertia o marcador, vazando "_1_" literal no
-    sumário em vez de um "1" em itálico."""
-    from atlas.traducao.editorial_html import _elemento_toc
+    extração marca isso como "_1_ Apresentando o Kubernetes", mas o render do
+    sumário não convertia o marcador, vazando "_1_" literal em vez de "1"
+    itálico."""
+    from atlas.traducao.editorial_html import _render_toc_bloco
 
-    html = _elemento_toc("_1_ Apresentando o Kubernetes 34", anchors=[])
+    html = _render_toc_bloco(
+        "_1_ Apresentando o Kubernetes 34", nivel=0, anchors=[], est={"italic": False}
+    )
     assert "<i>1</i>" in html
     assert "_1_" not in html
+
+
+def test_render_toc_bloco_indenta_por_nivel():
+    from atlas.traducao.editorial_html import _render_toc_bloco
+
+    h0 = _render_toc_bloco("1.1 Understanding 2", nivel=0, anchors=[], est={})
+    h2 = _render_toc_bloco("1.1 Understanding 2", nivel=2, anchors=[], est={})
+    assert "margin-left:0.0em" in h0
+    assert "margin-left:3.0em" in h2
+
+
+def test_render_toc_bloco_sub_lista_italica_fica_inline_com_bullets():
+    """Sub-lista de seções (itálico) fica compacta e inline (• separando), como
+    no original — não explode numa lista pontilhada."""
+    from atlas.traducao.editorial_html import _render_toc_bloco
+
+    html = _render_toc_bloco(
+        "Moving from monolithic apps 3 Providing a consistent environment 6",
+        nivel=2,
+        anchors=[],
+        est={"italic": True},
+    )
+    assert html.count("<p") == 1  # UMA linha, não várias
+    assert "toc-sep" in html  # bullet separador
+    assert "toc-sub" in html
+
+
+def test_render_toc_bloco_cabecalho_de_parte_versalete():
+    from atlas.traducao.editorial_html import _render_toc_bloco
+
+    html = _render_toc_bloco("Part I. The Path to Observability", nivel=0, anchors=[], est={})
+    assert "toc-parte" in html
+
+
+def test_e_entrada_toc_nao_confunde_reticencias_de_prosa():
+    """Leader de sumário real tem dezenas de pontos — reticências ("...") de
+    prosa comum NÃO podem ser confundidas com entrada de sumário (senão um
+    parágrafo com reticências viraria uma linha de TOC)."""
+    from atlas.traducao.editorial_html import _e_entrada_toc
+
+    class _B:
+        bbox = (72, 100, 400, 116)
+
+    assert _e_entrada_toc(_B(), [], "Bem... na verdade isso é só uma frase normal.") is False
+    assert _e_entrada_toc(_B(), [], "Foreword. . . . . . . . . . . . xi") is True
 
 
 def test_parece_sumario_mesclado_reconhece_toc_de_verdade():
