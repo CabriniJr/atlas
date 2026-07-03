@@ -212,14 +212,32 @@ def aplicar_unificacao(texto: str, mapa: dict[str, str]) -> str:
     return texto
 
 
-def montar_prompt(blocos: list[BlocoTraducao], cfg: ConfigTraducao) -> str:
+def _regra_termos(cfg: ConfigTraducao) -> str:
+    """Regra PRECISA do que fica em inglês (ADR-0041 fix): "NÃO traduza termos
+    técnicos" era largo demais — o modelo mantinha conceitos comuns
+    ("Observability", "Metrics", "Troubleshooting", "Dashboards") em inglês, que
+    têm termo consagrado em português. Só nome próprio/identificador de código e
+    glossário ficam em inglês; conceito técnico é traduzido."""
     glossario = ", ".join(cfg.glossario) if cfg.glossario else "(nenhum)"
+    return (
+        f"Mantenha em inglês APENAS: nomes próprios de produtos, ferramentas e "
+        f"empresas; nomes de APIs, classes, métodos e comandos; identificadores de "
+        f"código e caminhos de arquivo; e os termos do glossário: {glossario}. "
+        f"TRADUZA todo o resto para {cfg.idioma_destino}, INCLUSIVE conceitos "
+        f"técnicos que têm termo consagrado em português (ex.: "
+        f"observability→observabilidade, metrics→métricas, monitoring→monitoramento, "
+        f"dashboard→painel, troubleshooting→solução de problemas, "
+        f"deployment→implantação, tracing→rastreamento). Não deixe palavras comuns "
+        f"em inglês quando houver equivalente natural."
+    )
+
+
+def montar_prompt(blocos: list[BlocoTraducao], cfg: ConfigTraducao) -> str:
     corpo = "\n".join(f"[[{b.id}]] {b.texto}" for b in blocos)
     return (
         f"Traduza de {cfg.idioma_origem} para {cfg.idioma_destino} o texto de um livro "
         f"técnico sobre: {cfg.assunto or 'tecnologia'}.\n"
-        f"Regras: preserve o tom técnico; NÃO traduza termos técnicos, nomes de APIs, "
-        f"comandos ou código; mantenha em inglês os termos do glossário: {glossario}.\n"
+        f"Regras: preserve o tom técnico. {_regra_termos(cfg)}\n"
         f"Responda cada bloco no MESMO formato numerado, sem comentários extras:\n"
         f"[[N]] <tradução>\n\n{corpo}"
     )
@@ -268,7 +286,6 @@ def montar_prompt_refino(pares: list[tuple[int, str, str]], cfg: ConfigTraducao)
     o contrato de glossário e de formato de resposta é sempre mantido, pois o
     parser (``parsear_resposta``) depende dele.
     """
-    glossario = ", ".join(cfg.glossario) if cfg.glossario else "(nenhum)"
     corpo = "\n\n".join(f"[[{i}]]\nORIGEM: {origem}\nBRUTO: {bruto}" for i, origem, bruto in pares)
     instrucao = cfg.instrucao_refino.strip() or (
         f"Você revisa a tradução de {cfg.idioma_origem} para {cfg.idioma_destino} de um "
@@ -278,8 +295,7 @@ def montar_prompt_refino(pares: list[tuple[int, str, str]], cfg: ConfigTraducao)
     )
     return (
         f"{instrucao}\n"
-        f"NÃO traduza termos técnicos, nomes de APIs, comandos ou código; mantenha em "
-        f"inglês os termos do glossário: {glossario}.\n"
+        f"{_regra_termos(cfg)}\n"
         f"O texto pode conter marcador de ênfase (**negrito** ou _itálico_) ao redor de "
         f"uma palavra/trecho — preserve esse marcador na MESMA posição relativa da "
         f"tradução (ao redor da palavra/trecho equivalente), sem adicionar nem remover "
