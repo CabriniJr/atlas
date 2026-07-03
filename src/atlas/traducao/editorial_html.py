@@ -407,6 +407,18 @@ def _e_rodape_nativo(b, ph: float) -> bool:
     return na_faixa_inferior and tem_frase and not _e_folio(b, ph)
 
 
+def _comeca_minuscula(texto: str) -> bool:
+    """``True`` se o primeiro caractere alfabético do texto é minúsculo — sinal
+    de que o bloco é CONTINUAÇÃO de algo cortado pela quebra de página original
+    (parágrafo normal e nota de rodapé sempre começam com maiúscula/número).
+    Usado pra detectar nota de rodapé que estoura pro topo da página seguinte,
+    fora da faixa de margem que `_e_rodape_nativo` reconhece (ADR-0041 fix)."""
+    for ch in texto:
+        if ch.isalpha():
+            return ch.islower()
+    return False
+
+
 _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
 _RE_LISTA_NUM = re.compile(r"^\s*(\d+[.)]|[a-zA-Z][.)])\s+")
 
@@ -612,12 +624,19 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
 
     partes: list[str] = []
     lista_aberta: str | None = None
+    pendente_notas: list[str] = []
 
     def fecha_lista():
         nonlocal lista_aberta
         if lista_aberta:
             partes.append("</ol>" if lista_aberta == "ol" else "</ul>")
             lista_aberta = None
+
+    def flush_notas():
+        if pendente_notas:
+            corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in pendente_notas)
+            partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
+            pendente_notas.clear()
 
     for idx in sorted(paginas):
         blocos, traducoes = paginas[idx]
@@ -628,7 +647,6 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         if folio_blocos:
             alvo = max(folio_blocos, key=lambda b: b.bbox[3])  # mais perto do fundo
             valor_folio_pagina = _valor_folio(alvo)
-        marca_pagina = len(partes)  # 1º elemento desta página (p/ injetar o fólio, ADR-0041)
         # diagramas vetoriais (caixas/setas + rótulos, sem imagem raster): a
         # região inteira vira UMA imagem rasterizada — evita despejar os rótulos
         # como parágrafos soltos e sem estrutura (ADR-0041 fix).
@@ -639,18 +657,44 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         destaques = _regioes_destaque(page, blocos, blocos_em_diagrama)
         blocos_em_destaque = {b.id for _reg, contidos in destaques for b in contidos}
 
+        # continuação de nota de rodapé que estourou pro topo desta página (fora
+        # da faixa de margem que _e_rodape_nativo reconhece): gruda no final da
+        # última nota pendente em vez de vazar como parágrafo comum solto no
+        # meio do corpo (ADR-0041 fix).
+        id_continuacao = None
+        if pendente_notas:
+            uteis_ordem = sorted(
+                (
+                    b
+                    for b in blocos
+                    if b.bbox
+                    and not b.skip
+                    and not _e_folio(b, ph)
+                    and b.id not in blocos_em_diagrama
+                    and b.id not in blocos_em_destaque
+                ),
+                key=lambda b: b.bbox[1],
+            )
+            if uteis_ordem:
+                primeiro = uteis_ordem[0]
+                texto_primeiro = traducoes.get(primeiro.id) or primeiro.texto
+                if texto_primeiro and _comeca_minuscula(texto_primeiro):
+                    pendente_notas[-1] = f"{pendente_notas[-1]} {texto_primeiro}"
+                    id_continuacao = primeiro.id
+        flush_notas()
+        marca_pagina = len(partes)  # 1º elemento desta página (p/ injetar o fólio, ADR-0041)
+
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
-        notas_pag: list[str] = []
         itens: list[tuple] = []
         for b in blocos:
-            if b.id in blocos_em_diagrama or b.id in blocos_em_destaque:
+            if b.id in blocos_em_diagrama or b.id in blocos_em_destaque or b.id == id_continuacao:
                 continue
             if not (not b.skip or _estilo(b)["mono"]):
                 continue
             if _e_folio(b, ph):
                 continue
             if not _estilo(b)["mono"] and _e_rodape_nativo(b, ph):
-                notas_pag.append(traducoes.get(b.id) or b.texto)
+                pendente_notas.append(traducoes.get(b.id) or b.texto)
                 continue
             itens.append((b.bbox[1] if b.bbox else 0.0, "b", b))
         for y0, w, h, uri in _imagens(doc, page):
@@ -729,11 +773,9 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 fecha_lista()
                 partes.append(el)
         fecha_lista()
-        if notas_pag:
-            corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in notas_pag)
-            partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
         if valor_folio_pagina and len(partes) > marca_pagina:
             partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))
+    flush_notas()  # nota(s) pendente(s) da última página (ADR-0041)
 
     fontes = extrair_fontes(doc)
     geo_css = {

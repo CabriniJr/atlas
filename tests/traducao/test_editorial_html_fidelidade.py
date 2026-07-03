@@ -418,6 +418,53 @@ def test_injetar_string_set_em_elemento_sem_style():
     assert out == "<pre style=\"string-set: folio '42';\">codigo aqui</pre>"
 
 
+def test_comeca_minuscula_detecta_continuacao():
+    from atlas.traducao.editorial_html import _comeca_minuscula
+
+    assert _comeca_minuscula("finally returns it in a response.") is True
+    assert _comeca_minuscula("Finally returns it in a response.") is False
+    assert _comeca_minuscula("“minúscula entre aspas") is True
+    assert _comeca_minuscula("123 não tem letra antes") is True
+    assert _comeca_minuscula("") is False
+
+
+def test_montar_html_gruda_continuacao_de_nota_na_pagina_seguinte(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    p0 = doc.new_page()  # altura default ~792pt
+    p0.insert_text((72, 100), "Corpo do texto principal da primeira página.", fontname="helv",
+                   fontsize=12)
+    p0.insert_text((72, 760), "1. Nota explicativa que estoura pra proxima pagina e",
+                   fontname="helv", fontsize=8)
+    p1 = doc.new_page()
+    # continuação da nota: primeiro bloco da página, começa com minúscula,
+    # longe da margem (não seria pego por _e_rodape_nativo sozinho).
+    p1.insert_text((72, 90), "continua aqui no topo da pagina seguinte.", fontname="helv",
+                   fontsize=8)
+    p1.insert_text((72, 150), "Parágrafo comum de corpo da segunda página.", fontname="helv",
+                   fontsize=12)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    paginas = {}
+    for i in range(doc.page_count):
+        blocos = extrair_pagina(doc[i], i)
+        traducoes = {b.id: b.texto for b in blocos if not b.skip}
+        paginas[i] = (blocos, traducoes)
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert html.count('class="rodape-nativo"') == 1  # uma nota só, não duas soltas
+    assert "estoura pra proxima pagina e continua aqui no topo da pagina seguinte." in html
+    assert "Parágrafo comum de corpo da segunda página." in html
+    doc.close()
+
+
 def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):
     import fitz
 
