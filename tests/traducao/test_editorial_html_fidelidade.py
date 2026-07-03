@@ -540,6 +540,39 @@ def test_regioes_destaque_ignora_caixa_sem_preenchimento(tmp_path):
     doc.close()
 
 
+def test_regioes_destaque_ignora_regua_fina_perto_de_fundo_decorativo(tmp_path):
+    """Achado real ao auditar Kubernetes in Action: o fundo cinza decorativo
+    do numeral "fantasma" de capítulo (ex. o grande "6" atrás do título) e a
+    régua colorida fina sob o título de capítulo TÊM preenchimento — se
+    juntam (por proximidade) numa única região que, por coincidência,
+    também cobre o bloco do TÍTULO do capítulo, fazendo-o virar uma caixa
+    de destaque (borda + fundo cinza) em vez do título estilizado normal.
+    Réguas finas (uma dimensão <= 2pt) são excluídas do fundo de destaque —
+    só uma forma robusta conta como fundo de caixa real (ADR-0041 fix)."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_destaque
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    # fundo decorativo do numeral "fantasma" (forma robusta e preenchida).
+    page.draw_rect(fitz.Rect(394, 65, 506, 220), color=(0, 0, 0), fill=(0.9, 0.9, 0.9), width=0)
+    # régua fina colorida logo abaixo do título — preenchida, mas fina.
+    page.draw_rect(fitz.Rect(180, 185.5, 474, 186), color=(0, 0, 0), fill=(0.3, 0.4, 0.5), width=0)
+    page.insert_text((183, 150), "Volumes: attaching disk storage to containers",
+                      fontname="helv", fontsize=24)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_destaque(doc[0], blocos, ids_diagrama=set())
+    assert regioes == []
+    doc.close()
+
+
 def test_montar_html_envolve_caixa_de_destaque_em_div(tmp_path):
     import fitz
 

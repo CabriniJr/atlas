@@ -352,10 +352,18 @@ def _regioes_destaque(page, blocos: list, ids_diagrama: set) -> list[tuple]:
         desenhos = page.get_drawings()
     except Exception:  # noqa: BLE001
         return []
+    # réguas/sublinhados finos (ex. a linha colorida sob um título de capítulo)
+    # também têm preenchimento, mas não são o fundo de uma caixa de destaque —
+    # excluir evita que se juntem (por proximidade) ao fundo cinza decorativo
+    # do numeral "fantasma" do capítulo e formem uma região que por acaso cobre
+    # o BLOCO DO TÍTULO, fazendo o título de capítulo virar uma caixa de
+    # destaque (achado real ao auditar Kubernetes in Action, ADR-0041 fix).
     retangulos = [
         fitz.Rect(d["rect"])
         for d in desenhos
-        if d.get("rect") is not None and d.get("fill") is not None
+        if d.get("rect") is not None
+        and d.get("fill") is not None
+        and min(fitz.Rect(d["rect"]).width, fitz.Rect(d["rect"]).height) > _ESPESSURA_MAX_REGRA
     ]
     if not retangulos:
         return []
