@@ -115,9 +115,14 @@ def _render_final(doc, paginas, destino, cfg) -> None:
     doc.close()
 
 
-def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoTraducao:
+def _render_do_cache(
+    doc, destino, cfg, cache, total, on_progress, preferir_bruto: bool = False
+) -> ProgressoTraducao:
     """Re-renderiza o PDF usando só o que já está no cache (E9-05). Sem chamadas de IA:
-    blocos sem tradução cacheada caem no texto original (nunca perde conteúdo)."""
+    blocos sem tradução cacheada caem no texto original (nunca perde conteúdo).
+
+    ``preferir_bruto`` (E9-15): força a MT bruta mesmo quando o refino já existe —
+    permite comparar "tradução crua" vs "aprimorada por IA" sem repagar nada."""
     blocos_traduzidos = 0
     render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
     for i in range(total):
@@ -126,8 +131,11 @@ def _render_do_cache(doc, destino, cfg, cache, total, on_progress) -> ProgressoT
         for b in blocos:
             if b.skip:
                 continue
-            # refino tem prioridade; cai no bruto (raw) se a run foi parcial (ADR-0031).
-            cached = cache.get(b.texto, cfg) or cache.get_bruto(b.texto, cfg)
+            if preferir_bruto:
+                cached = cache.get_bruto(b.texto, cfg) or cache.get(b.texto, cfg)
+            else:
+                # refino tem prioridade; cai no bruto (raw) se a run foi parcial (ADR-0031).
+                cached = cache.get(b.texto, cfg) or cache.get_bruto(b.texto, cfg)
             if cached is not None:
                 traducoes[b.id] = cached
         blocos_traduzidos += len(traducoes)
@@ -269,6 +277,7 @@ def traduzir_pdf(
     on_evento=None,
     paralelismo: int = 1,
     checar_pausa=None,
+    preferir_bruto: bool = False,
 ) -> ProgressoTraducao:
     """Traduz um PDF (ADR-0030/0031) ou, com ``somente_render=True``, apenas
     **re-renderiza** a partir do cache já pago — zero IA (E9-05). É o que permite
@@ -278,14 +287,18 @@ def traduzir_pdf(
     (ADR-0039) — default 1 preserva o loop sequencial original.
 
     ``checar_pausa`` (ADR-0045): pausa manual pedida pelo usuário — só honrada
-    no loop sequencial (``paralelismo=1``); pendência para o modo paralelo."""
+    no loop sequencial (``paralelismo=1``); pendência para o modo paralelo.
+
+    ``preferir_bruto`` (E9-15): só tem efeito com ``somente_render=True`` — renderiza
+    a MT bruta em vez do refino, mesmo que o refino já esteja cacheado (comparação
+    "bruto vs. aprimorado por IA" sem repagar tradução)."""
     bruto_fn = bruto_fn or traduzir_bruto
     doc = fitz.open(origem)
     cache = cache or CacheTraducao()
     total = doc.page_count
 
     if somente_render:
-        return _render_do_cache(doc, destino, cfg, cache, total, on_progress)
+        return _render_do_cache(doc, destino, cfg, cache, total, on_progress, preferir_bruto)
 
     # glossario_auto: detecta termos técnicos a preservar antes de traduzir (ADR-0030).
     detectados: list[str] = []

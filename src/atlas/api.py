@@ -163,9 +163,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _download_traducao(self, label: str, previa: bool = False) -> None:
+    def _download_traducao(self, label: str, previa: bool = False, variante: str = "refino") -> None:
         """Stream do PDF de ``Traducao/<label>`` — a saída final (status.saida) ou,
-        com ``previa=True``, o snapshot renderizado durante a tradução (status.previa)."""
+        com ``previa=True``, o snapshot renderizado durante a tradução (status.previa,
+        ou ``status.previa_bruto`` com ``variante="bruto"``, E9-15)."""
         if _store is None:
             self._json(503, {"error": "store not ready"})
             return
@@ -173,7 +174,7 @@ class _Handler(BaseHTTPRequestHandler):
         if t is None:
             self._json(404, {"error": f"Traducao/{label} not found"})
             return
-        campo = "previa" if previa else "saida"
+        campo = ("previa_bruto" if variante == "bruto" else "previa") if previa else "saida"
         saida = (t.status or {}).get(campo)
         if not saida:
             falta = (
@@ -447,7 +448,8 @@ class _Handler(BaseHTTPRequestHandler):
             q = parse_qs(urlparse(self.path).query)
             label = q.get("label", [""])[0].strip()
             previa = q.get("previa", ["0"])[0] in ("1", "true", "yes")
-            self._download_traducao(label, previa=previa)
+            variante = q.get("variante", ["refino"])[0].strip() or "refino"
+            self._download_traducao(label, previa=previa, variante=variante)
             return
 
         # /_exportar?label=<Traducao>&fmt=md|epub → serializa e baixa (ADR-0032)
@@ -615,7 +617,8 @@ class _Handler(BaseHTTPRequestHandler):
             if not label:
                 self._json(400, {"error": "label obrigatório"})
                 return
-            self._json(*_iniciar_previa(label))
+            variante = (body.get("variante") or "refino").strip()
+            self._json(*_iniciar_previa(label, variante=variante))
             return
 
         # POST /_traducao_pool/escalar {max_concorrente} → muda o teto em runtime
@@ -1072,9 +1075,13 @@ def _traducao_pool_cancelar_fila(label: str) -> tuple[int, dict]:
     return 200, {"ok": True, "label": label}
 
 
-def _iniciar_previa(label: str) -> tuple[int, dict]:
+def _iniciar_previa(label: str, variante: str = "refino") -> tuple[int, dict]:
     """Renderiza uma prévia (snapshot do cache atual) em background — pode rodar
-    concorrente à tradução em curso (E9). Não altera a ``fase`` do job."""
+    concorrente à tradução em curso (E9). Não altera a ``fase`` do job.
+
+    ``variante`` (E9-15): ``"refino"`` (padrão, aprimorado por IA) ou ``"bruto"``
+    (MT crua) — ambas ficam disponíveis lado a lado (``status.previa``/
+    ``status.previa_bruto``), sem repagar tradução."""
     from atlas.rotinas.traduzir_pdf import render_previa
 
     if _store is None:
@@ -1084,15 +1091,17 @@ def _iniciar_previa(label: str) -> tuple[int, dict]:
         return 404, {"error": f"Traducao/{label} not found"}
     if (t.status or {}).get("previa_gerando"):
         return 409, {"ok": False, "error": "prévia já está sendo gerada"}
+    if variante not in ("refino", "bruto"):
+        return 400, {"error": "variante deve ser 'refino' ou 'bruto'"}
 
     def _run() -> None:
         try:
-            render_previa(_store, label, datetime.now())
+            render_previa(_store, label, datetime.now(), variante=variante)
         except Exception:  # noqa: BLE001 — status já registra o erro (ADR-0006)
             _log.exception("prévia %s falhou", label)
 
     threading.Thread(target=_run, daemon=True, name=f"previa-{label}").start()
-    return 200, {"ok": True, "label": label, "previa_gerando": True}
+    return 200, {"ok": True, "label": label, "previa_gerando": True, "variante": variante}
 
 
 def _limpar_artefatos(res) -> None:

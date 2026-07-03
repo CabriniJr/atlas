@@ -44,9 +44,10 @@ def _cache_para(origem: str, idioma_destino: str) -> str:
     return str(p.with_suffix(f".{idioma_destino}.cache.json"))
 
 
-def _previa_para(origem: str, idioma_destino: str) -> str:
+def _previa_para(origem: str, idioma_destino: str, variante: str = "refino") -> str:
     p = Path(origem)
-    return str(p.with_suffix(f".{idioma_destino}.previa.pdf"))
+    sufixo = "previa.pdf" if variante == "refino" else "previa.bruto.pdf"
+    return str(p.with_suffix(f".{idioma_destino}.{sufixo}"))
 
 
 def _verdade(v) -> bool:
@@ -223,6 +224,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             on_evento=on_evento,
             paralelismo=pool_global.max_concorrente,  # ADR-0039: réplicas também dentro do job
             checar_pausa=checar_pausa,  # ADR-0045: só honrado com paralelismo=1
+            preferir_bruto=_verdade(t.spec.get("preferir_bruto", False)),  # E9-15
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
         _log.exception("traduzir-pdf/%s falhou", label)
@@ -375,21 +377,24 @@ def re_refinar_traducao(store, label: str, agora: datetime) -> tuple[bool, str]:
     return True, f"{removidos} bloco(s) refinado(s) descartado(s) — MT bruta preservada"
 
 
-def render_previa(store, label: str, agora: datetime) -> None:
-    """Renderiza uma PRÉVIA do cache atual (parcial) → ``.previa.pdf``, sem tocar na
-    ``fase`` da tradução em curso (E9: renderizar enquanto traduz). Zero IA; roda em
-    thread de background disparada pela API. Best-effort — nunca levanta (ADR-0006)."""
+def render_previa(store, label: str, agora: datetime, variante: str = "refino") -> None:
+    """Renderiza uma PRÉVIA do cache atual (parcial) → ``.previa.pdf`` (refino) ou
+    ``.previa.bruto.pdf`` (E9-15: ``variante="bruto"``, MT crua mesmo se o refino já
+    existe), sem tocar na ``fase`` da tradução em curso (E9: renderizar enquanto
+    traduz). Zero IA; roda em thread de background disparada pela API. Best-effort
+    — nunca levanta (ADR-0006)."""
     t = store.get("Traducao", label)
     if t is None:
         return
     origem = (t.spec.get("origem") or "").strip()
     idioma_destino = t.spec.get("idioma_destino", "pt-BR")
+    campo_previa = "previa" if variante == "refino" else "previa_bruto"
     if not origem or not Path(origem).exists():
         _merge_status(
             store, label, agora, {"previa_gerando": False, "previa_erro": "origem inválida"}
         )
         return
-    previa = _previa_para(origem, idioma_destino)
+    previa = _previa_para(origem, idioma_destino, variante)
     cfg = ConfigTraducao(
         idioma_origem=t.spec.get("idioma_origem", "en"),
         idioma_destino=idioma_destino,
@@ -404,13 +409,21 @@ def render_previa(store, label: str, agora: datetime) -> None:
 
     try:
         cache = CacheTraducao.carregar(_cache_para(origem, idioma_destino))
-        traduzir_pdf(origem, previa, cfg, invocar_fn=_sem_ia, cache=cache, somente_render=True)
+        traduzir_pdf(
+            origem,
+            previa,
+            cfg,
+            invocar_fn=_sem_ia,
+            cache=cache,
+            somente_render=True,
+            preferir_bruto=(variante == "bruto"),
+        )
         _merge_status(
             store,
             label,
             datetime.now(),
             {
-                "previa": previa,
+                campo_previa: previa,
                 "previa_gerando": False,
                 "previa_em": datetime.now().isoformat(timespec="seconds"),
             },

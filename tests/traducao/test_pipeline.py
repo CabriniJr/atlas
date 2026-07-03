@@ -3,7 +3,7 @@ import re
 import fitz
 
 from atlas.traducao.pipeline import ProgressoTraducao, traduzir_pdf
-from atlas.traducao.traducao_ia import ConfigTraducao
+from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao
 
 
 def _fake_invocar_factory(contador):
@@ -45,6 +45,32 @@ def test_traduz_pdf_gera_saida_e_reporta_progresso(tmp_path):
     assert progresso == [1, 2]
     assert out.exists()
     assert "TRADUZIDO" in fitz.open(out)[0].get_text()
+
+
+def test_somente_render_preferir_bruto_usa_mt_mesmo_com_refino_cacheado(tmp_path):
+    src = tmp_path / "src.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_text((72, 100), "Page content here.", fontname="helv", fontsize=12)
+    doc.save(src)
+
+    cfg = ConfigTraducao()
+    cache = CacheTraducao()
+    cache.put_bruto("Page content here.", cfg, "BRUTO Page content here.")
+    cache.put("Page content here.", cfg, "REFINADO Page content here.")
+
+    out_refino = tmp_path / "out_refino.pdf"
+    traduzir_pdf(str(src), str(out_refino), cfg, cache=cache, somente_render=True)
+    texto_refino = fitz.open(out_refino)[0].get_text()
+    assert "REFINADO" in texto_refino
+    assert "BRUTO" not in texto_refino
+
+    out_bruto = tmp_path / "out_bruto.pdf"
+    traduzir_pdf(
+        str(src), str(out_bruto), cfg, cache=cache, somente_render=True, preferir_bruto=True
+    )
+    texto_bruto = fitz.open(out_bruto)[0].get_text()
+    assert "BRUTO" in texto_bruto
+    assert "REFINADO" not in texto_bruto
 
 
 def test_pipeline_usa_render_editorial_gera_continuacao(tmp_path):

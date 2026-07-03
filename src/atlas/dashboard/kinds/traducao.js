@@ -38,7 +38,8 @@ function _trShell(r) {
       <button class="btn" id="tr-estimar" ${origem ? '' : 'disabled'}>💵 Estimar</button>
       <button class="btn" id="tr-config-toggle">⚙️ Config</button>
       <button class="btn" id="tr-render" title="Re-renderiza o PDF a partir do cache já pago — não gasta IA" ${origem ? '' : 'disabled'}>🎨 Só re-renderizar (grátis)</button>
-      <button class="btn" id="tr-previa" title="Renderiza uma prévia do que já foi traduzido, mesmo com a tradução rodando" ${origem ? '' : 'disabled'}>📸 Prévia agora</button>
+      <button class="btn" id="tr-previa-ia" title="Prévia com a tradução aprimorada por IA (refino), a partir do cache já pago" ${origem ? '' : 'disabled'}>📸 Prévia (IA)</button>
+      <button class="btn" id="tr-previa-bruto" title="Prévia com a tradução BRUTA (MT), mesmo que o refino já exista — útil para comparar" ${origem ? '' : 'disabled'}>📸 Prévia (bruto)</button>
       <button class="btn" id="tr-traduzir" style="border-color:var(--green);color:var(--green)" ${origem ? '' : 'disabled'}>▶ Traduzir</button>
       <button class="btn" id="tr-pausar" title="Pausa entre páginas (ADR-0045) — retoma de onde parou" style="display:none;border-color:var(--yellow,#d9a441);color:var(--yellow,#d9a441)">⏸ Pausar</button>
     </div>
@@ -130,18 +131,23 @@ function _trLog(st) {
 }
 
 // Bloco da prévia (snapshot renderizado durante a tradução) + link de download.
+// E9-15: refino e bruto são gerados/baixados independentemente (comparar lado a lado).
 function _trPreviaBox(st, name) {
   if (st.previa_gerando) {
-    return `<div style="margin-top:8px;font-size:12px;color:var(--blue)">📸 gerando prévia do que já foi traduzido…</div>`;
+    return `<div style="margin-top:8px;font-size:12px;color:var(--blue)">📸 gerando prévia…</div>`;
   }
+  const partes = [];
   if (st.previa_erro) {
-    return `<div style="margin-top:8px;font-size:12px;color:var(--red)">📸 prévia falhou: ${esc(st.previa_erro)}</div>`;
+    partes.push(`<div style="font-size:12px;color:var(--red)">📸 prévia falhou: ${esc(st.previa_erro)}</div>`);
   }
   if (st.previa) {
     const q = st.previa_em ? ` (${esc(String(st.previa_em).slice(11, 16))})` : '';
-    return `<div style="margin-top:8px"><button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="trDownloadPrevia('${escJs(name || '')}')">⬇️ Baixar prévia${q}</button></div>`;
+    partes.push(`<button class="btn" style="border-color:var(--blue);color:var(--blue)" onclick="trDownloadPrevia('${escJs(name || '')}','refino')">⬇️ Prévia (IA)${q}</button>`);
   }
-  return '';
+  if (st.previa_bruto) {
+    partes.push(`<button class="btn" style="border-color:var(--muted);color:var(--muted)" onclick="trDownloadPrevia('${escJs(name || '')}','bruto')">⬇️ Prévia (bruto)</button>`);
+  }
+  return partes.length ? `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${partes.join('')}</div>` : '';
 }
 
 // Log fino das chamadas de IA no refino (visibilidade do gasto): lote, blocos, ms, ✓/✗.
@@ -376,20 +382,26 @@ function _trWire(name, container) {
     }
   };
 
-  // Prévia agora: renderiza um snapshot do cache atual sem interromper a tradução.
-  const pvBtn = container.querySelector('#tr-previa');
-  if (pvBtn) pvBtn.onclick = async () => {
-    pvBtn.disabled = true;
-    try {
-      await apiFetch(API + '/_previa', { method: 'POST', body: JSON.stringify({ label: name }) });
-      if (!polling) { polling = setInterval(poll, 1500); }
-      poll();
-    } catch (err) {
-      alert('prévia falhou: ' + err.message);
-    } finally {
-      setTimeout(() => { pvBtn.disabled = false; }, 1500);
-    }
-  };
+  // Prévia agora (E9-15): renderiza um snapshot do cache atual sem interromper a
+  // tradução — "IA" usa o refino (padrão) e "bruto" força a MT crua p/ comparar.
+  function _wirePrevia(id, variante) {
+    const btn = container.querySelector(id);
+    if (!btn) return;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await apiFetch(API + '/_previa', { method: 'POST', body: JSON.stringify({ label: name, variante }) });
+        if (!polling) { polling = setInterval(poll, 1500); }
+        poll();
+      } catch (err) {
+        alert('prévia falhou: ' + err.message);
+      } finally {
+        setTimeout(() => { btn.disabled = false; }, 1500);
+      }
+    };
+  }
+  _wirePrevia('#tr-previa-ia', 'refino');
+  _wirePrevia('#tr-previa-bruto', 'bruto');
 
   // Pool de tradução (ADR-0038): 1 timer global (evita empilhar ao trocar de aba).
   const poolBox = container.querySelector('#tr-pool');
@@ -434,17 +446,19 @@ async function _trPutSpec(name, patch) {
     { method: 'PUT', body: JSON.stringify({ labels, spec, status: r.status || {} }) });
 }
 
-// Baixa a prévia (snapshot parcial) renderizada durante a tradução.
-async function trDownloadPrevia(name) {
+// Baixa a prévia (snapshot parcial) renderizada durante a tradução — 'refino'
+// (aprimorada por IA, padrão) ou 'bruto' (MT crua, E9-15).
+async function trDownloadPrevia(name, variante) {
+  variante = variante || 'refino';
   try {
     const h = {}; if (typeof TOKEN !== 'undefined' && TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
-    const r = await fetch(API + '/_download?previa=1&label=' + encodeURIComponent(name),
+    const r = await fetch(API + '/_download?previa=1&variante=' + encodeURIComponent(variante) + '&label=' + encodeURIComponent(name),
       { credentials: 'same-origin', headers: h });
     if (!r.ok) throw new Error(await r.text());
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = name + '.previa.pdf';
+    a.href = url; a.download = name + '.previa.' + variante + '.pdf';
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   } catch (err) {
