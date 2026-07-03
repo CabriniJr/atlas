@@ -4,6 +4,7 @@ from atlas.traducao.tipografia import (
     bloco_e_mono,
     clusters_titulo,
     converter_enfase,
+    dividir_versalete,
     familia_fonte,
     fonte_seminegrito,
     nivel_titulo,
@@ -100,6 +101,48 @@ def test_fonte_seminegrito_detecta_peso_pelo_nome():
     assert fonte_seminegrito("Helvetica-Black") is True
     assert fonte_seminegrito("MinionPro-Regular") is False
     assert fonte_seminegrito("NewBaskerville-Roman") is False
+
+
+def test_dividir_versalete_separa_cabecalho_run_in_colado():
+    # Achado real (Kubernetes in Action): cabeçalho run-in small-caps sai colado
+    # ao corpo ("SCALING MICROSERVICES Scaling..."). O caps deve virar versalete
+    # (não caixa-alta literal — diretriz do usuário). Discriminador seguro: o
+    # run-in é seguido de FRASE capitalizada, a sigla é seguida de minúscula.
+    run, resto = dividir_versalete("SCALING MICROSERVICES Scaling microservices, unlike X.")
+    assert run == "SCALING MICROSERVICES"
+    assert resto == "Scaling microservices, unlike X."
+
+
+def test_dividir_versalete_nao_toca_sigla_no_meio_do_fluxo():
+    # "REST API allows..." — sigla seguida de minúscula, NÃO é cabeçalho.
+    assert dividir_versalete("REST API allows you to do things.") == (
+        None,
+        "REST API allows you to do things.",
+    )
+    assert dividir_versalete("HTTP POST requests carry a body.") == (
+        None,
+        "HTTP POST requests carry a body.",
+    )
+
+
+def test_dividir_versalete_bloco_inteiro_em_caps():
+    assert dividir_versalete("UNDERSTANDING IMAGE LAYERS") == ("UNDERSTANDING IMAGE LAYERS", "")
+    assert dividir_versalete("PART I") == ("PART I", "")
+
+
+def test_dividir_versalete_rotulo_de_admoestacao():
+    # "NOTE"/"TIP"/"NOTA" (rótulo de admoestação) vira versalete mesmo sozinho.
+    run, resto = dividir_versalete("NOTE If you’re using a Mac, do X.")
+    assert run == "NOTE"
+    assert resto == "If you’re using a Mac, do X."
+
+
+def test_dividir_versalete_ignora_texto_normal():
+    assert dividir_versalete("Um parágrafo normal de prosa.") == (
+        None,
+        "Um parágrafo normal de prosa.",
+    )
+    assert dividir_versalete("I am a single capital.") == (None, "I am a single capital.")
 
 
 def test_nivel_titulo_bate_no_cluster_mais_proximo():

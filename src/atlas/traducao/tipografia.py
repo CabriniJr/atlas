@@ -137,6 +137,51 @@ def familia_fonte(font: str) -> str:
     return "serif"
 
 
+_RE_PALAVRA_CAPS = r"[A-ZÀ-Þ][A-ZÀ-Þ0-9'’.\-/&]*(?![a-zà-þ])"
+_RE_RUN_CAPS = re.compile(rf"^({_RE_PALAVRA_CAPS}(?:\s+{_RE_PALAVRA_CAPS})*)\s*")
+_ADMOESTACOES = {
+    "NOTE",
+    "TIP",
+    "WARNING",
+    "CAUTION",
+    "IMPORTANT",
+    "NOTA",
+    "DICA",
+    "AVISO",
+    "CUIDADO",
+    "IMPORTANTE",
+    "ATENÇÃO",
+    "OBSERVAÇÃO",
+}
+
+
+def dividir_versalete(texto: str) -> tuple[str | None, str]:
+    """Separa um prefixo em CAIXA ALTA que deveria ser VERSALETE (small-caps), não
+    caixa-alta literal — diretriz do usuário: nada sai em caixa-alta inteira se o
+    original não for literalmente maiúsculo. No original, cabeçalho run-in e
+    rótulo de admoestação ("NOTE") são versalete (glifos maiúsculos sobre texto
+    caixa-baixa), e o PyMuPDF os entrega grudados ao corpo, em maiúscula
+    (achado real, auditoria visual, Kubernetes in Action:
+    "SCALING MICROSERVICES Scaling microservices, unlike...").
+
+    Devolve ``(prefixo_caps, resto)`` quando o prefixo é cabeçalho/rótulo, senão
+    ``(None, texto)``. Discriminador seguro (verificado em ~140 páginas reais):
+    o cabeçalho run-in é seguido de FRASE CAPITALIZADA ("...MICROSERVICES
+    Scaling..."), enquanto uma sigla no meio do fluxo ("REST API allows...") é
+    seguida de minúscula — então "REST API"/"HTTP POST" nunca são tocados."""
+    m = _RE_RUN_CAPS.match(texto)
+    if not m:
+        return None, texto
+    run = m.group(1)
+    palavras = run.split()
+    resto = texto[m.end() :]
+    e_admoestacao = len(palavras) == 1 and palavras[0].strip(".:") in _ADMOESTACOES
+    seguido_de_frase = not resto or resto[:1].isupper()
+    if e_admoestacao or (len(palavras) >= 2 and seguido_de_frase):
+        return run, resto
+    return None, texto
+
+
 def fonte_seminegrito(font: str) -> bool:
     """``True`` se o NOME da fonte indica peso forte (``Bold``/``Semibold``/
     ``Demi``/``Black``…). O fitz só marca a flag bold em fontes "Bold" cravado —

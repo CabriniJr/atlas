@@ -69,10 +69,10 @@ def test_refino_esgota_tokens_cai_para_bruto_sem_cachear():
     res, esgotou, motivo = refinar_blocos(blocos, brutos, cfg, cache, invocar_fn=fake)
     assert esgotou
     assert motivo == "erro"  # "sem tokens" não contém "timeout" (ADR-0039)
-    assert res[0] == "A refinado"      # 1º refinado
+    assert res[0] == "A refinado"  # 1º refinado
     assert res[1] == "b" and res[2] == "c"  # restante = bruto (sem perda)
     assert cache.get("A.", cfg) == "A refinado"  # só o refinado é cacheado
-    assert cache.get("B.", cfg) is None          # bruto não cacheado ⇒ retry no próximo run
+    assert cache.get("B.", cfg) is None  # bruto não cacheado ⇒ retry no próximo run
 
 
 def test_refino_classifica_timeout_para_retry_curto(monkeypatch):
@@ -106,15 +106,21 @@ def test_refino_desligado_traducao_puramente_mt(tmp_path):
     def nunca(*a, **k):
         raise AssertionError("não deve chamar LLM quando refino=False")
 
+    # marcador não-caixa-alta: um texto TODO em maiúscula seria convertido em
+    # versalete no render (caixa-baixa), então usa-se um sufixo como sentinela.
     prog = traduzir_pdf(
-        str(src), str(tmp_path / "o.pdf"), cfg,
-        invocar_fn=nunca, bruto_fn=lambda ts, c: [t.upper() for t in ts],
+        str(src),
+        str(tmp_path / "o.pdf"),
+        cfg,
+        invocar_fn=nunca,
+        bruto_fn=lambda ts, c: [f"{t} [mt]" for t in ts],
     )
     assert not prog.parcial
     # normaliza espaços: a fonte embutida pode quebrar a linha diferente do original.
     import re as _re
+
     saida = _re.sub(r"\s+", " ", fitz.open(str(tmp_path / "o.pdf"))[0].get_text())
-    assert "THE POD SCALES." in saida
+    assert "The pod scales. [mt]" in saida
 
 
 def test_pipeline_parcial_quando_tokens_acabam(tmp_path):
@@ -148,14 +154,19 @@ def test_resume_do_cache_em_disco(tmp_path):
         if estado["n"] > estado["falhar_depois"]:
             raise InvocarErro("sem tokens")
         import re
+
         i = re.search(r"\[\[(\d+)\]\]", prompt).group(1)
         return f"[[{i}]] REF{i}"
 
     # Run 1: refina 1, esgota no 2 → parcial
     p1 = traduzir_pdf(
-        str(src), str(tmp_path / "o1.pdf"), cfg,
-        invocar_fn=fake, cache=CacheTraducao.carregar(cache_path),
-        cache_path=cache_path, bruto_fn=lambda ts, c: [f"BR:{t}" for t in ts],
+        str(src),
+        str(tmp_path / "o1.pdf"),
+        cfg,
+        invocar_fn=fake,
+        cache=CacheTraducao.carregar(cache_path),
+        cache_path=cache_path,
+        bruto_fn=lambda ts, c: [f"BR:{t}" for t in ts],
     )
     assert p1.parcial
 
@@ -163,9 +174,13 @@ def test_resume_do_cache_em_disco(tmp_path):
     estado["falhar_depois"] = 99
     n_antes = estado["n"]
     p2 = traduzir_pdf(
-        str(src), str(tmp_path / "o2.pdf"), cfg,
-        invocar_fn=fake, cache=CacheTraducao.carregar(cache_path),
-        cache_path=cache_path, bruto_fn=lambda ts, c: [f"BR:{t}" for t in ts],
+        str(src),
+        str(tmp_path / "o2.pdf"),
+        cfg,
+        invocar_fn=fake,
+        cache=CacheTraducao.carregar(cache_path),
+        cache_path=cache_path,
+        bruto_fn=lambda ts, c: [f"BR:{t}" for t in ts],
     )
     assert not p2.parcial
     # o bloco já refinado no run 1 veio do cache (não re-chamou p/ ele)

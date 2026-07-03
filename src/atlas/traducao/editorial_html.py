@@ -28,6 +28,7 @@ from atlas.traducao.tipografia import (
     bloco_e_mono,
     clusters_titulo,
     converter_enfase,
+    dividir_versalete,
     extrair_fontes,
     familia_fonte,
     fonte_seminegrito,
@@ -446,6 +447,10 @@ pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space:
 figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
+/* versalete: cabeçalho run-in / rótulo que era CAIXA ALTA no original — o texto
+   fica em caixa-baixa (nada de maiúscula literal) e o glifo maiúsculo vem do
+   font-variant (achado real, diretriz do usuário; ADR-0041). */
+.vcap {{ font-variant: small-caps; letter-spacing: .02em; }}
 .rodape-nativo {{ margin-top: 1.1em; padding-top: .3em; border-top: 0.6pt solid #999;
                   font-size: 8pt; line-height: 1.25; }}
 .rodape-nativo p {{ margin: .12em 0; }}
@@ -863,7 +868,15 @@ def _elemento(
     if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
         rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
         return f'<p class="toc"{ida}><a href="#{link[1]}">{rotulo}</a></p>'
-    conteudo = converter_enfase(texto, _e)
+    # prefixo em CAIXA ALTA que é versalete no original (cabeçalho run-in /
+    # rótulo "NOTE"): vira <span class="vcap"> em caixa-baixa — nada de
+    # caixa-alta literal (diretriz do usuário; ADR-0041).
+    run_caps, resto_caps = dividir_versalete(texto)
+    if run_caps is not None:
+        vcap = f'<span class="vcap">{_e(run_caps.lower())}</span>'
+        conteudo = vcap + (" " + converter_enfase(resto_caps, _e) if resto_caps else "")
+    else:
+        conteudo = converter_enfase(texto, _e)
     if est["bold"]:
         conteudo = f'<span class="bd">{conteudo}</span>'
     if est["italic"]:
