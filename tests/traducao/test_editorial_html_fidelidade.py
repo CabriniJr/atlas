@@ -52,3 +52,42 @@ def test_montar_html_nunca_descarta_bloco_sem_traducao(tmp_path):
     html = montar_html(doc, paginas, geo)
     assert "This block never got translated" in html
     doc.close()
+
+
+def test_e_rodape_nativo_distingue_nota_de_folio():
+    from atlas.traducao.editorial_html import _e_rodape_nativo
+
+    class Nota:
+        bbox = (72.0, 745.0, 400.0, 760.0)
+        texto = "1. Este termo tem uma explicação mais longa aqui embaixo."
+
+    class Folio:
+        bbox = (300.0, 820.0, 310.0, 832.0)
+        texto = "42"
+
+    assert _e_rodape_nativo(Nota(), ph=842.0) is True
+    assert _e_rodape_nativo(Folio(), ph=842.0) is False
+
+
+def test_montar_html_renderiza_nota_de_rodape_nativa(tmp_path):
+    import fitz
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()  # altura default ~792pt
+    page.insert_text((72, 100), "Corpo do texto principal da página.", fontname="helv", fontsize=12)
+    page.insert_text((72, 760), "1. Nota explicativa ao pé da página aqui.", fontname="helv", fontsize=8)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert 'class="rodape-nativo"' in html
+    assert "Nota explicativa" in html
+    doc.close()

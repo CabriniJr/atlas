@@ -186,6 +186,9 @@ pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space:
 figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
+.rodape-nativo {{ margin-top: 1.1em; padding-top: .3em; border-top: 0.6pt solid #999;
+                  font-size: 8pt; line-height: 1.25; }}
+.rodape-nativo p {{ margin: .12em 0; }}
 a {{ color: #0645ad; text-decoration: none; }}
 h1 a, h2 a, h3 a {{ color: inherit; }}
 /* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
@@ -205,6 +208,18 @@ def _e_folio(b, ph: float) -> bool:
     uma_linha = (y1 - y0) < 26
     na_margem = y0 < ph * 0.075 or y1 > ph * 0.925
     return curto and uma_linha and na_margem
+
+
+def _e_rodape_nativo(b, ph: float) -> bool:
+    """Nota de rodapé do próprio PDF (não fólio): frase de várias palavras na
+    faixa inferior da página, acima da faixa mais estreita onde o fólio mora
+    (ADR-0041). Fólio é um rótulo curto (`_e_folio`); nota é prosa."""
+    if not b.bbox or not b.texto:
+        return False
+    y1 = b.bbox[3]
+    na_faixa_inferior = ph * 0.70 < y1 <= ph * 0.92
+    tem_frase = len(b.texto.split()) >= 4
+    return na_faixa_inferior and tem_frase and not _e_folio(b, ph)
 
 
 _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
@@ -392,11 +407,17 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         page = doc[idx]
         links = _links_pagina(page)
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
-        itens: list[tuple] = [
-            (b.bbox[1] if b.bbox else 0.0, "b", b)
-            for b in blocos
-            if (not b.skip or _estilo(b)["mono"]) and not _e_folio(b, ph)
-        ]
+        notas_pag: list[str] = []
+        itens: list[tuple] = []
+        for b in blocos:
+            if not (not b.skip or _estilo(b)["mono"]):
+                continue
+            if _e_folio(b, ph):
+                continue
+            if not _estilo(b)["mono"] and _e_rodape_nativo(b, ph):
+                notas_pag.append(traducoes.get(b.id) or b.texto)
+                continue
+            itens.append((b.bbox[1] if b.bbox else 0.0, "b", b))
         for y0, w, h, uri in _imagens(doc, page):
             itens.append((y0, "img", (w, h, uri)))
         itens.sort(key=lambda it: it[0])
@@ -438,6 +459,9 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 fecha_lista()
                 partes.append(el)
         fecha_lista()
+        if notas_pag:
+            corpo_notas = "".join(f"<p>{_e(t)}</p>" for t in notas_pag)
+            partes.append(f'<div class="rodape-nativo">{corpo_notas}</div>')
 
     css = _CSS.format(**geo)
     corpo = "\n".join(partes)
