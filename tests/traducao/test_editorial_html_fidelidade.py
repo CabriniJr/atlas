@@ -282,6 +282,38 @@ def test_glue_continuacao_de_item_de_lista_quebrado_em_2_blocos(tmp_path):
     doc.close()
 
 
+def test_parece_sumario_mesclado_reconhece_toc_de_verdade():
+    from atlas.traducao.editorial_html import _parece_sumario_mesclado
+
+    texto = "Introducing Kubernetes 1 First Steps with Docker 25 Pods 55"
+    assert _parece_sumario_mesclado(texto) is True
+
+
+def test_parece_sumario_mesclado_rejeita_paragrafo_com_referencias_cruzadas():
+    """Achado real (auditoria visual, Observability Engineering): um
+    parágrafo comum ("Chapter 2 looks at the practices... in Part II.") tem
+    2 links internos (Chapter 2, Part II) mas NÃO é um sumário — "2" de
+    "Chapter 2" virava um número de página fake, e o parágrafo inteiro saía
+    com estilo de sumário/link sublinhado."""
+    from atlas.traducao.editorial_html import _parece_sumario_mesclado
+
+    texto = (
+        "Chapter 2 looks at the practices engineers use to triage and locate "
+        "sources of issues using traditional monitoring methods. Those methods "
+        "are then contrasted with methods used in observability-based systems. "
+        "This chapter describes these methods at a high level, but the "
+        "technical and workflow implementations will become more concrete in "
+        "Part II."
+    )
+    assert _parece_sumario_mesclado(texto) is False
+
+
+def test_parece_sumario_mesclado_rejeita_menos_de_2_entradas():
+    from atlas.traducao.editorial_html import _parece_sumario_mesclado
+
+    assert _parece_sumario_mesclado("Um parágrafo qualquer sem número nenhum aqui.") is False
+
+
 def test_valor_folio_extrai_numero_arabico_e_romano():
     from atlas.traducao.editorial_html import _valor_folio
 
@@ -359,6 +391,37 @@ def test_abre_pagina_reconhece_titulo_de_capitulo_com_espaco_decorativo_acima():
 
     blocos = [TituloCapitulo()]
     assert _abre_pagina(TituloCapitulo(), blocos, ph=666.0) is True
+
+
+def test_abre_pagina_reconhece_titulo_precedido_do_proprio_rotulo():
+    """Achado real (auditoria visual, Observability Engineering): "CHAPTER
+    N"/"PART N" fica numa LINHA PRÓPRIA, acima do título (bloco próprio depois
+    do split de _dividir_por_rotulo_capitulo) — o rótulo, não o título, é o
+    bloco literalmente mais perto do topo. ``_abre_pagina`` só reconhecia o
+    bloco EXATAMENTE mais próximo do topo como "abre página": o título nunca
+    contava, e taxa_abre_pagina concluía (0% de abertura) que esse nível de
+    heading não deveria forçar quebra de página — capítulos passavam a fluir
+    no meio da página anterior em vez de abrir uma nova (ADR-0041 fix)."""
+    from atlas.traducao.editorial_html import _abre_pagina
+
+    class Rotulo:
+        bbox = (372.8, 75.8, 432.0, 96.0)
+        texto = "CHAPTER 1"
+        skip = False
+
+    class Titulo:
+        bbox = (248.1, 97.8, 432.0, 128.0)
+        texto = "What Is Observability?"
+        skip = False
+
+    class CorpoDistante:
+        bbox = (72.0, 300.0, 432.0, 400.0)
+        texto = "Parágrafo qualquer bem mais abaixo na página, bem longo mesmo."
+        skip = False
+
+    blocos = [Rotulo(), Titulo(), CorpoDistante()]
+    assert _abre_pagina(Titulo(), blocos, ph=792.0) is True
+    assert _abre_pagina(CorpoDistante(), blocos, ph=792.0) is False
 
 
 def test_montar_html_forca_quebra_quando_h1_sempre_abre_pagina(tmp_path):

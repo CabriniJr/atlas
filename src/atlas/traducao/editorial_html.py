@@ -460,15 +460,30 @@ def _e_folio(b, ph: float) -> bool:
     return curto and uma_linha and na_margem
 
 
+_INDICE_MAX_ABRE_PAGINA = 1  # tolera o rótulo ("CHAPTER N"/"PART N") antes do título
+
+
 def _abre_pagina(b, blocos: list, ph: float) -> bool:
-    """``True`` se ``b`` é o primeiro bloco de conteúdo (não-fólio) da página,
-    perto do topo — usado pra medir se um nível de heading tende a abrir página
-    nova no documento original (ADR-0041)."""
-    uteis = [x for x in blocos if x.bbox and not _e_folio(x, ph)]
+    """``True`` se ``b`` é um dos primeiros blocos de conteúdo (não-fólio) da
+    página, perto do topo — usado pra medir se um nível de heading tende a
+    abrir página nova no documento original (ADR-0041).
+
+    Tolera até ``_INDICE_MAX_ABRE_PAGINA`` blocos antes de ``b`` (não exige
+    ser LITERALMENTE o primeiro): achado real (auditoria visual, Observability
+    Engineering) — "CHAPTER N"/"PART N" vem numa linha própria ACIMA do
+    título (bloco próprio, depois de ``_dividir_por_rotulo_capitulo``); o
+    rótulo, não o título, é o bloco mais próximo do topo. Sem essa folga, o
+    título NUNCA contava como "abre página" (o rótulo sempre "roubava" a
+    posição), a taxa de abertura desse nível ficava em 0% e o motor concluía
+    que capítulos/partes não deveriam forçar quebra de página — o oposto do
+    que o livro faz."""
+    uteis = sorted((x for x in blocos if x.bbox and not _e_folio(x, ph)), key=lambda x: x.bbox[1])
     if not uteis:
         return False
-    primeiro = min(uteis, key=lambda x: x.bbox[1])
-    return primeiro.bbox == b.bbox and b.bbox[1] <= ph * 0.20
+    indice = next((i for i, x in enumerate(uteis) if x.bbox == b.bbox), None)
+    if indice is None:
+        return False
+    return indice <= _INDICE_MAX_ABRE_PAGINA and b.bbox[1] <= ph * 0.20
 
 
 _RE_FOLIO_NUM = re.compile(r"\b\d+\b")
@@ -647,6 +662,24 @@ def _entradas_toc(texto: str) -> list[tuple]:
     if buf:
         ent.append((" ".join(buf), None))
     return ent
+
+
+_PALAVRAS_MAX_ENTRADA_TOC = 12  # entrada de sumário é um título curto, não uma frase
+
+
+def _parece_sumario_mesclado(texto_original: str) -> bool:
+    """``True`` só se ``texto_original`` tiver a CARA de um sumário mesclado
+    (2+ entradas, todas título CURTO — não frases). Achado real (auditoria
+    visual, Observability Engineering): um parágrafo comum com 2 referências
+    cruzadas ("Chapter 2 looks at... in Part II.") tem 2 links internos (o
+    sinal antigo, sozinho, bastava pra virar sumário) mas NENHUMA cara de
+    entrada de TOC — o número "2" de "Chapter 2" virava um número de página
+    fake e o parágrafo inteiro saía com estilo de link/sumário sublinhado.
+    Sumário de verdade: toda "entrada" é um título curto (poucas palavras)."""
+    entradas = _entradas_toc(texto_original)
+    if len(entradas) < 2:
+        return False
+    return all(len(titulo.split()) <= _PALAVRAS_MAX_ENTRADA_TOC for titulo, _num in entradas)
 
 
 def _elemento_toc(texto: str, anchors: list) -> str:
@@ -934,10 +967,12 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             est = _estilo(b)
             # código/imutável e sem tradução: cai no original — nunca descarta bloco (ADR-0041).
             texto = traducoes.get(b.id) or b.texto
-            # sumário mesclado (bloco com ≥2 links internos): uma linha por entrada.
+            # sumário mesclado (bloco com ≥2 links internos E cara de sumário —
+            # não vale só ter 2 links: um parágrafo comum com 2 referências
+            # cruzadas também tem 2 links, ADR-0041 fix): uma linha por entrada.
             if not est["mono"]:
                 ganchors = _goto_anchors(b, links, paginas)
-                if len(ganchors) >= 2:
+                if len(ganchors) >= 2 and _parece_sumario_mesclado(b.texto):
                     fecha_lista()
                     heading_aberto = None
                     partes.append(_elemento_toc(texto, ganchors))
