@@ -419,11 +419,15 @@ body {{ text-align: justify; hyphens: auto; line-height: 1.34; color: #000; }}
 p {{ margin: 0 0 .45em 0; orphans: 3; widows: 3; }}
 h1,h2,h3 {{ text-align: left; font-weight: bold; margin: .7em 0 .28em; line-height: 1.2;
             page-break-after: avoid; break-after: avoid; }}
-/* o título de capítulo (h1) vira a cabeça de página corrente; quebra por nível
-   é calculada por documento (ADR-0041) — não é uma regra fixa. */
+/* cabeça de página corrente (folio) segue o heading mais recente, seja qual
+   nível for — achado real (auditoria visual, Observability Engineering): só
+   h1 atualizava "cap", mas h1 quase não ocorre nesse livro (título de parte,
+   raro); o rodapé ficava travado no título do LIVRO inteiro, nunca mostrando
+   o capítulo/seção atual (o original atualiza a cada seção). Quebra por
+   nível é calculada por documento (ADR-0041) — não é uma regra fixa. */
 h1 {{ string-set: cap content(); break-before: {h1_break}; }}
-h2 {{ break-before: {h2_break}; }}
-h3 {{ break-before: {h3_break}; }}
+h2 {{ string-set: cap content(); break-before: {h2_break}; }}
+h3 {{ string-set: cap content(); break-before: {h3_break}; }}
 ul {{ margin: .3em 0 .55em 1.3em; padding: 0; }}
 li {{ margin: .12em 0; }}
 pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space: pre-wrap;
