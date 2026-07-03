@@ -828,10 +828,14 @@ def _toc_sublista_inline(entradas: list, anchors: list) -> str:
     return ' <span class="toc-sep">•</span> '.join(partes)
 
 
+_BULLETS_TOC = "■•·▪◦●○�\t -–—"
+
+
 def _entrada_toc_link(titulo: str, alvo: str | None, num: str | None) -> str:
     """``<a>título</a>`` (âncora → página via target-counter) ou título +
-    número original quando não há link (fallback E9-09)."""
-    titulo_html = converter_enfase(titulo.strip(), _e)
+    número original quando não há link (fallback E9-09). Tira bullet inicial
+    (■/•) que o original usa como separador — o render põe o seu próprio •."""
+    titulo_html = converter_enfase(titulo.strip().lstrip(_BULLETS_TOC), _e)
     if alvo:
         return f'<a href="#{alvo}">{titulo_html}</a>'
     n = f' <span class="pg">{_e(num)}</span>' if num else ""
