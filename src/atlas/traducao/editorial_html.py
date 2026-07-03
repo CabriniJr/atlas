@@ -449,6 +449,12 @@ img {{ max-width: 100%; }}
 .destaque {{ background: #f0f0f0; border: 0.6pt solid #ccc; border-radius: 4px;
              padding: 10px 14px; margin: .6em 0; page-break-inside: avoid; }}
 .destaque p, .destaque li {{ margin: .2em 0; }}
+/* título do box (ex.: "This chapter covers") respira do conteúdo — no
+   original há um bom espaço entre o rótulo e a lista (achado real, auditoria
+   visual, Kubernetes in Action: saíam colados). */
+.destaque > p:first-child {{ margin-bottom: .6em; }}
+.destaque > p:first-child + ul,
+.destaque > p:first-child + ol {{ margin-top: 0; }}
 /* só link EXTERNO (uri) parece "link" (sublinhado) — cruzado interno
    (goto: sumário, "Chapter N"/"Part N" em prosa) fica como no original:
    sem sublinhado, é só texto normal (às vezes colorido) que por baixo
