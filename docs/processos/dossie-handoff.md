@@ -21,11 +21,11 @@ atualizado-em: 2026-07-03
 | 1.5    | 2026-07-02 | Tech Lead | **Agente modo `code` via Ollama nativo** (ADR-0042/E7-45, pedido do PO, prioridade máxima) e **recuperação de órfãos no boot + serialização de chamadas Ollama** (ADR-0043/E9-14) — ambos commitados em `main`; não fazem parte do E9-13 | — |
 | 1.6    | 2026-07-02 | Tech Lead | **Qualidade/auto mode do Agente via Ollama** (ADR-0044/E7-46): grep/glob reais, CLAUDE.md injetado, `max_turnos`, `POST /_self_restart`, aba 🤖 Auto. `atlas-builder` passou a usar `provider=ollama-local` (gemma4) | — |
 | 1.7    | 2026-07-02 | Tech Lead | Instância caiu (crash-loop, WIP quebrado não commitado — revertido). Achado e corrigido: `ia.invocar` trocava de motor ollama→claude **às escondidas** na tradução, queimando cota do Claude; agora `fallback=False` na tradução (ADR-0045/E9-15). Ollama virou motor padrão; controle real (pausar/recomeçar/re-refinar) na UI de `Traducao` | — |
-| 1.8    | 2026-07-03 | Tech Lead | **E9-13 concluído** (12/12 tarefas, ADR-0041). Nova frente **E9-15** (opção prévia bruto/IA na UI) feita. Achado + corrigido via amostragem visual real (Kubernetes/Observability/Prometheus): diagrama vetorial virando parágrafos soltos, prosa classificada como código, marcador `**` vazando em `<pre>`, caixa de destaque perdendo fundo/borda, link vazando pro parágrafo inteiro. **Aberto:** página em branco espúria antes de quebra forçada de h1 (não root-causado ainda) | — |
+| 1.8    | 2026-07-03 | Tech Lead | **E9-13 concluído** (12/12 tarefas, ADR-0041). Nova frente **E9-15** (opção prévia bruto/IA na UI) feita. Achado + corrigido via amostragem visual real (Kubernetes/Observability/Prometheus): diagrama vetorial virando parágrafos soltos, prosa classificada como código, marcador `**` vazando em `<pre>`, caixa de destaque perdendo fundo/borda, link vazando pro parágrafo inteiro, **e página em branco espúria antes de quebra forçada de heading** (root-causado via bissecção de HTML real + corrigido) | — |
 
 ---
 
-## ⭐ Estado atual (2026-07-03) — E9-13 concluído + auditoria visual (pendência aberta)
+## ⭐ Estado atual (2026-07-03) — E9-13 concluído + auditoria visual (6 bugs corrigidos)
 
 **Contexto:** o PO revisou o render editorial (motor `render_motor=html`,
 ADR-0036) e apontou perda de informação real: fonte genérica (não a do PDF),
@@ -77,34 +77,33 @@ Running) contra o render, achei e corrigi 5 bugs reais, todos commitados:
    `@bottom-left`/`@bottom-right` (não é bug — confirmado via grep no HTML
    gerado, nenhum `<p>` contém só um traço).
 
-**Pendência aberta (task #19 no tracker desta sessão, sem commit ainda):**
-página quase vazia (só cabeçalho/rodapé) aparece às vezes **antes** de um h1
-com `break-before: page` forçado, quando o conteúdo anterior já ia virar página
-naturalmente bem ali (WeasyPrint não colapsa a quebra forçada com a quebra
-natural adjacente). Achado no Observability Engineering pág. 127 (capítulo 12):
-o título ficou na página com fólio "128" em vez de "127", com uma página em
-branco sobrando entre elas. Repro sintético mínimo (28 parágrafos + h1
-break-before:page) **não reproduziu** o bug isoladamente — a causa exata ainda
-não foi isolada. Próximo passo: usar o HTML fatiado real (não sintético) das
-páginas 140-151 do Observability pra bisseccionar qual elemento entre a
-"Conclusão" do capítulo anterior e o h1 do capítulo 12 causa a divergência
-(candidatos: o `<span style="string-set:...">` do fólio, o bloco de nota de
-rodapé nativo, ou interação com `orphans/widows:3`).
+6. **Página quase vazia antes de quebra forçada de heading** — achada e
+   **corrigida** (commit `754f8d5`). Root cause isolado bissectando o HTML real
+   (sintético não reproduziu): o `<span style="string-set:...">` vazio do
+   fólio, quando a página anterior já está 100% cheia, é empurrado sozinho pro
+   WeasyPrint numa nova página — e a quebra forçada do heading seguinte
+   empurra o conteúdo real por MAIS uma página, deixando uma página fantasma
+   entre elas. Fix: `_injetar_string_set()` anexa a declaração `string-set` no
+   PRIMEIRO elemento com conteúdo real da página (splice no `style="..."`),
+   nunca um `<span>` vazio separado — elemento nunca fica "sozinho". Verificado
+   no Observability Engineering completo: de ~12+ páginas quase-vazias
+   esperadas caiu pra só 3 remanescentes, todas explicadas (capa + colofão do
+   original, não o bug).
 
 **Como retomar:**
 1. Ler [ADR-0041](../arquitetura/adr/ADR-0041-fidelidade-tipografica-e-paginacao-adaptativa.md)
    + seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
-2. Pra investigar a página em branco: reproduzir com
-   `data/pdfs/observability-ITER.pdf` (páginas ~148-151) — ver comandos usados
-   nesta sessão pra fatiar o HTML de um range de páginas via `montar_html`
-   diretamente (não precisa reprocessar o livro inteiro).
-3. Continuar a auditoria visual pro Prometheus (só Kubernetes e Observability
+2. Continuar a auditoria visual pro Prometheus (só Kubernetes e Observability
    foram amostrados nesta sessão) — mesma técnica: `somente_render=True` a
    partir do cache (zero custo de IA), amostrar página de início de capítulo,
-   página com foto/diagrama, página com lista/código/callout.
-4. Trabalho é **direto em `main`**, sem worktree/branch (convenção deste repo,
+   página com foto/diagrama, página com lista/código/callout. Técnica de
+   bissecção (fatiar `montar_html` de um range de páginas + testar direto no
+   WeasyPrint, sem reprocessar o livro inteiro) provou ser essencial pra achar
+   bugs de layout que só aparecem com conteúdo real longo — reusar se surgir
+   outro caso parecido.
+3. Trabalho é **direto em `main`**, sem worktree/branch (convenção deste repo,
    CLAUDE.md §0).
-5. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
+4. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
    mecânico mais recente (commits, testes, checkboxes).
 
 **Trabalho concorrente:** rodar `git status` antes de tocar em
