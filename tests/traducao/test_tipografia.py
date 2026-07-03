@@ -1,9 +1,19 @@
+from dataclasses import dataclass
+
 from atlas.traducao.tipografia import (
+    bloco_e_mono,
     clusters_titulo,
     converter_enfase,
     nivel_titulo,
     taxa_abre_pagina,
 )
+
+
+@dataclass
+class _SpanFake:
+    text: str
+    font: str
+    flags: int = 0
 
 
 def _escapar(t):
@@ -103,3 +113,31 @@ def test_extrai_fontes_documento_sem_fonte_embutida_nao_quebra(tmp_path):
     fontes = extrair_fontes(doc)  # não deve levantar exceção
     assert isinstance(fontes, dict)
     doc.close()
+
+
+def test_bloco_todo_em_courier_e_mono():
+    spans = [
+        _SpanFake("$ kubectl scale rc kubia --replicas=3", "Courier-Bold"),
+        _SpanFake('replicationcontroller "kubia" scaled', "Courier"),
+    ]
+    assert bloco_e_mono(spans) is True
+
+
+def test_bloco_prosa_com_poucos_termos_courier_nao_e_mono():
+    # ADR-0041 fix: um parágrafo de prosa com 2-3 termos inline em Courier
+    # (estilo "código" pontual) não deve virar bloco de código inteiro — senão
+    # a prosa nunca é traduzida e vira <pre> verbatim (bug real observado).
+    spans = [
+        _SpanFake("You added the annotation ", "NewBaskerville-Roman"),
+        _SpanFake("mycompany.com/someannotation", "Courier"),
+        _SpanFake(" with the value ", "NewBaskerville-Roman"),
+        _SpanFake("foo", "Courier"),
+        _SpanFake(" bar. It's a good idea to use this format for annotation keys "
+                   "to prevent key collisions across tools and libraries.",
+                   "NewBaskerville-Roman"),
+    ]
+    assert bloco_e_mono(spans) is False
+
+
+def test_bloco_sem_spans_nao_e_mono():
+    assert bloco_e_mono([]) is False

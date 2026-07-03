@@ -25,6 +25,7 @@ import statistics
 import fitz
 
 from atlas.traducao.tipografia import (
+    bloco_e_mono,
     clusters_titulo,
     converter_enfase,
     extrair_fontes,
@@ -42,8 +43,8 @@ try:  # WeasyPrint é opcional em import-time (o motor pymupdf continua disponí
 except Exception:  # noqa: BLE001
     weasyprint = None
 
-# flags de span do PyMuPDF (bits): 1=italic, 3=monospaced, 4=bold.
-_ITALIC, _MONO, _BOLD = 1 << 1, 1 << 3, 1 << 4
+# flags de span do PyMuPDF (bits): 1=italic, 4=bold.
+_ITALIC, _BOLD = 1 << 1, 1 << 4
 
 
 def _e(txt: str) -> str:
@@ -56,10 +57,6 @@ def _bold(s) -> bool:
 
 def _ital(s) -> bool:
     return bool(s.flags & _ITALIC) or "italic" in s.font.lower() or "oblique" in s.font.lower()
-
-
-def _mono_span(s) -> bool:
-    return bool(s.flags & _MONO) or "mono" in s.font.lower() or "courier" in s.font.lower()
 
 
 def _estilo(b) -> dict:
@@ -76,7 +73,7 @@ def _estilo(b) -> dict:
         "size": statistics.median([s.size for s in b.spans if s.size] or [11.0]),
         "bold": peso(_bold) > total / 2,
         "italic": peso(_ital) > total / 2,
-        "mono": any(_mono_span(s) for s in b.spans),
+        "mono": bloco_e_mono(b.spans),
         "color": b.spans[0].color or 0,
         "font": font_dom,
     }

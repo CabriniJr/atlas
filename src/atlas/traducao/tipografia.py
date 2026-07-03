@@ -106,3 +106,30 @@ def gerar_font_faces(fontes: dict[str, str]) -> str:
         f'@font-face {{ font-family: "{nome}"; src: url({uri}); }}'
         for nome, uri in fontes.items()
     )
+
+
+_FLAG_MONOSPACE = 1 << 3  # bit 3 do flags do fitz
+
+
+def _span_mono(s) -> bool:
+    font = s.font.lower()
+    return bool(s.flags & _FLAG_MONOSPACE) or "mono" in font or "courier" in font
+
+
+def bloco_e_mono(spans: list) -> bool:
+    """Um bloco só é tratado como código/imutável (ADR-0033: nunca traduz, nunca
+    reflui) se a MAIORIA do texto (por peso de caracteres) estiver em fonte
+    monoespaçada — não basta UM span isolado. Um parágrafo de prosa com um termo
+    técnico inline em Courier (ex.: ``mycompany.com/foo``) não deve virar um
+    bloco de código inteiro: senão a prosa nunca é traduzida (vaza pro `<pre>`
+    verbatim, sem passar por `converter_enfase`) — bug real visto em produção,
+    ADR-0041 fix. Usado tanto na extração (decide ``skip``) quanto no render
+    (decide `<pre>` vs. parágrafo) — a MESMA função nos dois lugares evita que
+    um bloco seja marcado com ênfase na extração (achando que não é código) e
+    depois vire `<pre>` verbatim no render (vazando o marcador ``**``)."""
+    partes_validas = [s for s in spans if s.text.strip()]
+    if not partes_validas:
+        return False
+    total = sum(max(1, len(s.text)) for s in partes_validas)
+    peso_mono = sum(len(s.text) for s in partes_validas if _span_mono(s))
+    return peso_mono > total / 2

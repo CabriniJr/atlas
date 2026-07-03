@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-_FLAG_MONOSPACE = 8  # bit 3 do flags do fitz
+from atlas.traducao.tipografia import bloco_e_mono
+
 _FLAG_ITALIC = 1 << 1
 _FLAG_BOLD = 1 << 4
 
@@ -97,7 +98,6 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
         if "lines" not in bloco:  # bloco de imagem — ignora
             continue
         spans: list[Span] = []
-        mono = False
         for linha in bloco["lines"]:
             for s in linha.get("spans", []):
                 spans.append(
@@ -110,10 +110,9 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                         flags=s.get("flags", 0),
                     )
                 )
-                if s.get("flags", 0) & _FLAG_MONOSPACE:
-                    mono = True
         if not spans:
             continue
+        mono = bloco_e_mono(spans)
         texto_plano = " ".join(s.text.strip() for s in spans if s.text.strip())
         skip = mono or not _tem_letra(texto_plano)
         texto = texto_plano if skip else _marcar_enfase(spans)
