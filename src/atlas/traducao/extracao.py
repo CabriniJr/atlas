@@ -183,6 +183,25 @@ def _montar_bloco(
     )
 
 
+_TOLERANCIA_BBOX_DUPLICADO = 0.5  # pt — folga pro arredondamento de ponto flutuante do PDF
+
+
+def _e_duplicata(span: Span, vistos: list[Span]) -> bool:
+    """``True`` se ``span`` repete texto+posição de um span já coletado no
+    MESMO bloco (achado real: alguns PDFs desenham o bullet de um item de
+    lista DUAS vezes, como uma "linha" extra só com o glifo repetido no MESMO
+    bbox — sem filtrar, o `•` extra vaza como um segundo bullet solto no fim
+    do item, ADR-0041 fix)."""
+    for v in vistos:
+        if v.text != span.text:
+            continue
+        if all(
+            abs(a - b) <= _TOLERANCIA_BBOX_DUPLICADO for a, b in zip(v.bbox, span.bbox, strict=True)
+        ):
+            return True
+    return False
+
+
 def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
     d = page.get_text("dict")
     blocos: list[BlocoTraducao] = []
@@ -193,16 +212,17 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
         spans: list[Span] = []
         for linha in bloco["lines"]:
             for s in linha.get("spans", []):
-                spans.append(
-                    Span(
-                        text=s["text"],
-                        bbox=tuple(s["bbox"]),
-                        font=s.get("font", ""),
-                        size=s.get("size", 0.0),
-                        color=s.get("color", 0),
-                        flags=s.get("flags", 0),
-                    )
+                candidato = Span(
+                    text=s["text"],
+                    bbox=tuple(s["bbox"]),
+                    font=s.get("font", ""),
+                    size=s.get("size", 0.0),
+                    color=s.get("color", 0),
+                    flags=s.get("flags", 0),
                 )
+                if _e_duplicata(candidato, spans):
+                    continue
+                spans.append(candidato)
         if not spans:
             continue
         divisao = _dividir_por_titulo_embutido(spans)
