@@ -68,6 +68,33 @@ def _juntar_spans(spans: list[Span]) -> str:
     return "".join(saida)
 
 
+def _juntar_linha_mono(spans_linha: list[Span]) -> str:
+    """Junta os spans de UMA linha de código (mesma lógica de adjacência
+    token-a-token do ``_juntar_spans``, pra sintaxe colorida), mas SEM
+    stripar o início — a indentação de um span como ``"  name: foo"`` é
+    conteúdo real, não espaço incidental de layout."""
+    if not spans_linha:
+        return ""
+    saida = [spans_linha[0].text]
+    for anterior, atual in zip(spans_linha, spans_linha[1:], strict=False):
+        gap = atual.bbox[0] - anterior.bbox[2]
+        if gap > 1.0:
+            saida.append(" ")
+        saida.append(atual.text)
+    return "".join(saida).rstrip()
+
+
+def _juntar_linhas_mono(linhas: list[list[Span]]) -> str:
+    """Texto VERBATIM de um bloco de código: 1 linha do PDF = 1 linha do
+    texto (``\\n`` real), indentação preservada. Achado real (auditoria
+    visual, Kubernetes in Action): ``_juntar_spans`` colapsa todas as linhas
+    num espaço só — ótimo pra prosa (que reflui), péssimo pra código, que
+    virava uma única linha sem indentação/estrutura, ilegível e irreproduzível
+    (código é ``skip=True``, nunca traduzido, e vira ``<pre>`` no render —
+    precisa ser ipsis litteris, como uma imagem, ADR-0041 fix)."""
+    return "\n".join(_juntar_linha_mono(linha) for linha in linhas)
+
+
 def _marcar_enfase(spans: list[Span]) -> str:
     """Monta o texto do bloco marcando trechos que divergem do estilo dominante
     (negrito/itálico) com marcadores leves (``**b**``/``_i_``) — a tradução é
@@ -169,12 +196,22 @@ def classificar_papel(bloco: dict, largura_pagina: float) -> str:
 
 
 def _montar_bloco(
-    prox_id: int, pagina: int, bbox, spans: list[Span], n_linhas: int, largura_pagina: float
+    prox_id: int,
+    pagina: int,
+    bbox,
+    spans: list[Span],
+    n_linhas: int,
+    largura_pagina: float,
+    linhas_spans: list[list[Span]] | None = None,
 ) -> BlocoTraducao:
     mono = bloco_e_mono(spans)
-    texto_plano = _juntar_spans(spans)
-    skip = mono or not _tem_letra(texto_plano)
-    texto = texto_plano if skip else _marcar_enfase(spans)
+    if mono and linhas_spans:
+        texto = _juntar_linhas_mono(linhas_spans)
+        skip = True
+    else:
+        texto_plano = _juntar_spans(spans)
+        skip = mono or not _tem_letra(texto_plano)
+        texto = texto_plano if skip else _marcar_enfase(spans)
     papel = classificar_papel(
         {"texto": texto, "bbox": bbox, "n_linhas": n_linhas, "mono": mono}, largura_pagina
     )
@@ -210,7 +247,9 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
         if "lines" not in bloco:  # bloco de imagem — ignora
             continue
         spans: list[Span] = []
+        linhas_spans: list[list[Span]] = []
         for linha in bloco["lines"]:
+            linha_atual: list[Span] = []
             for s in linha.get("spans", []):
                 candidato = Span(
                     text=s["text"],
@@ -223,6 +262,9 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                 if _e_duplicata(candidato, spans):
                     continue
                 spans.append(candidato)
+                linha_atual.append(candidato)
+            if linha_atual:
+                linhas_spans.append(linha_atual)
         if not spans:
             continue
         divisao = _dividir_por_titulo_embutido(spans)
@@ -242,7 +284,13 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
             continue
         blocos.append(
             _montar_bloco(
-                prox_id, pagina, tuple(bloco["bbox"]), spans, len(bloco["lines"]), page.rect.width
+                prox_id,
+                pagina,
+                tuple(bloco["bbox"]),
+                spans,
+                len(bloco["lines"]),
+                page.rect.width,
+                linhas_spans,
             )
         )
         prox_id += 1
