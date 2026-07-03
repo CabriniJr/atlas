@@ -5,7 +5,7 @@ status: aprovado
 versao: 1.0
 dono: PO/PM
 revisado-por: Tech Lead
-atualizado-em: 2026-06-26
+atualizado-em: 2026-07-03
 ---
 
 # Dossiê de handoff — estado atual e como continuar
@@ -21,10 +21,11 @@ atualizado-em: 2026-06-26
 | 1.5    | 2026-07-02 | Tech Lead | **Agente modo `code` via Ollama nativo** (ADR-0042/E7-45, pedido do PO, prioridade máxima) e **recuperação de órfãos no boot + serialização de chamadas Ollama** (ADR-0043/E9-14) — ambos commitados em `main`; não fazem parte do E9-13 | — |
 | 1.6    | 2026-07-02 | Tech Lead | **Qualidade/auto mode do Agente via Ollama** (ADR-0044/E7-46): grep/glob reais, CLAUDE.md injetado, `max_turnos`, `POST /_self_restart`, aba 🤖 Auto. `atlas-builder` passou a usar `provider=ollama-local` (gemma4) | — |
 | 1.7    | 2026-07-02 | Tech Lead | Instância caiu (crash-loop, WIP quebrado não commitado — revertido). Achado e corrigido: `ia.invocar` trocava de motor ollama→claude **às escondidas** na tradução, queimando cota do Claude; agora `fallback=False` na tradução (ADR-0045/E9-15). Ollama virou motor padrão; controle real (pausar/recomeçar/re-refinar) na UI de `Traducao` | — |
+| 1.8    | 2026-07-03 | Tech Lead | **E9-13 concluído** (12/12 tarefas, ADR-0041). Nova frente **E9-15** (opção prévia bruto/IA na UI) feita. Achado + corrigido via amostragem visual real (Kubernetes/Observability/Prometheus): diagrama vetorial virando parágrafos soltos, prosa classificada como código, marcador `**` vazando em `<pre>`, caixa de destaque perdendo fundo/borda, link vazando pro parágrafo inteiro. **Aberto:** página em branco espúria antes de quebra forçada de h1 (não root-causado ainda) | — |
 
 ---
 
-## ⭐ Estado atual (2026-07-02) — E9-13: fidelidade tipográfica + paginação adaptativa
+## ⭐ Estado atual (2026-07-03) — E9-13 concluído + auditoria visual (pendência aberta)
 
 **Contexto:** o PO revisou o render editorial (motor `render_motor=html`,
 ADR-0036) e apontou perda de informação real: fonte genérica (não a do PDF),
@@ -36,51 +37,85 @@ original. Decisão registrada em [ADR-0041](../arquitetura/adr/ADR-0041-fidelida
 + seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
 Backlog: [`roadmap/backlog.md` §E9-13](../roadmap/backlog.md#épico-tradutor-editorial).
 
-**E9-01..E9-12 — feito e commitado em `main`** (motor editorial HTML/WeasyPrint
-default, TOC+hyperlinks+folio fiéis, pool de execução, paralelismo de páginas,
-fallback claude↔ollama). Ver linhas E9-01..E9-12 no backlog pra detalhe de cada.
+**E9-01..E9-12 e E9-13 (12/12 tarefas) — feito e commitado em `main`.** O
+[plano](../superpowers/plans/2026-07-02-fidelidade-editorial-avancada.md) está
+inteiro com checkboxes `[x]`: fonte real embutida (`tipografia.extrair_fontes`
++ `@font-face`), ênfase inline (`**bold**`/`_italic_` → `<b>`/`<i>`), link herda
+cor (sem azul forçado), listas `<ol>` + zero bloco descartado, nota de rodapé
+nativa distinta do fólio, fólio dinâmico via `string-set` (número igual ao
+original, escala sozinho no reflow), quebra de página por nível de heading
+**extraída do documento** (clustering + taxa de abertura, não regra fixa).
 
-**Em andamento — E9-13, 2/12 tarefas do [plano](../superpowers/plans/2026-07-02-fidelidade-editorial-avancada.md):**
-- ✅ Task 1 `extracao.py` marca ênfase inline (`**bold**`/`_italic_`) no texto do
-  bloco (commit `8c93880`).
-- ✅ Task 2 `traducao_ia.montar_prompt_refino` instrui a IA a preservar os
-  marcadores de ênfase (commit `ce0ebc3`).
-- ⏳ Task 3 `tipografia.py` (**novo módulo**) — `converter_enfase` (marcador →
-  `<b>`/`<i>`); ⏳ Task 4 clustering de heading (`clusters_titulo`/`nivel_titulo`)
-  + `taxa_abre_pagina`; ⏳ Task 5 `extrair_fontes`/`gerar_font_faces` (fonte real
-  embutida via PyMuPDF).
-- ⏳ Task 6 `editorial_html.py` liga fonte real + ênfase inline no `_elemento`;
-  ⏳ Task 7 listas numeradas (`<ol>`) + zero bloco descartado sem tradução;
-  ⏳ Task 8 nota de rodapé nativa (distinta do fólio); ⏳ Task 9 **fólio
-  dinâmico** via `string-set` (número igual ao original, escala sozinho no
-  reflow); ⏳ Task 10 quebra de página por nível **extraída do PDF** (não regra
-  fixa); ⏳ Task 11 `@font-face` real no CSS + link herda cor (remove azul
-  fixo); ⏳ Task 12 regressão de fidelidade end-to-end + re-render do PDF de
-  controle (observability).
+**E9-15 — feito:** opção de renderizar prévia com MT bruta OU tradução
+refinada por IA — dois botões na UI (`Prévia (IA)`/`Prévia (bruto)`),
+`traduzir_pdf(..., preferir_bruto=True)`, zero custo de IA (usa só cache).
 
-**Como retomar (spec-driven, subagent-driven-development):**
+**Auditoria visual pós-E9-13 (pedido do PO: "compara renderizado com original,
+lista os ajustes"; depois "implementa tudo"):** amostrando páginas reais dos 3
+livros do PO (Kubernetes in Action, Observability Engineering, Prometheus Up &
+Running) contra o render, achei e corrigi 5 bugs reais, todos commitados:
+1. **Diagrama vetorial virava lista de `<p>` soltos** (figuras com caixas/setas
+   desenhadas via `page.get_drawings()`, não `page.get_images()`) —
+   `_regioes_diagrama()`/`_renderizar_diagrama()` em `editorial_html.py`
+   rasterizam a região inteira como imagem (commit `beb1472`).
+2. **Prosa classificada como código** (bug real: `mycompany.com/foo` em fonte
+   Courier dentro de um parágrafo de prosa fazia o BLOCO INTEIRO virar `<pre>`
+   não traduzido) — `tipografia.bloco_e_mono()` unifica a decisão por MAIORIA
+   de caracteres (não 1 span), usada em `extracao.py` E `editorial_html.py`
+   (commit `5272e75`); isso também consertou o marcador `**` vazando pra
+   dentro de código.
+3. **Caixa de destaque (callout/tip) perdia fundo/borda** —
+   `_regioes_destaque()` detecta forma com `fill` (preenchimento) que envolve
+   prosa (>=6 palavras) e envolve em `<div class="destaque">` (commit
+   `ff6d4a0`).
+4. **Link vazando pro parágrafo inteiro** (uma URL de 1 linha dentro de um
+   parágrafo de 5 linhas fazia o parágrafo inteiro virar `<a>` azul/sublinhado)
+   — `_link_do_bloco()` agora exige >=50% de cobertura da área do bloco (commit
+   `ff6d4a0`, mesmo commit do item 3).
+5. **Investigado e descartado:** o traço "—" antes do fólio que parecia bug de
+   classificação de texto é na verdade a régua CSS `border-top` intencional do
+   `@bottom-left`/`@bottom-right` (não é bug — confirmado via grep no HTML
+   gerado, nenhum `<p>` contém só um traço).
+
+**Pendência aberta (task #19 no tracker desta sessão, sem commit ainda):**
+página quase vazia (só cabeçalho/rodapé) aparece às vezes **antes** de um h1
+com `break-before: page` forçado, quando o conteúdo anterior já ia virar página
+naturalmente bem ali (WeasyPrint não colapsa a quebra forçada com a quebra
+natural adjacente). Achado no Observability Engineering pág. 127 (capítulo 12):
+o título ficou na página com fólio "128" em vez de "127", com uma página em
+branco sobrando entre elas. Repro sintético mínimo (28 parágrafos + h1
+break-before:page) **não reproduziu** o bug isoladamente — a causa exata ainda
+não foi isolada. Próximo passo: usar o HTML fatiado real (não sintético) das
+páginas 140-151 do Observability pra bisseccionar qual elemento entre a
+"Conclusão" do capítulo anterior e o h1 do capítulo 12 causa a divergência
+(candidatos: o `<span style="string-set:...">` do fólio, o bloco de nota de
+rodapé nativo, ou interação com `orphans/widows:3`).
+
+**Como retomar:**
 1. Ler [ADR-0041](../arquitetura/adr/ADR-0041-fidelidade-tipografica-e-paginacao-adaptativa.md)
    + seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
-2. Abrir o [plano](../superpowers/plans/2026-07-02-fidelidade-editorial-avancada.md)
-   e continuar nas tarefas com `[ ]` (cada task já tem o código completo — TDD,
-   um commit por task). Tasks 3-12 têm dependência sequencial (mesmos arquivos
-   editados cumulativamente) — não paralelizar.
-3. Trabalho é **direto em `main`**, sem worktree/branch (convenção deste repo,
-   CLAUDE.md §0) — mesmo em subagent-driven-development.
-4. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
+2. Pra investigar a página em branco: reproduzir com
+   `data/pdfs/observability-ITER.pdf` (páginas ~148-151) — ver comandos usados
+   nesta sessão pra fatiar o HTML de um range de páginas via `montar_html`
+   diretamente (não precisa reprocessar o livro inteiro).
+3. Continuar a auditoria visual pro Prometheus (só Kubernetes e Observability
+   foram amostrados nesta sessão) — mesma técnica: `somente_render=True` a
+   partir do cache (zero custo de IA), amostrar página de início de capítulo,
+   página com foto/diagrama, página com lista/código/callout.
+4. Trabalho é **direto em `main`**, sem worktree/branch (convenção deste repo,
+   CLAUDE.md §0).
+5. `handoff-auto.md` (gerado por `scripts/handoff-snapshot.sh`) traz o snapshot
    mecânico mais recente (commits, testes, checkboxes).
 
-**Trabalho concorrente já resolvido:** o WIP paralelo de 2026-07-02
-(`agente_ollama.py`, `ADR-0042`, dispatch por motor em `api.py`/`app.py`,
-serialização Ollama em `ia.py`, recuperação de órfãos em `retomada.py`) foi
-commitado separado do E9-13 — ver [ADR-0042](../arquitetura/adr/ADR-0042-agente-code-via-ollama.md)
-(E7-45) e [ADR-0043](../arquitetura/adr/ADR-0043-recuperacao-orfaos-boot-e-serializacao-ollama.md)
-(E9-14). Ao retomar o E9-13, ainda vale rodar `git status` antes de tocar em
+**Trabalho concorrente:** rodar `git status` antes de tocar em
 `README.md`/`backlog.md`/qualquer arquivo compartilhado — outros processos
-concorrentes podem surgir de novo.
+concorrentes (Dev Sonnet em paralelo) podem estar mexendo neles.
 
 **Ambiente:** local via `python -m atlas` (env `ATLAS_DB_PATH=data/atlas.sqlite`,
-`ATLAS_API_PORT=8080`) → `http://atlas.local:8080`. Já reiniciado no código novo.
+`ATLAS_API_PORT=8080`) → `http://atlas.local:8080`. **Não reiniciado com o
+código desta sessão ainda** — o PO pediu explicitamente pra NÃO reiniciar até
+o render ficar bom; reinicie (`systemctl --user restart atlas.service`) só
+quando o PO confirmar ou pedir.
 **Pendência do PO:** `sudo dnf install -y pandoc` (botão EPUB). Sub-projetos B/C/D
 (qualidade AI-augmented, Agente editor + judge, configs de qualidade) = E9-02..04.
 
