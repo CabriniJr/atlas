@@ -22,10 +22,11 @@ atualizado-em: 2026-07-03
 | 1.6    | 2026-07-02 | Tech Lead | **Qualidade/auto mode do Agente via Ollama** (ADR-0044/E7-46): grep/glob reais, CLAUDE.md injetado, `max_turnos`, `POST /_self_restart`, aba 🤖 Auto. `atlas-builder` passou a usar `provider=ollama-local` (gemma4) | — |
 | 1.7    | 2026-07-02 | Tech Lead | Instância caiu (crash-loop, WIP quebrado não commitado — revertido). Achado e corrigido: `ia.invocar` trocava de motor ollama→claude **às escondidas** na tradução, queimando cota do Claude; agora `fallback=False` na tradução (ADR-0045/E9-15). Ollama virou motor padrão; controle real (pausar/recomeçar/re-refinar) na UI de `Traducao` | — |
 | 1.8    | 2026-07-03 | Tech Lead | **E9-13 concluído** (12/12 tarefas, ADR-0041). Nova frente **E9-15** (opção prévia bruto/IA na UI) feita. Achado + corrigido via amostragem visual real (Kubernetes/Observability/Prometheus): diagrama vetorial virando parágrafos soltos, prosa classificada como código, marcador `**` vazando em `<pre>`, caixa de destaque perdendo fundo/borda, link vazando pro parágrafo inteiro, **e página em branco espúria antes de quebra forçada de heading** (root-causado via bissecção de HTML real + corrigido) | — |
+| 1.9    | 2026-07-03 | Tech Lead | Continuação da auditoria visual (Prometheus amostrado): **3 bugs reais** achados e corrigidos — nota de rodapé cortada ao virar página original (vazava como `<p>` solto), espaço espúrio entre tokens de código com syntax highlighting (`http . server` → `http.server`), marcador `**` vazando dentro de nota de rodapé (mesma causa do bug anterior, função esquecida). Um suspeito de bug (página com "Blackbox Exporter" gigante) investigado e **descartado** — era imagem raster de verdade (screenshot), não texto mal classificado | — |
 
 ---
 
-## ⭐ Estado atual (2026-07-03) — E9-13 concluído + auditoria visual (6 bugs corrigidos)
+## ⭐ Estado atual (2026-07-03) — E9-13 concluído + auditoria visual (9 bugs corrigidos)
 
 **Contexto:** o PO revisou o render editorial (motor `render_motor=html`,
 ADR-0036) e apontou perda de informação real: fonte genérica (não a do PDF),
@@ -53,7 +54,8 @@ refinada por IA — dois botões na UI (`Prévia (IA)`/`Prévia (bruto)`),
 **Auditoria visual pós-E9-13 (pedido do PO: "compara renderizado com original,
 lista os ajustes"; depois "implementa tudo"):** amostrando páginas reais dos 3
 livros do PO (Kubernetes in Action, Observability Engineering, Prometheus Up &
-Running) contra o render, achei e corrigi 5 bugs reais, todos commitados:
+Running) contra o render, achei e corrigi 9 bugs reais (2 descartados após
+investigação), todos commitados:
 1. **Diagrama vetorial virava lista de `<p>` soltos** (figuras com caixas/setas
    desenhadas via `page.get_drawings()`, não `page.get_images()`) —
    `_regioes_diagrama()`/`_renderizar_diagrama()` em `editorial_html.py`
@@ -90,13 +92,40 @@ Running) contra o render, achei e corrigi 5 bugs reais, todos commitados:
    esperadas caiu pra só 3 remanescentes, todas explicadas (capa + colofão do
    original, não o bug).
 
+**Auditoria visual, rodada 2 (Prometheus Up & Running amostrado):**
+7. **Nota de rodapé cortada ao virar página original** — uma nota que estoura
+   pro TOPO da página original seguinte (fora da faixa de margem que
+   `_e_rodape_nativo` reconhece) vazava como `<p>` solto no meio do corpo,
+   cortando a frase ao meio. `_comeca_minuscula()` detecta a continuação
+   (primeiro bloco útil da página começando com minúscula, quando a página
+   anterior terminou em nota pendente) e gruda no final da nota; notas agora
+   são deferidas (`pendente_notas`) e só "fecham" no início da próxima página
+   (commit `c2196d7`).
+8. **Espaço espúrio entre tokens de código** (`http . server . BaseHTTP...`
+   em vez de `http.server.BaseHTTP...`) — código com destaque de sintaxe tem
+   cada token/cor como span separado do PyMuPDF; `texto_plano` usava
+   `" ".join(...)` cego entre TODOS os spans. `_juntar_spans()` decide por
+   geometria (gap de bbox no eixo x, mesma linha) se insere espaço — spans
+   tocando ficam colados (commit `1a2525f`).
+9. **Marcador `**` vazando dentro de nota de rodapé** — `flush_notas()` usava
+   `_e(t)` (escape puro) em vez de `converter_enfase(t, _e)`; mesma função já
+   usada em parágrafos normais, só faltava aplicar em notas (commit `892d7f8`).
+10. **Investigado e descartado:** uma página com "Blackbox Exporter" em fonte
+    gigante + links azuis + tabela parecia texto mal classificado como
+    heading — na verdade é uma imagem raster de verdade (screenshot de
+    navegador, 106 imagens na página original), preservada corretamente.
+    `get_text()` no PDF renderizado confirma: nenhum desses textos existe como
+    texto real, só pixels da imagem.
+
 **Como retomar:**
 1. Ler [ADR-0041](../arquitetura/adr/ADR-0041-fidelidade-tipografica-e-paginacao-adaptativa.md)
    + seção "Fidelidade avançada" da [spec](../specs/traducao-render-editorial.md).
-2. Continuar a auditoria visual pro Prometheus (só Kubernetes e Observability
-   foram amostrados nesta sessão) — mesma técnica: `somente_render=True` a
-   partir do cache (zero custo de IA), amostrar página de início de capítulo,
-   página com foto/diagrama, página com lista/código/callout. Técnica de
+2. Os 3 livros do PO (Kubernetes in Action, Observability Engineering,
+   Prometheus Up & Running) já foram amostrados nesta sessão (várias páginas
+   de cada, tipos variados: início de capítulo, foto/diagrama, callout,
+   lista, código). Se o PO trouxer mais páginas problemáticas, mesma técnica:
+   `somente_render=True` a partir do cache (zero custo de IA), amostrar tipos
+   variados, comparar pixmap do render vs. original lado a lado. Técnica de
    bissecção (fatiar `montar_html` de um range de páginas + testar direto no
    WeasyPrint, sem reprocessar o livro inteiro) provou ser essencial pra achar
    bugs de layout que só aparecem com conteúdo real longo — reusar se surgir
