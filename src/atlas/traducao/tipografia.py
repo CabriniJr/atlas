@@ -6,6 +6,7 @@ sem WeasyPrint/IO pesado (mesmo padrão de ``layout.py``). ``extrair_fontes`` é
 
 from __future__ import annotations
 
+import base64
 import re
 from collections.abc import Callable
 
@@ -70,3 +71,38 @@ def taxa_abre_pagina(
         taxa = sum(1 for f in flags if f) / len(flags)
         out[nivel] = taxa >= limiar
     return out
+
+
+_MIME_FONTE = {"ttf": "font/ttf", "otf": "font/otf", "woff": "font/woff", "woff2": "font/woff2"}
+
+
+def extrair_fontes(doc) -> dict[str, str]:
+    """``Span.font`` (basefont) → data URI da fonte real embutida no PDF
+    (ADR-0041). Fonte não extraível (Type3, CFF cru, subset corrompido) fica de
+    fora do mapa — o chamador cai no fallback genérico do CSS, nunca quebra."""
+    vistos: dict[str, str] = {}
+    for page in doc:
+        for entry in page.get_fonts(full=True):
+            xref, ext, _ftype, basefont = entry[0], entry[1], entry[2], entry[3]
+            if not basefont or basefont in vistos:
+                continue
+            if (ext or "").lower() not in _MIME_FONTE:
+                continue
+            try:
+                _nome, ext_real, _tipo, buf = doc.extract_font(xref)
+            except Exception:  # noqa: BLE001 — extração é best-effort (ADR-0006)
+                continue
+            if not buf:
+                continue
+            mime = _MIME_FONTE.get((ext_real or ext).lower(), "font/ttf")
+            vistos[basefont] = f"data:{mime};base64," + base64.b64encode(buf).decode()
+    return vistos
+
+
+def gerar_font_faces(fontes: dict[str, str]) -> str:
+    """``@font-face`` p/ cada fonte real extraída — pronto p/ embutir no
+    ``<style>`` do render editorial (ADR-0041)."""
+    return "\n".join(
+        f'@font-face {{ font-family: "{nome}"; src: url({uri}); }}'
+        for nome, uri in fontes.items()
+    )

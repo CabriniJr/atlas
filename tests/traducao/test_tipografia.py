@@ -58,3 +58,48 @@ def test_taxa_abre_pagina_forca_quebra_com_amostra_suficiente():
 def test_taxa_abre_pagina_amostra_pequena_fica_falso():
     out = taxa_abre_pagina({"h3": [True, True]})  # só 2 ocorrências
     assert out["h3"] is False
+
+
+def test_extrai_fonte_real_embutida(tmp_path):
+    import fitz
+
+    from atlas.traducao.tipografia import extrair_fontes, gerar_font_faces
+
+    fonte_path = str(
+        __import__("pathlib").Path(__file__).resolve().parents[2]
+        / "src" / "atlas" / "traducao" / "fonts" / "LiberationSans-Regular.ttf"
+    )
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_font(fontname="atlasteste", fontfile=fonte_path)
+    page.insert_text((72, 100), "Hello world", fontname="atlasteste", fontsize=12)
+    p = tmp_path / "f.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    fontes = extrair_fontes(doc)
+    assert fontes  # pelo menos uma fonte extraída
+    uri = next(iter(fontes.values()))
+    assert uri.startswith("data:font/")
+    css = gerar_font_faces(fontes)
+    assert "@font-face" in css
+    doc.close()
+
+
+def test_extrai_fontes_documento_sem_fonte_embutida_nao_quebra(tmp_path):
+    import fitz
+
+    from atlas.traducao.tipografia import extrair_fontes
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Hello world", fontname="helv", fontsize=12)  # fonte base-14
+    p = tmp_path / "f2.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    fontes = extrair_fontes(doc)  # não deve levantar exceção
+    assert isinstance(fontes, dict)
+    doc.close()
