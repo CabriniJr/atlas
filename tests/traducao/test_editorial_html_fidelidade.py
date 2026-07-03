@@ -1,3 +1,5 @@
+import fitz
+
 from atlas.traducao.editorial_html import _elemento
 from atlas.traducao.extracao import BlocoTraducao, Span
 
@@ -296,6 +298,108 @@ def test_montar_html_rasteriza_diagrama_em_vez_de_paragrafos_soltos(tmp_path):
     assert "App B" not in html
     assert "Este é um parágrafo comum" in html  # texto normal continua intacto
     doc.close()
+
+
+def test_regioes_destaque_detecta_caixa_com_fundo_e_prosa(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_destaque
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), fill=(0.92, 0.92, 0.92), width=1)
+    page.insert_text((80, 120), "DICA", fontname="helv", fontsize=10)
+    page.insert_text((80, 140), "Este e um paragrafo de dica com bastante texto explicativo aqui.",
+                      fontname="helv", fontsize=9)
+    page.insert_text((72, 400), "Paragrafo comum de corpo, bem longe da caixa de destaque.",
+                      fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_destaque(doc[0], blocos, ids_diagrama=set())
+    assert len(regioes) == 1
+    _reg, contidos = regioes[0]
+    textos = {b.texto for b in contidos}
+    assert any("paragrafo de dica" in t.lower() for t in textos)
+    assert not any("comum de corpo" in t.lower() for t in textos)
+    doc.close()
+
+
+def test_regioes_destaque_ignora_caixa_sem_preenchimento(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_destaque
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), width=1)  # sem fill
+    page.insert_text((80, 140), "Este e um paragrafo qualquer com bastante texto aqui dentro.",
+                      fontname="helv", fontsize=9)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_destaque(doc[0], blocos, ids_diagrama=set())
+    assert regioes == []
+    doc.close()
+
+
+def test_montar_html_envolve_caixa_de_destaque_em_div(tmp_path):
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(72, 100, 450, 200), color=(0, 0, 0), fill=(0.92, 0.92, 0.92), width=1)
+    page.insert_text((80, 140), "Este e um paragrafo de dica com bastante texto explicativo aqui.",
+                      fontname="helv", fontsize=9)
+    page.insert_text((72, 400), "Paragrafo comum de corpo, bem longe da caixa de destaque.",
+                      fontname="helv", fontsize=11)
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    traducoes = {b.id: b.texto for b in blocos if not b.skip}
+    paginas = {0: (blocos, traducoes)}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert 'class="destaque"' in html
+    assert "paragrafo de dica" in html.lower()
+    assert "comum de corpo" in html.lower()
+    doc.close()
+
+
+def test_link_do_bloco_ignora_url_que_cobre_so_uma_fracao_pequena():
+    from atlas.traducao.editorial_html import _link_do_bloco
+    from atlas.traducao.extracao import BlocoTraducao
+
+    # parágrafo de 5 linhas; só a última linha (uma URL) tem link — não deve
+    # fazer o PARÁGRAFO INTEIRO virar <a> (ADR-0041 fix).
+    bloco = BlocoTraducao(id=1, pagina=0, bbox=(102.0, 148.0, 474.0, 210.0), texto="...")
+    links = [(fitz.Rect(102.0, 198.0, 270.0, 210.0), "uri", "http://example.com/docs")]
+    assert _link_do_bloco(bloco, links) is None
+
+
+def test_link_do_bloco_aceita_link_que_cobre_a_maior_parte_do_bloco():
+    from atlas.traducao.editorial_html import _link_do_bloco
+    from atlas.traducao.extracao import BlocoTraducao
+
+    # título/legenda de 1 linha cujo link cobre quase todo o bbox — deve
+    # continuar funcionando (não regride o caso normal).
+    bloco = BlocoTraducao(id=1, pagina=0, bbox=(100.0, 100.0, 300.0, 112.0), texto="Título")
+    links = [(fitz.Rect(100.0, 100.0, 300.0, 112.0), "uri", "http://example.com")]
+    assert _link_do_bloco(bloco, links) == ("uri", "http://example.com")
 
 
 def test_regressao_nenhum_texto_e_perdido_no_render(tmp_path):

@@ -245,6 +245,44 @@ def _renderizar_diagrama(page, regiao: fitz.Rect) -> str:
     return "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
 
 
+def _regioes_destaque(page, blocos: list, ids_diagrama: set) -> list[tuple]:
+    """Detecta caixas de destaque (callout/tip/nota) do original: uma forma com
+    PREENCHIMENTO (fundo colorido/cinza) que envolve prosa — diferente de um
+    diagrama (rótulos curtos e desconexos, ``_regioes_diagrama``): aqui exige
+    pelo menos um bloco de frase de verdade (>=6 palavras). Os blocos
+    continuam sendo traduzidos/renderizados normalmente como ``<p>``/``<li>``
+    — só ganham um contêiner com fundo/borda (``.destaque``) em vez de se
+    perderem soltos no corpo (ADR-0041 fix)."""
+    try:
+        desenhos = page.get_drawings()
+    except Exception:  # noqa: BLE001
+        return []
+    retangulos = [
+        fitz.Rect(d["rect"])
+        for d in desenhos
+        if d.get("rect") is not None and d.get("fill") is not None
+    ]
+    if not retangulos:
+        return []
+    regioes = _mesclar_retangulos(retangulos)
+    out = []
+    for reg in regioes:
+        if reg.width < _LARGURA_MIN_REGIAO or reg.height < _ALTURA_MIN_REGIAO:
+            continue
+        contidos = [
+            b
+            for b in blocos
+            if b.bbox and b.id not in ids_diagrama and _fracao_contida(b.bbox, reg) > 0.6
+        ]
+        if not contidos:
+            continue
+        tem_frase = any(len(b.texto.split()) >= 6 for b in contidos)
+        if tem_frase:
+            contidos.sort(key=lambda b: b.bbox[1])
+            out.append((reg, contidos))
+    return out
+
+
 _CSS = """
 /* folio do original: régua fina no rodapé + "página | capítulo" (nº na borda
    externa, alternando recto/verso) — o "chartzinho" com capítulo + página. */
@@ -285,6 +323,10 @@ img {{ max-width: 100%; }}
 .rodape-nativo {{ margin-top: 1.1em; padding-top: .3em; border-top: 0.6pt solid #999;
                   font-size: 8pt; line-height: 1.25; }}
 .rodape-nativo p {{ margin: .12em 0; }}
+/* caixa de destaque (callout/tip/nota do original, ADR-0041) */
+.destaque {{ background: #f0f0f0; border: 0.6pt solid #ccc; border-radius: 4px;
+             padding: 10px 14px; margin: .6em 0; page-break-inside: avoid; }}
+.destaque p, .destaque li {{ margin: .2em 0; }}
 a {{ text-decoration: underline; }}
 /* sumário: rótulo + leader de pontos + número de página recalculado (E9-09) */
 p.toc {{ text-align: left; margin: .12em 0; }}
@@ -443,17 +485,30 @@ def _elemento_toc(texto: str, anchors: list) -> str:
     return "\n".join(linhas)
 
 
+_FRACAO_MIN_LINK = 0.5  # ADR-0041 fix: ver docstring de _link_do_bloco
+
+
 def _link_do_bloco(b, links: list[tuple]):
-    """Link cujo retângulo mais cobre o bloco (ou None)."""
+    """Link cujo retângulo mais cobre o bloco (ou None). Exige que o link cubra
+    ao menos ``_FRACAO_MIN_LINK`` da área do bloco — senão uma URL de UMA linha
+    dentro de um parágrafo de várias linhas faria o PARÁGRAFO INTEIRO virar
+    `<a>` (bug real: título/legenda de 1 linha cujo link já cobre quase tudo
+    continua funcionando; só o caso "link pontual dentro de prosa" é rejeitado,
+    ADR-0041 fix)."""
     if not b.bbox or not links:
         return None
     bx = fitz.Rect(b.bbox)
+    area_bloco = bx.width * bx.height
+    if area_bloco <= 0:
+        return None
     melhor, area = None, 0.0
     for r, tipo, alvo in links:
         inter = bx & r
         a = 0.0 if inter.is_empty else inter.width * inter.height
         if a > area:
             area, melhor = a, (tipo, alvo)
+    if area / area_bloco < _FRACAO_MIN_LINK:
+        return None
     return melhor if area > 0 else None
 
 
@@ -559,12 +614,16 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         # como parágrafos soltos e sem estrutura (ADR-0041 fix).
         diagramas = _regioes_diagrama(page, blocos)
         blocos_em_diagrama = {b.id for _reg, contidos in diagramas for b in contidos}
+        # caixas de destaque (callout/tip/nota, fundo colorido): os blocos
+        # continuam traduzidos normalmente, só ganham um contêiner (ADR-0041 fix).
+        destaques = _regioes_destaque(page, blocos, blocos_em_diagrama)
+        blocos_em_destaque = {b.id for _reg, contidos in destaques for b in contidos}
 
         # itens da página (blocos de texto + imagens) em ordem de leitura vertical.
         notas_pag: list[str] = []
         itens: list[tuple] = []
         for b in blocos:
-            if b.id in blocos_em_diagrama:
+            if b.id in blocos_em_diagrama or b.id in blocos_em_destaque:
                 continue
             if not (not b.skip or _estilo(b)["mono"]):
                 continue
@@ -578,6 +637,8 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             itens.append((y0, "img", (w, h, uri)))
         for reg, _contidos in diagramas:
             itens.append((reg.y0, "img", (reg.width, reg.height, _renderizar_diagrama(page, reg))))
+        for reg, contidos in destaques:
+            itens.append((reg.y0, "destaque", contidos))
         itens.sort(key=lambda it: it[0])
 
         for _y, tipo, obj in itens:
@@ -587,6 +648,37 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 pct = max(15, min(100, int(w / tw * 100))) if tw else 100
                 fecha_lista()
                 partes.append(f'<figure><img src="{uri}" style="width:{pct}%"></figure>')
+                continue
+            if tipo == "destaque":
+                fecha_lista()
+                partes.append('<div class="destaque">')
+                lista_local: str | None = None
+                for cb in obj:
+                    cest = _estilo(cb)
+                    ctexto = traducoes.get(cb.id) or cb.texto
+                    clink = _link_do_bloco(cb, links)
+                    if clink and clink[0] == "goto":
+                        destpage, pt = clink[1]
+                        alvo = _alvo_goto(paginas, destpage, pt)
+                        clink = ("goto", alvo) if alvo else None
+                    cel = _elemento(
+                        cb, ctexto, cest, body_sz, clusters, anchor=_anchor(idx, cb.id), link=clink
+                    )
+                    ctipo_li = _tipo_lista(cb.texto) if not cest["mono"] else None
+                    if ctipo_li and cel.startswith("<li"):
+                        if lista_local and lista_local != ctipo_li:
+                            partes.append("</ol>" if lista_local == "ol" else "</ul>")
+                            lista_local = None
+                        if not lista_local:
+                            partes.append("<ol>" if ctipo_li == "ol" else "<ul>")
+                            lista_local = ctipo_li
+                    elif lista_local:
+                        partes.append("</ol>" if lista_local == "ol" else "</ul>")
+                        lista_local = None
+                    partes.append(cel)
+                if lista_local:
+                    partes.append("</ol>" if lista_local == "ol" else "</ul>")
+                partes.append("</div>")
                 continue
             b = obj
             est = _estilo(b)
