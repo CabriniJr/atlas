@@ -93,6 +93,62 @@ def _marcar_enfase(spans: list[Span]) -> str:
     return " ".join(saida)
 
 
+_PALAVRAS_MIN_TITULO_EMBUTIDO = 3  # mínimo de palavras pro prefixo "parecer" um título
+_CHARS_MIN_CORPO_EMBUTIDO = 20  # mínimo de caracteres pro restante "parecer" um parágrafo
+
+
+def _e_upper(texto: str) -> bool:
+    """``True`` se não houver letra minúscula — spans só de pontuação/espaço
+    (ex. o "-" de "MULTI-TIER") não têm letra nenhuma e são compatíveis com
+    maiúsculo por vacuidade (não devem cortar a sequência de um heading)."""
+    return all(c.isupper() for c in texto if c.isalpha())
+
+
+def _dividir_por_titulo_embutido(spans: list[Span]) -> tuple[list[Span], list[Span]] | None:
+    """Um heading "run-in" (versalete colorido, ex. o estilo "SPLITTING MULTI-
+    TIER APPS..." da Manning) às vezes fica GRUDADO ao parágrafo seguinte no
+    mesmo "bloco" do PyMuPDF — sem quebra de linha real entre eles. Sem
+    dividir, o heading nunca vira um elemento próprio: fica mascarado dentro
+    do parágrafo (e a cor dominante do bloco inteiro decide, por peso de
+    caractere, se o resultado parece "todo azul" ou "todo preto" dependendo de
+    qual trecho é mais longo — bug real visto ao auditar Kubernetes in
+    Action). Detecta um prefixo de spans TODO MAIÚSCULO com uma cor uniforme
+    diferente da cor uniforme do restante — e divide em ``(spans_titulo,
+    spans_corpo)``. ``None`` se o bloco não tiver essa forma (a esmagadora
+    maioria dos blocos)."""
+    partes_validas = [s for s in spans if s.text.strip()]
+    if len(partes_validas) < 2:
+        return None
+    cor0 = partes_validas[0].color
+    corte = 0
+    for i, s in enumerate(partes_validas):
+        if not _e_upper(s.text) or s.color != cor0:
+            corte = i
+            break
+    else:
+        return None  # bloco inteiro é maiúsculo/uniforme — não é heading+corpo
+    titulo, corpo = partes_validas[:corte], partes_validas[corte:]
+    if not corpo or corpo[0].color == cor0:
+        return None
+    if len({s.color for s in corpo}) != 1:
+        return None  # corpo tem que ser uma cor só (senão pode ser link inline, etc.)
+    texto_titulo = _juntar_spans(titulo)
+    texto_corpo = _juntar_spans(corpo)
+    if len(texto_titulo.split()) < _PALAVRAS_MIN_TITULO_EMBUTIDO:
+        return None
+    if len(texto_corpo) < _CHARS_MIN_CORPO_EMBUTIDO:
+        return None
+    return titulo, corpo
+
+
+def _bbox_uniao_spans(spans: list[Span]) -> tuple[float, float, float, float]:
+    x0 = min(s.bbox[0] for s in spans)
+    y0 = min(s.bbox[1] for s in spans)
+    x1 = max(s.bbox[2] for s in spans)
+    y1 = max(s.bbox[3] for s in spans)
+    return (x0, y0, x1, y1)
+
+
 def classificar_papel(bloco: dict, largura_pagina: float) -> str:
     """Classifica o papel do bloco para o render editorial (ADR-0033).
 
@@ -112,10 +168,26 @@ def classificar_papel(bloco: dict, largura_pagina: float) -> str:
     return "encaixado"
 
 
+def _montar_bloco(
+    prox_id: int, pagina: int, bbox, spans: list[Span], n_linhas: int, largura_pagina: float
+) -> BlocoTraducao:
+    mono = bloco_e_mono(spans)
+    texto_plano = _juntar_spans(spans)
+    skip = mono or not _tem_letra(texto_plano)
+    texto = texto_plano if skip else _marcar_enfase(spans)
+    papel = classificar_papel(
+        {"texto": texto, "bbox": bbox, "n_linhas": n_linhas, "mono": mono}, largura_pagina
+    )
+    return BlocoTraducao(
+        id=prox_id, pagina=pagina, bbox=bbox, texto=texto, spans=spans, skip=skip, papel=papel
+    )
+
+
 def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
     d = page.get_text("dict")
     blocos: list[BlocoTraducao] = []
-    for bid, bloco in enumerate(d.get("blocks", [])):
+    prox_id = 0
+    for bloco in d.get("blocks", []):
         if "lines" not in bloco:  # bloco de imagem — ignora
             continue
         spans: list[Span] = []
@@ -133,24 +205,25 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
                 )
         if not spans:
             continue
-        mono = bloco_e_mono(spans)
-        texto_plano = _juntar_spans(spans)
-        skip = mono or not _tem_letra(texto_plano)
-        texto = texto_plano if skip else _marcar_enfase(spans)
-        papel = classificar_papel(
-            {"texto": texto, "bbox": tuple(bloco["bbox"]),
-             "n_linhas": len(bloco["lines"]), "mono": mono},
-            page.rect.width,
-        )
+        divisao = _dividir_por_titulo_embutido(spans)
+        if divisao:
+            for sub_spans in divisao:
+                blocos.append(
+                    _montar_bloco(
+                        prox_id,
+                        pagina,
+                        _bbox_uniao_spans(sub_spans),
+                        sub_spans,
+                        1,
+                        page.rect.width,
+                    )
+                )
+                prox_id += 1
+            continue
         blocos.append(
-            BlocoTraducao(
-                id=bid,
-                pagina=pagina,
-                bbox=tuple(bloco["bbox"]),
-                texto=texto,
-                spans=spans,
-                skip=skip,
-                papel=papel,
+            _montar_bloco(
+                prox_id, pagina, tuple(bloco["bbox"]), spans, len(bloco["lines"]), page.rect.width
             )
         )
+        prox_id += 1
     return blocos
