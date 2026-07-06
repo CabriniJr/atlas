@@ -176,6 +176,56 @@ def test_documento_recua_paragrafo_amostra_pequena_e_bloco():
     assert _documento_recua_paragrafo(paginas, ph=792.0) is False
 
 
+def _bloco_xy(x0, x1, y0):
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    sp = Span(text="w", bbox=(x0, y0, x1, y0 + 10), font="Times", size=10.0, color=0, flags=0)
+    return BlocoTraducao(id=1, pagina=0, bbox=(x0, y0, x1, y0 + 10), texto="w", spans=[sp])
+
+
+def test_limites_colunas_detecta_indice_multicoluna():
+    """Índice de 3 colunas: 3 bandas x, cada uma com vários blocos atravessando
+    a página → 2 fronteiras. Coluna única (prosa) → []."""
+    from atlas.traducao.editorial_html import _limites_colunas
+
+    pw, ph = 531.0, 666.0
+    # 3 colunas (x0≈66/206/346), 6 blocos cada, atravessando a página inteira
+    blocos = []
+    for col_x0, col_x1 in [(66, 190), (206, 330), (346, 465)]:
+        for k in range(6):
+            blocos.append(_bloco_xy(col_x0, col_x1, 60 + k * 90))
+    lim = _limites_colunas(blocos, pw, ph)
+    assert len(lim) == 2
+    assert 190 < lim[0] < 206 and 330 < lim[1] < 346
+
+
+def test_limites_colunas_prosa_coluna_unica_vazio():
+    from atlas.traducao.editorial_html import _limites_colunas
+
+    blocos = [_bloco_xy(72, 460, 60 + k * 50) for k in range(10)]
+    assert _limites_colunas(blocos, 531.0, 666.0) == []
+
+
+def test_limites_colunas_ignora_callout_lateral_curto():
+    """Listagem de código com callouts numa banda lateral CURTA (poucos blocos,
+    pouca altura) não é confundida com coluna (falso-positivo real, K8S p203)."""
+    from atlas.traducao.editorial_html import _limites_colunas
+
+    blocos = [_bloco_xy(93, 465, 60 + k * 40) for k in range(10)]  # corpo largo
+    blocos += [_bloco_xy(34, 76, 245 + k * 12) for k in range(4)]  # callout curto lateral
+    assert _limites_colunas(blocos, 531.0, 666.0) == []
+
+
+def test_coluna_de_mapeia_x_na_banda():
+    from atlas.traducao.editorial_html import _coluna_de
+
+    lim = [200.0, 340.0]
+    assert _coluna_de(100.0, lim) == 0
+    assert _coluna_de(250.0, lim) == 1
+    assert _coluna_de(400.0, lim) == 2
+    assert _coluna_de(150.0, []) == 0
+
+
 def test_termina_aberto_detecta_frase_cortada():
     from atlas.traducao.editorial_html import _termina_aberto
 

@@ -565,6 +565,53 @@ p.toc a::after, .toc-lin a::after, .toc-cap a::after {{
 """
 
 
+_COL_GAP_MIN = 0.018  # separador de coluna: vão vertical vazio >= 1.8% da largura
+_COL_MIN_BLOCOS = 5  # cada coluna precisa de vários blocos (não é um callout solto)
+_COL_MIN_ALTURA = 0.4  # cada coluna atravessa >= 40% da altura (índice preenche a página)
+
+
+def _limites_colunas(blocos: list, pw: float, ph: float) -> list[float]:
+    """Fronteiras x entre colunas numa página multi-coluna (índice remissivo), ou
+    ``[]`` (coluna única). Acha VÃOS verticais vazios entre os intervalos [x0,x1]
+    dos blocos; um vão só conta se cada banda resultante tem >= ``_COL_MIN_BLOCOS``
+    blocos atravessando >= ``_COL_MIN_ALTURA`` da altura — assim uma listagem de
+    código com callouts laterais (banda curta) NÃO é confundida com coluna
+    (achado real, auditoria visual, Kubernetes in Action: o índice de 3 colunas
+    saía intercalado, palavra por linha, ilegível)."""
+    uteis = [b for b in blocos if b.bbox and not b.skip]
+    if len(uteis) < _COL_MIN_BLOCOS * 2:
+        return []
+    intervalos = sorted((b.bbox[0], b.bbox[2]) for b in uteis)
+    gaps, cobertura = [], intervalos[0][1]
+    for x0, x1 in intervalos[1:]:
+        if x0 - cobertura > pw * _COL_GAP_MIN:
+            gaps.append((cobertura, x0))
+        cobertura = max(cobertura, x1)
+    limites = [(a + b) / 2 for a, b in gaps]
+    if not limites:
+        return []
+    bordas = [0.0, *limites, pw]
+    bandas: list[list] = [[] for _ in bordas[:-1]]
+    for b in uteis:
+        cx = (b.bbox[0] + b.bbox[2]) / 2
+        for i in range(len(bordas) - 1):
+            if bordas[i] <= cx < bordas[i + 1]:
+                bandas[i].append(b)
+                break
+    for banda in bandas:
+        if len(banda) < _COL_MIN_BLOCOS:
+            return []
+        ys = [b.bbox[1] for b in banda] + [b.bbox[3] for b in banda]
+        if max(ys) - min(ys) < ph * _COL_MIN_ALTURA:
+            return []
+    return limites
+
+
+def _coluna_de(x_centro: float, limites: list[float]) -> int:
+    """Índice da coluna (0 = mais à esquerda) que contém ``x_centro``."""
+    return sum(1 for lim in limites if x_centro >= lim)
+
+
 def _e_folio(b, ph: float) -> bool:
     """Bloco de margem (cabeça de página / número de página): linha curta na faixa
     superior/inferior. Não entra no corpo — vira elemento de margem repetido no CSS."""
@@ -1315,7 +1362,21 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             itens.append((reg.y0, "img", (reg.width, reg.height, _renderizar_diagrama(page, reg))))
         for reg, contidos in destaques:
             itens.append((reg.y0, "destaque", contidos))
-        itens.sort(key=lambda it: it[0])
+        # ordem de leitura: em página multi-coluna (índice remissivo), lê coluna
+        # por coluna (esquerda→direita, cima→baixo) em vez de intercalar por y —
+        # senão as 2-3 colunas do índice saíam misturadas, palavra por linha
+        # (achado real, auditoria visual, Kubernetes in Action). Página de coluna
+        # única (o normal) ⇒ limites vazio ⇒ ordena só por y0, como antes.
+        limites_col = _limites_colunas(
+            [b for b in blocos if b.bbox and not _e_folio(b, ph)], geo["pw"], ph
+        )
+
+        def _chave_ordem(it, _lim=limites_col):
+            y0, tipo, obj = it
+            cx = (obj.bbox[0] + obj.bbox[2]) / 2 if tipo == "b" and obj.bbox else 0.0
+            return (_coluna_de(cx, _lim), y0)
+
+        itens.sort(key=_chave_ordem)
 
         for _y, tipo, obj in itens:
             if tipo == "img":
