@@ -186,6 +186,21 @@ def test_termina_aberto_detecta_frase_cortada():
     assert _termina_aberto("Uma pergunta?") is False
 
 
+def test_limpar_espaco_pontuacao_remove_espaco_espurio():
+    """Achado real (auditoria visual, Observability Engineering): o join de spans
+    injetava espaço espúrio ("( www , docs , support )") — em pt-BR nunca há
+    espaço antes de vírgula/fecha-parêntese."""
+    from atlas.traducao.editorial_html import _limpar_espaco_pontuacao
+
+    assert _limpar_espaco_pontuacao("( www , docs , support )") == "(www, docs, support)"
+    assert _limpar_espaco_pontuacao("uma lista [ a , b ]") == "uma lista [a, b]"
+    # NÃO mexe em ! ? : (arriscado: identificadores, saída de código)
+    assert _limpar_espaco_pontuacao("em torno de !env") == "em torno de !env"
+    assert _limpar_espaco_pontuacao("6380 16504 ?   Sl") == "6380 16504 ?   Sl"
+    # texto normal intacto
+    assert _limpar_espaco_pontuacao("Uma frase (normal) aqui.") == "Uma frase (normal) aqui."
+
+
 def test_e_paragrafo_prosa_distingue_de_toc_e_heading():
     from atlas.traducao.editorial_html import _e_paragrafo_prosa
 

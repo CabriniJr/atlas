@@ -725,6 +725,20 @@ def _termina_aberto(texto: str) -> bool:
     return bool(t) and t[-1] not in _FIM_FRASE
 
 
+# espaço espúrio antes de pontuação de fechamento / depois de abertura — o
+# join de spans do original às vezes injeta um espaço onde não devia
+# ("( www , docs , support )"). Em pt-BR nunca há espaço antes de vírgula/
+# ponto-e-vírgula/fecha-parêntese, então limpar é seguro. NÃO inclui ! ? : —
+# arriscado ("de !env" com identificador, coluna "?" de saída de ps). Só prosa
+# (o `<pre>` de código sai antes, verbatim). Achado real, auditoria visual, OBS.
+_RE_ESPACO_ANTES_PONT = re.compile(r"[ \t]+([,;)\]}])")
+_RE_ESPACO_DEPOIS_ABRE = re.compile(r"([(\[{])[ \t]+")
+
+
+def _limpar_espaco_pontuacao(texto: str) -> str:
+    return _RE_ESPACO_DEPOIS_ABRE.sub(r"\1", _RE_ESPACO_ANTES_PONT.sub(r"\1", texto))
+
+
 def _e_paragrafo_prosa(el: str) -> bool:
     """``True`` se ``el`` é um ``<p>`` de prosa comum (não sumário, não nota) —
     tem tag ``<p`` e a abertura não carrega ``class`` (toc/rodapé têm classe)."""
@@ -1105,6 +1119,7 @@ def _elemento(
     pos_rotulo_css = "break-before:avoid;page-break-before:avoid;" if apos_rotulo else ""
     if est["mono"]:
         return f"<pre{ida}>{_e(b.texto)}</pre>"  # código: original, verbatim
+    texto = _limpar_espaco_pontuacao(texto)  # "( www , docs )" → "(www, docs)"
     # sumário: link interno + linha terminando em nº de página → regenera a página.
     if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
         rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
