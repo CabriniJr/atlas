@@ -711,6 +711,29 @@ def _comeca_minuscula(texto: str) -> bool:
     return False
 
 
+_FIM_FRASE = ".!?:;…"
+_FECHA_CITACAO = "\"'»”’)]}"
+
+
+def _termina_aberto(texto: str) -> bool:
+    """``True`` se ``texto`` termina NO MEIO de uma frase (sem pontuação final) —
+    sinal de que o parágrafo foi cortado pela quebra de página do original e
+    CONTINUA no bloco seguinte (achado real, auditoria visual, Observability
+    Engineering: "...recover above its target threshold. This" | "likely
+    occurs..." saíam como 2 parágrafos, com "This"/"Esse" órfão)."""
+    t = texto.rstrip().rstrip(_FECHA_CITACAO).rstrip()
+    return bool(t) and t[-1] not in _FIM_FRASE
+
+
+def _e_paragrafo_prosa(el: str) -> bool:
+    """``True`` se ``el`` é um ``<p>`` de prosa comum (não sumário, não nota) —
+    tem tag ``<p`` e a abertura não carrega ``class`` (toc/rodapé têm classe)."""
+    if not el.startswith("<p"):
+        return False
+    fim = el.find(">")
+    return fim > 0 and 'class="' not in el[:fim]
+
+
 _BULLETS = ("•", "◦", "▪", "-", "–", "—", "*")
 _RE_LISTA_NUM = re.compile(r"^\s*(\d+[.)]|[a-zA-Z][.)])\s+")
 
@@ -1189,6 +1212,9 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     pendente_notas: list[str] = []
     heading_aberto: str | None = None
     rotulo_capitulo_anterior = False  # ADR-0041: título logo após o rótulo não quebra de novo
+    # texto do último <p> de prosa emitido (ou None) — p/ grudar um parágrafo
+    # cortado pela virada de página do original no <p> anterior (ADR-0041).
+    ultimo_texto_p: str | None = None
 
     def _tag_heading(el: str) -> str | None:
         for tag in ("h1", "h2", "h3"):
@@ -1283,11 +1309,13 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 pct = max(15, min(100, int(w / tw * 100))) if tw else 100
                 fecha_lista()
                 heading_aberto = None
+                ultimo_texto_p = None
                 partes.append(f'<figure><img src="{uri}" style="width:{pct}%"></figure>')
                 continue
             if tipo == "destaque":
                 fecha_lista()
                 heading_aberto = None
+                ultimo_texto_p = None
                 partes.append('<div class="destaque">')
                 lista_local: str | None = None
                 for cb in obj:
@@ -1347,6 +1375,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 if _e_entrada_toc(b, ganchors, b.texto):
                     fecha_lista()
                     heading_aberto = None
+                    ultimo_texto_p = None
                     nivel_ind = nivel_indent(b.bbox[0], toc_niveis)
                     partes.append(_render_toc_bloco(texto, nivel_ind, ganchors, est))
                     continue
@@ -1379,9 +1408,11 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 fechamento = f"</{tag_atual}>"
                 conteudo_extra = el[el.index(">") + 1 : -len(fechamento)]
                 partes[-1] = partes[-1].removesuffix(fechamento) + " " + conteudo_extra + fechamento
+                ultimo_texto_p = None
                 continue
             if tipo_li and el.startswith("<li"):
                 heading_aberto = None
+                ultimo_texto_p = None
                 if lista_aberta and lista_aberta != tipo_li:
                     fecha_lista()
                 if not lista_aberta:
@@ -1403,10 +1434,29 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 if est["italic"]:
                     extra = f'<span class="it">{extra}</span>'
                 partes[-1] = partes[-1].removesuffix("</li>") + " " + extra + "</li>"
+                ultimo_texto_p = None
+            elif (
+                ultimo_texto_p is not None
+                and _e_paragrafo_prosa(el)
+                and partes
+                and _e_paragrafo_prosa(partes[-1])
+                and _termina_aberto(ultimo_texto_p)
+                and _comeca_minuscula(texto)
+            ):
+                # parágrafo cortado pela virada de página do original (bloco por
+                # página): o <p> anterior terminou no meio da frase e este começa
+                # em minúscula — gruda no anterior em vez de virar um <p> solto,
+                # com "This"/"Esse" órfão no fim da página (achado real, ADR-0041).
+                fecha_lista()
+                corpo_el = el[el.index(">") + 1 : -len("</p>")]
+                partes[-1] = partes[-1].removesuffix("</p>") + " " + corpo_el + "</p>"
+                ultimo_texto_p = f"{ultimo_texto_p} {texto}"
+                heading_aberto = None
             else:
                 fecha_lista()
                 heading_aberto = tag_atual
                 partes.append(el)
+                ultimo_texto_p = texto if _e_paragrafo_prosa(el) else None
         fecha_lista()
         if valor_folio_pagina and len(partes) > marca_pagina:
             partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))

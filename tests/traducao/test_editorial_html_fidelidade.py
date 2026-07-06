@@ -176,6 +176,90 @@ def test_documento_recua_paragrafo_amostra_pequena_e_bloco():
     assert _documento_recua_paragrafo(paginas, ph=792.0) is False
 
 
+def test_termina_aberto_detecta_frase_cortada():
+    from atlas.traducao.editorial_html import _termina_aberto
+
+    assert _termina_aberto("...recover above its target threshold. This") is True
+    assert _termina_aberto("...limiar-alvo. Esse") is True
+    assert _termina_aberto("Um parágrafo que termina bem.") is False
+    assert _termina_aberto('Ele disse "pronto."') is False  # pontuação sob aspas
+    assert _termina_aberto("Uma pergunta?") is False
+
+
+def test_e_paragrafo_prosa_distingue_de_toc_e_heading():
+    from atlas.traducao.editorial_html import _e_paragrafo_prosa
+
+    assert _e_paragrafo_prosa('<p id="u1_2" style="x">texto</p>') is True
+    assert _e_paragrafo_prosa('<p class="toc-lin">x</p>') is False
+    assert _e_paragrafo_prosa("<h2>Título</h2>") is False
+    assert _e_paragrafo_prosa("<li>item</li>") is False
+
+
+def test_montar_html_gruda_paragrafo_cortado_na_virada_de_pagina():
+    """Achado real (auditoria visual, Observability Engineering): um parágrafo
+    que atravessa a quebra de página do original vira 2 blocos (1 por página) e
+    saía como 2 <p>, com a última palavra ("This"/"Esse") órfã no fim da página
+    e a frase cortada. Gruda num <p> só quando o anterior termina aberto e este
+    começa em minúscula."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+
+    def _bloco_p(pid, pagina, texto, y0):
+        sp = Span(
+            text=texto, bbox=(72, y0, 400, y0 + 12), font="Times", size=10.0, color=0, flags=0
+        )
+        return BlocoTraducao(
+            id=pid, pagina=pagina, bbox=(72, y0, 400, y0 + 12), texto=texto, spans=[sp]
+        )
+
+    p0 = [
+        _bloco_p(0, 0, "Um parágrafo anterior que termina normalmente.", 100),
+        _bloco_p(1, 0, "O SLO começou a se recuperar acima do limiar-alvo. Esse", 200),
+    ]
+    p1 = [_bloco_p(0, 1, "provavelmente ocorre porque houve uma grande queda.", 100)]
+    paginas = {0: (p0, {b.id: b.texto for b in p0}), 1: (p1, {b.id: b.texto for b in p1})}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert "limiar-alvo. Esse provavelmente ocorre" in html  # grudado num <p> só
+    assert "Esse</p>" not in html  # não ficou órfão no fim de um <p>
+    doc.close()
+
+
+def test_montar_html_nao_gruda_paragrafos_distintos():
+    """Não pode grudar quando o anterior TERMINA a frase e o próximo começa em
+    maiúscula (parágrafos de verdade, separados)."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    doc.new_page()
+    doc.new_page()
+
+    def _bloco_p(pid, pagina, texto, y0):
+        sp = Span(
+            text=texto, bbox=(72, y0, 400, y0 + 12), font="Times", size=10.0, color=0, flags=0
+        )
+        return BlocoTraducao(
+            id=pid, pagina=pagina, bbox=(72, y0, 400, y0 + 12), texto=texto, spans=[sp]
+        )
+
+    p0 = [_bloco_p(0, 0, "Este parágrafo termina com ponto final.", 200)]
+    p1 = [_bloco_p(0, 1, "Este é um novo parágrafo que começa em maiúscula.", 100)]
+    paginas = {0: (p0, {b.id: b.texto for b in p0}), 1: (p1, {b.id: b.texto for b in p1})}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+    assert html.count("<p ") >= 2  # continuam 2 parágrafos separados
+    doc.close()
+
+
 def test_tipo_lista_reconhece_numerado_e_alfabetico():
     from atlas.traducao.editorial_html import _tipo_lista
 
