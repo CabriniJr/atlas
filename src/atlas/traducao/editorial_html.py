@@ -1109,6 +1109,90 @@ def _e_entrada_toc(b, ganchors: list, texto: str) -> bool:
     return bool(_RE_TOC_FIM.search(limpo)) and len(limpo.split()) <= 18
 
 
+# ── Níveis de outline (marcadores/bookmarks do PDF) — ADR-0046 ───────────────
+# O WeasyPrint deriva o outline do PDF de h1/h2/h3 (nível = 1/2/3). Só isso deixa
+# a hierarquia plana/torta em livros com PARTES: no O'Reilly, "Parte I" e
+# "Capítulo 1" são AMBOS h1 (mesmo tamanho, distintos só pelo rótulo) e caem no
+# mesmo nível; e o rótulo solto "PARTE I" (linha pequena acima do título da
+# parte) polui o outline com uma entrada órfã. Aqui reatribuímos `bookmark-level`
+# por PAPEL estrutural (parte > capítulo > seção > subseção), desacoplado do
+# tamanho de fonte — e SÓ quando o livro tem partes detectáveis como heading
+# (senão mantém o padrão tag→nível do WeasyPrint, sem arriscar regressão em livro
+# cujas partes não são extraíveis, ex.: Kubernetes in Action, cujos divisores de
+# parte são páginas rasterizadas). O ajuste é só de metadado de navegação — não
+# altera o visual (tag/tamanho/quebra do heading seguem iguais).
+_RE_OUT_PARTE = re.compile(r"^\s*(PARTE|PART)\s+([IVXLCDM]+|\d+)\b", re.IGNORECASE)
+_RE_OUT_PARTE_ROTULO = re.compile(r"^\s*(PARTE|PART)\s+([IVXLCDM]+|\d+)\s*[.:]?\s*$", re.IGNORECASE)
+_RE_OUT_CAP = re.compile(r"^\s*(CAP[IÍ]TULO|CHAPTER|AP[EÊ]NDICE|APPENDIX)\b", re.IGNORECASE)
+_RANK_TAG_OUT = {"h1": 0, "h2": 1, "h3": 2}
+
+
+def _tag_heading_frag(frag: str) -> str | None:
+    """Nível de heading (h1/h2/h3) do fragmento HTML, ou None se não for heading."""
+    for tag in ("h1", "h2", "h3"):
+        if frag.startswith(f"<{tag}"):
+            return tag
+    return None
+
+
+def _texto_frag(frag: str) -> str:
+    """Texto plano (sem tags, entidades resolvidas) de um fragmento HTML."""
+    return _html.unescape(re.sub("<[^>]+>", "", frag)).strip()
+
+
+def _injetar_bookmark_level(frag: str, nivel: int | None) -> str:
+    """Injeta ``bookmark-level:N`` (ou ``none``) no style inline do heading —
+    o WeasyPrint honra a propriedade e monta o outline por ela."""
+    regra = f"bookmark-level:{'none' if nivel is None else nivel};"
+    if 'style="' in frag:
+        return frag.replace('style="', f'style="{regra}', 1)
+    fim = frag.index(">")  # heading sem style (raro): abre um
+    return frag[:fim] + f' style="{regra}"' + frag[fim:]
+
+
+def _atribuir_niveis_outline(partes: list[str]) -> None:
+    """Reatribui ``bookmark-level`` dos headings por papel estrutural (ADR-0046).
+    Opera in-place sobre a lista de fragmentos. No-op se o documento não tem
+    partes detectáveis como heading (mantém o outline padrão do WeasyPrint)."""
+    idxs = [i for i, f in enumerate(partes) if _tag_heading_frag(f)]
+    if not idxs:
+        return
+    tag = {i: _tag_heading_frag(partes[i]) for i in idxs}
+    txt = {i: _texto_frag(partes[i]) for i in idxs}
+    papel: dict[int, str] = {}
+    for i in idxs:
+        if _RE_OUT_PARTE.match(txt[i]):
+            papel[i] = "parte"
+        elif _RE_OUT_CAP.match(txt[i]):
+            papel[i] = "cap"
+        else:
+            papel[i] = "secao"
+    if not any(p == "parte" for p in papel.values()):
+        return  # sem partes: mantém tag→nível (não arrisca regressão)
+    suprimir: set[int] = set()
+    # rótulo de parte solto ("parte i") seguido de um título MAIOR: o título é a
+    # Parte de verdade; o rótulo vira cosmético (sem bookmark, senão duplica).
+    for k, i in enumerate(idxs):
+        if papel[i] == "parte" and _RE_OUT_PARTE_ROTULO.match(txt[i]) and k + 1 < len(idxs):
+            j = idxs[k + 1]
+            if papel[j] == "secao" and _RANK_TAG_OUT[tag[j]] < _RANK_TAG_OUT[tag[i]]:
+                suprimir.add(i)
+                papel[j] = "parte"
+    # tiers de tamanho entre os headings SEM papel (seção/subseção): a maior vira
+    # o nível logo abaixo do capítulo, e as menores descem a partir daí.
+    tags_secao = sorted({tag[i] for i in idxs if papel[i] == "secao"}, key=_RANK_TAG_OUT.get)
+    for i in idxs:
+        if i in suprimir:
+            nivel: int | None = None
+        elif papel[i] == "parte":
+            nivel = 1
+        elif papel[i] == "cap":
+            nivel = 2
+        else:
+            nivel = 2 + tags_secao.index(tag[i])
+        partes[i] = _injetar_bookmark_level(partes[i], nivel)
+
+
 _FRACAO_MIN_LINK = 0.5  # ADR-0041 fix: ver docstring de _link_do_bloco
 
 
@@ -1585,6 +1669,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 partes.insert(marca_pagina + 1, f'<img class="cap-numeral" src="{numeral}" alt="">')
                 partes[marca_pagina + 2] = _suprimir_break_before(partes[marca_pagina + 2])
     flush_notas()  # nota(s) pendente(s) da última página (ADR-0041)
+    _atribuir_niveis_outline(partes)  # outline Parte>Cap>Seção por papel (ADR-0046)
 
     fontes = extrair_fontes(doc)
     p_estilo = _CSS_P_RECUO if _documento_recua_paragrafo(paginas, ph) else _CSS_P_BLOCO
