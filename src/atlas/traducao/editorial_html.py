@@ -548,7 +548,8 @@ figure.pagina-imagem {{ margin: 0; break-before: page; break-after: page;
 figure.pagina-imagem img {{ width: 100%; }}
 /* numeral decorativo do abre-capítulo (Manning): grande, cinza claro, flutua no
    topo à direita; a margem negativa o alinha ao lado do título (ADR-0041). */
-.cap-numeral {{ float: right; width: 78pt; margin: -0.6em 0 .2em 1em; }}
+.cap-abre {{ break-before: page; page-break-before: always; height: 0; margin: 0; }}
+.cap-numeral {{ float: right; width: 84pt; margin: 0 0 .2em 1em; }}
 .it {{ font-style: italic; }} .bd {{ font-weight: bold; }}
 /* versalete: cabeçalho run-in / rótulo que era CAIXA ALTA no original — o texto
    fica em caixa-baixa (nada de maiúscula literal) e o glifo maiúsculo vem do
@@ -559,7 +560,11 @@ figure.pagina-imagem img {{ width: 100%; }}
 .rodape-nativo p {{ margin: .12em 0; }}
 /* caixa de destaque (callout/tip/nota do original, ADR-0041) */
 .destaque {{ background: #f0f0f0; border: 0.6pt solid #ccc; border-radius: 4px;
-             padding: 10px 14px; margin: .6em 0; page-break-inside: avoid; }}
+             padding: 10px 14px; margin: .6em 0 1em 0; page-break-inside: avoid; }}
+/* box logo após o título do capítulo (abre-capítulo Manning) respira do título;
+   o corpo depois do box também tem distância (achado real, usuário). */
+h1 + .destaque, h2 + .destaque, h3 + .destaque {{ margin-top: 1.6em; }}
+.destaque + p {{ margin-top: .8em; }}
 .destaque p, .destaque li {{ margin: .2em 0; }}
 /* título do box (ex.: "This chapter covers") respira do conteúdo — no
    original há um bom espaço entre o rótulo e a lista (achado real, auditoria
@@ -782,6 +787,20 @@ _RE_ESPACO_DEPOIS_ABRE = re.compile(r"([(\[{])[ \t]+")
 
 def _limpar_espaco_pontuacao(texto: str) -> str:
     return _RE_ESPACO_DEPOIS_ABRE.sub(r"\1", _RE_ESPACO_ANTES_PONT.sub(r"\1", texto))
+
+
+def _suprimir_break_before(el: str) -> str:
+    """Injeta ``break-before:avoid`` inline na abertura de ``el`` (vence a regra
+    de tag no <style>) — usado no título logo após o numeral decorativo, que já
+    abriu a página (ADR-0041)."""
+    fim = el.find(">")
+    if fim < 0:
+        return el
+    supr = "break-before:avoid;page-break-before:avoid;"
+    m = re.search(r'style="', el[:fim])
+    if m:
+        return el[: m.end()] + supr + el[m.end() :]
+    return el[:fim] + f' style="{supr}"' + el[fim:]
 
 
 def _e_paragrafo_prosa(el: str) -> bool:
@@ -1545,13 +1564,21 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         fecha_lista()
         if valor_folio_pagina and len(partes) > marca_pagina:
             partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))
-        # numeral decorativo do abre-capítulo (Manning): entra flutuando à direita
-        # LOGO APÓS o 1º elemento da página (o título), pra ficar ao lado dele no
-        # topo — depois da quebra de página do título, sem interferir na quebra.
+        # numeral decorativo do abre-capítulo (Manning): entra ANTES do 1º
+        # elemento (o título), flutuando à direita NO TOPO da página — o título
+        # flui à esquerda dele, como no original. O numeral leva o break-before
+        # (abre a página); o break-before do título é suprimido (senão abriria
+        # 2ª página, deixando o numeral sozinho). ADR-0041.
         if len(partes) > marca_pagina:
             numeral = _numeral_decorativo(page)
             if numeral:
+                # elemento de fluxo com break-before (o float NÃO honra
+                # break-before — abre a página aqui); depois o numeral flutua no
+                # topo à direita e o título flui à esquerda, com seu próprio
+                # break suprimido (senão abriria 2ª página).
+                partes.insert(marca_pagina, '<div class="cap-abre"></div>')
                 partes.insert(marca_pagina + 1, f'<img class="cap-numeral" src="{numeral}" alt="">')
+                partes[marca_pagina + 2] = _suprimir_break_before(partes[marca_pagina + 2])
     flush_notas()  # nota(s) pendente(s) da última página (ADR-0041)
 
     fontes = extrair_fontes(doc)
