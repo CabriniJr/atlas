@@ -218,6 +218,30 @@ def _rasterizar_pagina(page, zoom: float = 2.0) -> str | None:
         return None
 
 
+def _regua_sob_titulo(page) -> bool:
+    """``True`` se o abre-capítulo do original tem a RÉGUA (linha horizontal fina)
+    logo abaixo do título — o traço característico do template O'Reilly (ex.:
+    Prometheus). Detecção fiel (não inventa a régua): acha o MAIOR span de texto
+    da página (o título de capítulo, >= 20pt) e exige um traço horizontal largo
+    (> 50% da página) e fino (< 3pt) numa faixa curta logo abaixo da base dele.
+    Reproduzido como ``border-bottom`` no heading (ADR-0047)."""
+    dd = page.get_text("dict")
+    maxsz, ybase = 0.0, None
+    for bl in dd["blocks"]:
+        for ln in bl.get("lines", []):
+            for s in ln["spans"]:
+                if s["text"].strip() and s["size"] > maxsz:
+                    maxsz, ybase = s["size"], ln["bbox"][3]
+    if maxsz < 20 or ybase is None:
+        return False
+    pw = page.rect.width
+    for d in page.get_drawings():
+        r = d["rect"]
+        if r.width > pw * 0.5 and r.height < 3 and 0 <= r.y0 - ybase <= 24:
+            return True
+    return False
+
+
 def _numeral_decorativo(page) -> str | None:
     """Data-URI do grande numeral decorativo cinza do abre-capítulo (Manning),
     ou ``None``. É arte vetorial (não texto/imagem): um glifo grande, cinza claro
@@ -789,6 +813,39 @@ def _limpar_espaco_pontuacao(texto: str) -> str:
     return _RE_ESPACO_DEPOIS_ABRE.sub(r"\1", _RE_ESPACO_ANTES_PONT.sub(r"\1", texto))
 
 
+_SOBRE = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")  # dígito → sobrescrito Unicode
+
+
+def _marcadores_sobrescrito(b) -> list[str]:
+    """Valores dos spans em SOBRESCRITO (flag bit0 do fitz) que são só dígitos —
+    ou seja, marcadores de nota de rodapé ("member¹"). O texto do span vem
+    concatenado no bloco e some no meio da prosa como um número solto na
+    linha de base ("membro 1 da CNCF"); aqui o identificamos p/ re-elevar."""
+    return [
+        s.text.strip()
+        for s in b.spans
+        if (s.flags & 1) and s.text.strip().isdigit() and 1 <= len(s.text.strip()) <= 3
+    ]
+
+
+def _aplicar_sobrescritos(texto: str, b) -> str:
+    """Re-eleva marcadores de nota de rodapé a sobrescrito Unicode na prosa já
+    traduzida (ADR-0047): o span sobrescrito do original vira um número solto na
+    linha de base depois que o texto é concatenado/traduzido. Sem markup nem
+    re-tradução — troca a 1ª ocorrência isolada de cada marcador (não colada a
+    outro dígito, p/ não pegar "1" dentro de "2016") pelo glifo sobrescrito,
+    comendo um espaço antes ("membro 1 da" → "membro¹ da")."""
+    marcadores = _marcadores_sobrescrito(b)
+    if not marcadores:
+        return texto
+    for v in marcadores:
+        pat = re.compile(r"[ \u00a0\u2009]?(?<!\d)" + re.escape(v) + r"(?!\d)")
+        m = pat.search(texto)
+        if m:
+            texto = texto[: m.start()] + v.translate(_SOBRE) + texto[m.end() :]
+    return texto
+
+
 def _suprimir_break_before(el: str) -> str:
     """Injeta ``break-before:avoid`` inline na abertura de ``el`` (vence a regra
     de tag no <style>) — usado no título logo após o numeral decorativo, que já
@@ -1140,14 +1197,19 @@ def _texto_frag(frag: str) -> str:
     return _html.unescape(re.sub("<[^>]+>", "", frag)).strip()
 
 
-def _injetar_bookmark_level(frag: str, nivel: int | None) -> str:
-    """Injeta ``bookmark-level:N`` (ou ``none``) no style inline do heading —
-    o WeasyPrint honra a propriedade e monta o outline por ela."""
-    regra = f"bookmark-level:{'none' if nivel is None else nivel};"
+def _injetar_estilo_heading(frag: str, regra: str) -> str:
+    """Injeta uma ``regra`` CSS no style inline do heading (abre um style se não
+    houver). Usado p/ bookmark-level (outline) e border-bottom (régua)."""
     if 'style="' in frag:
         return frag.replace('style="', f'style="{regra}', 1)
     fim = frag.index(">")  # heading sem style (raro): abre um
     return frag[:fim] + f' style="{regra}"' + frag[fim:]
+
+
+def _injetar_bookmark_level(frag: str, nivel: int | None) -> str:
+    """Injeta ``bookmark-level:N`` (ou ``none``) no style inline do heading —
+    o WeasyPrint honra a propriedade e monta o outline por ela."""
+    return _injetar_estilo_heading(frag, f"bookmark-level:{'none' if nivel is None else nivel};")
 
 
 def _atribuir_niveis_outline(partes: list[str]) -> None:
@@ -1273,6 +1335,7 @@ def _elemento(
     if est["mono"]:
         return f"<pre{ida}>{_e(b.texto)}</pre>"  # código: original, verbatim
     texto = _limpar_espaco_pontuacao(texto)  # "( www , docs )" → "(www, docs)"
+    texto = _aplicar_sobrescritos(texto, b)  # nota de rodapé: "membro 1 da" → "membro¹ da"
     # sumário: link interno + linha terminando em nº de página → regenera a página.
     if link and link[0] == "goto" and link[1] and _RE_TOC_FIM.search(texto):
         rotulo = _e(_RE_TOC_FIM.sub("", texto).rstrip(" .·•…-–—\t"))
@@ -1653,6 +1716,16 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         fecha_lista()
         if valor_folio_pagina and len(partes) > marca_pagina:
             partes[marca_pagina] = _injetar_string_set(partes[marca_pagina], _e(valor_folio_pagina))
+        # régua do abre-capítulo (O'Reilly/Prometheus): border-bottom no título
+        # se o original tem a linha fina logo abaixo dele (ADR-0047).
+        if (
+            len(partes) > marca_pagina
+            and _tag_heading_frag(partes[marca_pagina])
+            and _regua_sob_titulo(page)
+        ):
+            partes[marca_pagina] = _injetar_estilo_heading(
+                partes[marca_pagina], "border-bottom:1.1pt solid currentColor;padding-bottom:.12em;"
+            )
         # numeral decorativo do abre-capítulo (Manning): entra ANTES do 1º
         # elemento (o título), flutuando à direita NO TOPO da página — o título
         # flui à esquerda dele, como no original. O numeral leva o break-before
