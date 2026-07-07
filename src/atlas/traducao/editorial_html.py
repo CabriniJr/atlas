@@ -1089,7 +1089,12 @@ def _e_entrada_toc(b, ganchors: list, texto: str) -> bool:
     Guarda contra falso-positivo: uma entrada de TOC é CURTA (título), não um
     parágrafo de prosa que por acaso tem um link cruzado e termina em número."""
     limpo = _limpar_toc(texto)
-    if _RE_PARTE_TOC.match(limpo) and len(limpo.split()) <= 8:
+    # cabeçalho de PARTE no sumário SÓ conta como entrada de TOC se tiver link
+    # interno (goto) OU leader — senão uma DIVISÓRIA de parte no corpo ("PART
+    # III", sem link) era roteada pro render de TOC e perdia o break-before de
+    # rótulo (ficava órfã no fim da página anterior — achado real, OBS).
+    tem_ctx_toc = bool(ganchors) or bool(_RE_LEADER_TOC.search(texto))
+    if tem_ctx_toc and _RE_PARTE_TOC.match(limpo) and len(limpo.split()) <= 8:
         return True
     # leader de pontos LITERAL no original é sinal forte de sumário — cobre o
     # front matter com página romana ("Foreword. . . . xi") e o capítulo O'Reilly

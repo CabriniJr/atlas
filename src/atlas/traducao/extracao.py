@@ -309,6 +309,20 @@ def _e_duplicata(span: Span, vistos: list[Span]) -> bool:
     return False
 
 
+# rótulo de PARTE isolado ("PART III"/"PARTE III"/"PART 2") — SÓ o rótulo, sem
+# título junto (a divisória de parte no corpo). Sem número/título depois.
+_RE_ROTULO_PARTE = re.compile(r"^\s*(PART|PARTE)\s+([IVXLCDM]+|\d+)\s*$", re.IGNORECASE)
+
+
+def _e_rotulo_parte(texto: str) -> bool:
+    """``True`` se o bloco é só o rótulo de uma divisória de parte ("PART III").
+    Marcado como ``rotulo_capitulo`` pra abrir a página junto com o título da
+    parte, em vez de ficar órfão no fim da página anterior (o rótulo tem tamanho
+    de seção, então caía como h3 sem quebra — achado real, Observability
+    Engineering: "PARTE III" sobrava no fim da página da Conclusão)."""
+    return bool(_RE_ROTULO_PARTE.match(texto))
+
+
 _RE_FIM_PAGINA_IDX = re.compile(r"\d[\d\s,;.–—-]*$")
 
 
@@ -428,4 +442,7 @@ def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:
             )
         )
         prox_id += 1
+    for b in blocos:
+        if _e_rotulo_parte(b.texto):
+            b.papel = "rotulo_capitulo"
     return blocos
