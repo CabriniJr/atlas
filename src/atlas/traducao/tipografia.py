@@ -64,6 +64,54 @@ def clusters_titulo(
     return [c[0] for c in clusters[:max_niveis]]
 
 
+def limites_colunas(
+    retangulos: list[tuple[float, float, float, float]],
+    pw: float,
+    ph: float,
+    min_gap: float = 0.018,
+    min_blocos: int = 5,
+    min_altura: float = 0.4,
+) -> list[float]:
+    """Fronteiras x entre colunas de uma página multi-coluna (índice remissivo),
+    ou ``[]`` (coluna única). ``retangulos`` = ``[(x0, y0, x1, y1)]``. Acha VÃOS
+    verticais vazios entre os intervalos [x0,x1]; um vão só conta se cada banda
+    resultante tem >= ``min_blocos`` retângulos atravessando >= ``min_altura`` da
+    altura — assim listagem de código com callout lateral curto NÃO vira coluna
+    (achado real, Kubernetes in Action). Motor puro (usado na extração e no
+    render)."""
+    if len(retangulos) < min_blocos * 2:
+        return []
+    inter = sorted((r[0], r[2]) for r in retangulos)
+    gaps, cobertura = [], inter[0][1]
+    for x0, x1 in inter[1:]:
+        if x0 - cobertura > pw * min_gap:
+            gaps.append((cobertura, x0))
+        cobertura = max(cobertura, x1)
+    limites = [(a + b) / 2 for a, b in gaps]
+    if not limites:
+        return []
+    bordas = [0.0, *limites, pw]
+    bandas: list[list] = [[] for _ in bordas[:-1]]
+    for r in retangulos:
+        cx = (r[0] + r[2]) / 2
+        for i in range(len(bordas) - 1):
+            if bordas[i] <= cx < bordas[i + 1]:
+                bandas[i].append(r)
+                break
+    for banda in bandas:
+        if len(banda) < min_blocos:
+            return []
+        ys = [r[1] for r in banda] + [r[3] for r in banda]
+        if max(ys) - min(ys) < ph * min_altura:
+            return []
+    return limites
+
+
+def coluna_de(x_centro: float, limites: list[float]) -> int:
+    """Índice da coluna (0 = mais à esquerda) que contém ``x_centro``."""
+    return sum(1 for lim in limites if x_centro >= lim)
+
+
 _TOKENS_MONO = ("mono", "courier", "consol", "menlo", "inconsolata", "source code")
 _TOKENS_SANS = (
     "myriad",

@@ -6,6 +6,7 @@ tradução). Marca ``skip=True`` para código (fonte monospace) e blocos sem let
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from atlas.traducao.tipografia import bloco_e_mono
@@ -32,7 +33,8 @@ class BlocoTraducao:
     texto: str
     spans: list[Span] = field(default_factory=list)
     skip: bool = False
-    papel: str = "encaixado"  # ADR-0033: prosa | encaixado | imutavel
+    papel: str = "encaixado"  # ADR-0033: prosa | encaixado | imutavel | indice
+    indent: float = 0.0  # recuo (pt) dentro da coluna — só p/ entrada de índice
 
 
 def _tem_letra(texto: str) -> bool:
@@ -305,6 +307,46 @@ def _e_duplicata(span: Span, vistos: list[Span]) -> bool:
         ):
             return True
     return False
+
+
+_RE_FIM_PAGINA_IDX = re.compile(r"\d[\d\s,;.–—-]*$")
+
+
+def _termina_com_pagina(texto: str) -> bool:
+    """``True`` se a linha termina numa referência de página (número/faixa) — o
+    fim de uma entrada de índice remissivo."""
+    return bool(_RE_FIM_PAGINA_IDX.search(texto.strip()))
+
+
+def agrupar_entradas_indice(
+    linhas: list[tuple[float, float, str]], tol: float = 3.0
+) -> list[tuple[float, float, str]]:
+    """Agrupa as LINHAS de uma coluna do índice remissivo em ENTRADAS lógicas
+    (termo + sub-entrada + refs de página), juntando as linhas de continuação
+    (quebradas pela largura estreita da coluna) de volta na entrada. Uma entrada
+    fecha quando termina numa referência de página; um termo principal (no recuo
+    MÍNIMO da coluna) é entrada própria — não gruda com a sub-entrada seguinte.
+
+    ``linhas`` = ``[(x0, y0, texto)]`` em ordem de leitura (y crescente). Devolve
+    ``[(x0, y0, texto)]`` da 1ª linha de cada entrada — o x0 vira o nível de
+    indentação no render. Sem isso o índice saía fragmentado, linha por linha,
+    cada fragmento traduzido solto e ilegível (achado real, Kubernetes in
+    Action)."""
+    linhas = [(x, y, t.strip()) for x, y, t in linhas if t.strip()]
+    if not linhas:
+        return []
+    min_x = min(round(x) for x, _, _ in linhas)
+    entradas: list[tuple[float, float, str]] = []
+    cur_x, cur_y, cur_t = linhas[0]
+    for x, y, txt in linhas[1:]:
+        junta = not _termina_com_pagina(cur_t) and round(cur_x) > min_x and x > cur_x + tol
+        if junta:
+            cur_t = f"{cur_t} {txt}"
+        else:
+            entradas.append((cur_x, cur_y, cur_t))
+            cur_x, cur_y, cur_t = x, y, txt
+    entradas.append((cur_x, cur_y, cur_t))
+    return entradas
 
 
 def extrair_pagina(page, pagina: int) -> list[BlocoTraducao]:

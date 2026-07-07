@@ -28,12 +28,14 @@ from atlas.traducao.tipografia import (
     agrupar_niveis,
     bloco_e_mono,
     clusters_titulo,
+    coluna_de,
     converter_enfase,
     dividir_versalete,
     extrair_fontes,
     familia_fonte,
     fonte_seminegrito,
     gerar_font_faces,
+    limites_colunas,
     nivel_indent,
     nivel_titulo,
     taxa_abre_pagina,
@@ -183,6 +185,36 @@ def _rasterizar_drawing(d) -> str | None:
         pix = npg.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=True)
         return "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
     except Exception:  # noqa: BLE001 — decorativo é best-effort; falha ⇒ sem numeral
+        return None
+
+
+_FRACAO_CAPA = 0.55  # imagens cobrindo >= 55% da página ⇒ é capa/página-imagem
+
+
+def _e_pagina_imagem(page) -> bool:
+    """``True`` se a página é dominada por imagem (capa, contracapa, página de
+    ilustração): as imagens cobrem >= ``_FRACAO_CAPA`` da área. Essas páginas
+    devem virar UMA imagem full-page — refluir os pedaços (8 imagens + título)
+    espalha a capa por várias páginas (achado real, Kubernetes in Action)."""
+    area_pagina = page.rect.width * page.rect.height
+    if area_pagina <= 0:
+        return False
+    area_img = 0.0
+    for img in page.get_images(full=True):
+        try:
+            for r in page.get_image_rects(img[0]):
+                area_img += r.width * r.height
+        except Exception:  # noqa: BLE001
+            continue
+    return area_img / area_pagina >= _FRACAO_CAPA
+
+
+def _rasterizar_pagina(page, zoom: float = 2.0) -> str | None:
+    """Data-URI PNG da página inteira rasterizada (capa/página-imagem)."""
+    try:
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        return "data:image/png;base64," + base64.b64encode(pix.tobytes("png")).decode()
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -510,6 +542,10 @@ pre {{ font-family: 'Liberation Mono','DejaVu Sans Mono',monospace; white-space:
        text-align: left; line-height: 1.3; page-break-inside: avoid; }}
 figure {{ margin: .6em 0; text-align: center; page-break-inside: avoid; }}
 img {{ max-width: 100%; }}
+/* capa / página-imagem: imagem única ocupando a página inteira, sozinha */
+figure.pagina-imagem {{ margin: 0; break-before: page; break-after: page;
+                        page-break-inside: avoid; }}
+figure.pagina-imagem img {{ width: 100%; }}
 /* numeral decorativo do abre-capítulo (Manning): grande, cinza claro, flutua no
    topo à direita; a margem negativa o alinha ao lado do título (ADR-0041). */
 .cap-numeral {{ float: right; width: 78pt; margin: -0.6em 0 .2em 1em; }}
@@ -565,51 +601,13 @@ p.toc a::after, .toc-lin a::after, .toc-cap a::after {{
 """
 
 
-_COL_GAP_MIN = 0.018  # separador de coluna: vão vertical vazio >= 1.8% da largura
-_COL_MIN_BLOCOS = 5  # cada coluna precisa de vários blocos (não é um callout solto)
-_COL_MIN_ALTURA = 0.4  # cada coluna atravessa >= 40% da altura (índice preenche a página)
-
-
 def _limites_colunas(blocos: list, pw: float, ph: float) -> list[float]:
-    """Fronteiras x entre colunas numa página multi-coluna (índice remissivo), ou
-    ``[]`` (coluna única). Acha VÃOS verticais vazios entre os intervalos [x0,x1]
-    dos blocos; um vão só conta se cada banda resultante tem >= ``_COL_MIN_BLOCOS``
-    blocos atravessando >= ``_COL_MIN_ALTURA`` da altura — assim uma listagem de
-    código com callouts laterais (banda curta) NÃO é confundida com coluna
-    (achado real, auditoria visual, Kubernetes in Action: o índice de 3 colunas
-    saía intercalado, palavra por linha, ilegível)."""
-    uteis = [b for b in blocos if b.bbox and not b.skip]
-    if len(uteis) < _COL_MIN_BLOCOS * 2:
-        return []
-    intervalos = sorted((b.bbox[0], b.bbox[2]) for b in uteis)
-    gaps, cobertura = [], intervalos[0][1]
-    for x0, x1 in intervalos[1:]:
-        if x0 - cobertura > pw * _COL_GAP_MIN:
-            gaps.append((cobertura, x0))
-        cobertura = max(cobertura, x1)
-    limites = [(a + b) / 2 for a, b in gaps]
-    if not limites:
-        return []
-    bordas = [0.0, *limites, pw]
-    bandas: list[list] = [[] for _ in bordas[:-1]]
-    for b in uteis:
-        cx = (b.bbox[0] + b.bbox[2]) / 2
-        for i in range(len(bordas) - 1):
-            if bordas[i] <= cx < bordas[i + 1]:
-                bandas[i].append(b)
-                break
-    for banda in bandas:
-        if len(banda) < _COL_MIN_BLOCOS:
-            return []
-        ys = [b.bbox[1] for b in banda] + [b.bbox[3] for b in banda]
-        if max(ys) - min(ys) < ph * _COL_MIN_ALTURA:
-            return []
-    return limites
+    """Fronteiras x entre colunas (índice remissivo) — delega pro motor puro
+    ``tipografia.limites_colunas`` sobre os bbox dos blocos úteis (ADR-0041)."""
+    return limites_colunas([b.bbox for b in blocos if b.bbox and not b.skip], pw, ph)
 
 
-def _coluna_de(x_centro: float, limites: list[float]) -> int:
-    """Índice da coluna (0 = mais à esquerda) que contém ``x_centro``."""
-    return sum(1 for lim in limites if x_centro >= lim)
+_coluna_de = coluna_de
 
 
 def _e_folio(b, ph: float) -> bool:
@@ -1300,6 +1298,17 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
     for idx in sorted(paginas):
         blocos, traducoes = paginas[idx]
         page = doc[idx]
+        # capa / página-imagem: rasteriza a página inteira como UMA imagem
+        # full-page — não reflui os pedaços (senão a capa se espalha por várias
+        # páginas, achado real, Kubernetes in Action).
+        if _e_pagina_imagem(page):
+            uri = _rasterizar_pagina(page)
+            if uri:
+                fecha_lista()
+                heading_aberto = None
+                ultimo_texto_p = None
+                partes.append(f'<figure class="pagina-imagem"><img src="{uri}"></figure>')
+                continue
         links = _links_pagina(page)
         folio_blocos = [b for b in blocos if b.bbox and _e_folio(b, ph)]
         valor_folio_pagina = None
