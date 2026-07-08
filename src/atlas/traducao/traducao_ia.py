@@ -53,6 +53,10 @@ class ConfigTraducao:
     max_tentativas_timeout: int = 5  # ADR-0039: retries curtos antes de declarar escassez
     janela_retry_timeout_seg: int = 300  # ADR-0039: 5min entre retries curtos (timeout)
     instrucao_refino: str = ""  # ADR-0040: persona do Agente de refino; vazio = instrução padrão
+    # E9-16 / ADR-0048: escalada visível do motor. Ollama é o padrão; após N falhas
+    # de CONEXÃO consecutivas (endpoint fora), o restante do job migra p/ escalonar_para.
+    escalonar_apos_falhas: int = 3  # tentativas rápidas no Ollama antes de escalar
+    escalonar_para: str = "claude"  # motor de destino da escalada
 
 
 class CacheTraducao:

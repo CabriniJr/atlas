@@ -143,3 +143,11 @@ def test_classificar_erro_tres_classes():
     assert _classificar_erro(Exception("ollama: <urlopen error [Errno 111] Connection refused>")) == "conexao"
     assert _classificar_erro(Exception("ollama: <urlopen error [Errno -2] Name or service not known>")) == "conexao"
     assert _classificar_erro(Exception("rate limit exceeded")) == "erro"
+
+
+def test_config_tem_campos_de_escalada_com_defaults():
+    from atlas.traducao.traducao_ia import ConfigTraducao
+
+    cfg = ConfigTraducao()
+    assert cfg.escalonar_apos_falhas == 3
+    assert cfg.escalonar_para == "claude"
