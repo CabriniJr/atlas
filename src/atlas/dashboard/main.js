@@ -355,6 +355,17 @@ function renderTabs() {
     </div>`;
   }).join('');
   bar.innerHTML = tabs + '<div class="tab-add" onclick="newResource()" title="Novo recurso">＋</div>';
+  // Abas roláveis (E9-16): roda-do-mouse vertical rola o tabbar na horizontal —
+  // um listener só, marcado com dataset pra não empilhar a cada re-render.
+  if (!bar.dataset.wheelBound) {
+    bar.addEventListener('wheel', (e) => {
+      if (e.deltaY === 0) return;
+      if (bar.scrollWidth <= bar.clientWidth) return;  // nada a rolar
+      e.preventDefault();
+      bar.scrollLeft += e.deltaY;
+    }, { passive: false });
+    bar.dataset.wheelBound = '1';
+  }
 }
 
 function activateTab(id) {

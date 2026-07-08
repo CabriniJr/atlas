@@ -30,8 +30,9 @@ body{background:var(--bg);color:var(--text);font-family:'SF Mono',Consolas,monos
 #editor{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 /* ── Tab bar ── */
 #tabbar{height:35px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:stretch;flex-shrink:0;overflow-x:auto;overflow-y:hidden}
-#tabbar::-webkit-scrollbar{height:2px}
-#tabbar::-webkit-scrollbar-thumb{background:var(--border)}
+#tabbar::-webkit-scrollbar{height:6px}
+#tabbar::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+#tabbar::-webkit-scrollbar-thumb:hover{background:var(--muted)}
 .tab{display:flex;align-items:center;gap:6px;padding:0 14px 0 12px;border-right:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;transition:background .1s;position:relative;min-width:100px;max-width:200px}
 .tab:hover{background:var(--bg3);color:var(--text)}
 .tab.active{background:var(--bg);color:var(--text);border-bottom:1px solid var(--blue)}
