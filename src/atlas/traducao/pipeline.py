@@ -209,6 +209,7 @@ def _processar_paginas_paralelo(
     on_evento,
     detectados,
     paralelismo,
+    checar_pausa=None,
 ):
     """Distribui as páginas entre até ``paralelismo`` workers (ADR-0039) — o
     mesmo dial de "réplicas" do pool entre jobs (ADR-0038) vale pra páginas de
@@ -219,8 +220,19 @@ def _processar_paginas_paralelo(
     esgotado_evt = threading.Event()
     estado = {"blocos_traduzidos": 0, "paginas_prontas": 0, "motivo_pausa": None}
     render_paginas: dict[int, tuple[list, dict[int, str]]] = {}
+    pausa_evt = threading.Event()
 
     def processar(i: int) -> None:
+        # Pausa cooperativa (E9-16): entre páginas, checa o pedido de pausa. Uma
+        # página em voo termina; as não iniciadas são puladas — mesmo resume de
+        # uma pausa por escassez, só que pedida pelo usuário (motivo="manual").
+        if not pausa_evt.is_set() and checar_pausa is not None and checar_pausa():
+            pausa_evt.set()
+        if pausa_evt.is_set():
+            with lock:
+                if estado["motivo_pausa"] is None:
+                    estado["motivo_pausa"] = "manual"
+            return
         page = doc[i]
         blocos = extrair_pagina(page, i)
         traduziveis = [b for b in blocos if not b.skip]
@@ -259,7 +271,7 @@ def _processar_paginas_paralelo(
     return (
         render_paginas,
         estado["blocos_traduzidos"],
-        esgotado_evt.is_set(),
+        esgotado_evt.is_set() or pausa_evt.is_set(),
         estado["motivo_pausa"],
     )
 
@@ -286,8 +298,10 @@ def traduzir_pdf(
     ``paralelismo`` > 1 distribui as páginas restantes entre workers concorrentes
     (ADR-0039) — default 1 preserva o loop sequencial original.
 
-    ``checar_pausa`` (ADR-0045): pausa manual pedida pelo usuário — só honrada
-    no loop sequencial (``paralelismo=1``); pendência para o modo paralelo.
+    ``checar_pausa`` (ADR-0045/E9-16): pausa manual pedida pelo usuário — honrada
+    em AMBOS os loops (sequencial e paralelo). Checada entre páginas: nunca aborta
+    uma chamada de IA em voo, apenas pula as páginas ainda não iniciadas
+    (``motivo_pausa="manual"``, resumível como uma pausa por escassez).
 
     ``preferir_bruto`` (E9-15): só tem efeito com ``somente_render=True`` — renderiza
     a MT bruta em vez do refino, mesmo que o refino já esteja cacheado (comparação
@@ -322,6 +336,7 @@ def traduzir_pdf(
             on_evento,
             detectados,
             paralelismo,
+            checar_pausa,
         )
     else:
         render_paginas, blocos_traduzidos, esgotado, motivo_pausa = _processar_paginas_sequencial(
