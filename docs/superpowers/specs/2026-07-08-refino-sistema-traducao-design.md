@@ -88,8 +88,15 @@ uma camada de política no nível do job decide escalar:
 
 **Estado novo em `status`:**
 - `motor_efetivo`: motor realmente em uso (`"ollama"` | `"claude"`); default = `spec.motor`.
-- `falhas_conexao_consecutivas`: contador do run atual (reseta a cada lote OK).
-- `escalonado_em`: timestamp + motivo, quando escala (para a nota visível).
+- `escalonado_em` / `escalonado_motivo`: timestamp + motivo, quando escala (nota visível).
+
+> **Reconciliação (pós-implementação):** este rascunho previa um contador
+> `falhas_conexao_consecutivas` cross-batch (reset por lote OK). A implementação
+> adotou, em vez disso, **retry rápido por chamada** dentro do wrapper
+> (`escalonar_apos_falhas` tentativas de conexão no Ollama antes de escalar) — mais
+> simples e, contra um endpoint determinísticamente fora (connection refused é
+> instantâneo), escala já no 1º lote. Não há campo `falhas_conexao_consecutivas`.
+> Fonte de verdade: **ADR-0048**.
 
 **Config nova em `ConfigTraducao` / `spec`:**
 - `escalonar_apos_falhas: int = 3` — nº de falhas de conexão consecutivas no Ollama

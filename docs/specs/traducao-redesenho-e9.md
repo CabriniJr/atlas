@@ -181,10 +181,29 @@ Porque **cada run é cara**, entregamos primeiro o que é grátis e visível:
 | Split de config quebra caches existentes | migração: chave nova ignora campos de render; cache antigo revalida uma vez |
 | Mid-run pause conflita com disjuntor pré-run (ADR-0005) | ADR novo define precedência: mid-run pausa e reagenda; pré-run bloqueia despacho |
 
+## Refino do controle e fallback (E9-16 · ADR-0048)
+
+Leva de refino sobre a base do épico (fonte de verdade: [ADR-0048](../arquitetura/adr/ADR-0048-fallback-escalado-e-pausa-cooperativa.md)):
+
+- **Pausa cooperativa nos dois loops.** O ⏸ manual (ADR-0045) era honrado só no loop
+  sequencial; agora `_processar_paginas_paralelo` também para entre páginas
+  (`checar_pausa` + `threading.Event`), nunca matando chamada de IA em voo.
+- **Fallback escalado e visível (Ollama→Claude).** Ollama segue padrão; numa falha de
+  **conexão** (endpoint local fora), o wrapper `montar_invocar_escalavel` tenta rápido
+  até `escalonar_apos_falhas` vezes e, esgotado, muta `cfg.motor` para Claude,
+  migrando o **restante** do job (visível em `status.motor_efetivo` + badge). *Nota de
+  reconciliação:* a política adotada é **retry rápido por chamada** (não um contador
+  cross-batch com reset por lote, como um rascunho anterior sugeria) — mais simples e,
+  contra um endpoint determinísticamente fora, escala já no 1º lote. Timeout/erro
+  seguem o retry/pausa do ADR-0039.
+- **Serialização.** `CacheTraducao.salvar` passa a usar tmp único (`mkstemp`) — corrige
+  `FileNotFoundError` sob `salvar` concorrente (workers paralelos).
+
 ## Rastreabilidade
 
 - **Aprofunda:** ADR-0030 (Kind Traducao), ADR-0031 (pipeline resumível), ADR-0032
-  (export), ADR-0033 (render editorial), ADR-0034 (comparador), ADR-0005 (orçamento).
+  (export), ADR-0033 (render editorial), ADR-0034 (comparador), ADR-0005 (orçamento),
+  ADR-0048 (fallback escalado + pausa cooperativa).
 - **Épico:** [backlog `épico-tradutor-editorial`](../roadmap/backlog.md).
 - **Sub-projeto A anterior:** [`traducao-render-editorial.md`](traducao-render-editorial.md)
   (permanece; o Pilar 3 revisa seu motor de reflow e a fonte).
