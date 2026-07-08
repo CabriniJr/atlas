@@ -50,11 +50,15 @@ def montar_invocar_escalavel(cfg: ConfigTraducao, on_escala=None, lock=None):
     def inv(prompt, modelo=None, timeout=60, motor="claude"):
         motor_atual = motor  # == cfg.motor no momento da chamada (pipeline relê)
         if motor_atual != "ollama":
-            return invocar(prompt, modelo=modelo, timeout=timeout, motor=motor_atual, fallback=False)
+            return invocar(
+                prompt, modelo=modelo, timeout=timeout, motor=motor_atual, fallback=False
+            )
         ultimo: Exception | None = None
         for _ in range(max(1, cfg.escalonar_apos_falhas)):
             try:
-                return invocar(prompt, modelo=modelo, timeout=timeout, motor="ollama", fallback=False)
+                return invocar(
+                    prompt, modelo=modelo, timeout=timeout, motor="ollama", fallback=False
+                )
             except InvocarErro as exc:
                 if _classificar_erro(exc) != "conexao":
                     raise  # timeout/erro → ADR-0039 no pipeline
@@ -66,7 +70,9 @@ def montar_invocar_escalavel(cfg: ConfigTraducao, on_escala=None, lock=None):
                 cfg.modelo = None  # não herda modelo do ollama no motor de destino
                 if on_escala is not None:
                     on_escala("ollama", cfg.escalonar_para, str(ultimo))
-        return invocar(prompt, modelo=None, timeout=timeout, motor=cfg.escalonar_para, fallback=False)
+        return invocar(
+            prompt, modelo=None, timeout=timeout, motor=cfg.escalonar_para, fallback=False
+        )
 
     return inv
 
