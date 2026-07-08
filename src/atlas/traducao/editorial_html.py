@@ -55,6 +55,10 @@ _ITALIC, _BOLD = 1 << 1, 1 << 4
 
 
 def _e(txt: str) -> str:
+    # REVISÃO E9-16 (c): todo texto traduzido chega ao HTML por `_e`
+    # (html.escape, que já escapa & < > ") direto ou via `converter_enfase(_, _e)`;
+    # href de link também passa por `_e` (L~1360). Verificado: sem caminho que
+    # injete texto traduzido cru no markup — sem risco de injeção/markup quebrado.
     return _html.escape(txt or "")
 
 
@@ -146,6 +150,12 @@ def _geometria(doc, paginas) -> dict:
     right = max(24.0, pw - quantil_alto(direitas_abs, pw - 72))
     bottom = max(24.0, ph - quantil_alto(fundos_abs, ph - 60))
 
+    # REVISÃO E9-16 (b): pisos de largura/altura útil verificados corretos — para
+    # uma página tamanho-livro normal, `pw - left - MIN` fica bem acima de 24pt,
+    # então o piso garante coluna >= MIN (o guard da regressão E9-09). Só numa
+    # página degenerada minúscula (pw - left - 300 < 24) o `max(24, …)` prevalece
+    # e a coluna pode ficar < MIN — mas aí não há margem confiável a preservar de
+    # qualquer forma; comportamento aceitável, sem regressão.
     if pw - left - right < _MIN_CONTEUDO_LARGURA:
         right = max(24.0, pw - left - _MIN_CONTEUDO_LARGURA)
     if ph - top - bottom < _MIN_CONTEUDO_ALTURA:
@@ -459,6 +469,12 @@ def _injetar_string_set(html_el: str, valor: str) -> str:
     própria declaração ao elemento com conteúdo real elimina essa página
     fantasma, porque o elemento nunca fica "sozinho" — ele sempre carrega
     conteúdo visível junto."""
+    # REVISÃO E9-16 (d): `valor` é embutido numa string CSS entre aspas simples;
+    # html.escape NÃO neutraliza `'` (fecharia a string CSS). Verificado seguro:
+    # o único chamador passa `_e(_valor_folio(alvo))`, e `_valor_folio` só devolve
+    # dígitos arábicos (`\d+`) ou romanos (`[ivxlcdm]+`) — jamais uma aspa. O folio
+    # dinâmico (string-set folio → @bottom-left/right via string(folio)) fica bem
+    # formado; sem vetor de injeção CSS.
     decl = f"string-set: folio '{valor}';"
     if 'style="' in html_el:
         return html_el.replace('style="', f'style="{decl}', 1)
@@ -1622,6 +1638,12 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             b = obj
             est = _estilo(b)
             # código/imutável e sem tradução: cai no original — nunca descarta bloco (ADR-0041).
+            # REVISÃO E9-16 (a): verificado que TODO caminho de emissão de bloco
+            # usa o mesmo idioma `traducoes.get(b.id) or b.texto` (aqui; nota de
+            # rodapé L1536; destaque L1579; continuação L1519) — nenhum bloco
+            # traduzido é silenciosamente descartado; tradução vazia/ausente cai
+            # no original, como manda o ADR-0041. Diagramas ficam em inglês só
+            # porque a região é rasterizada de propósito (não é descarte).
             texto = traducoes.get(b.id) or b.texto
             # sumário mesclado (bloco com ≥2 links internos E cara de sumário —
             # não vale só ter 2 links: um parágrafo comum com 2 referências

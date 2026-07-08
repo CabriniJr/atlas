@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -113,9 +114,20 @@ class CacheTraducao:
         """Persiste o cache em JSON (cria o diretório se preciso)."""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        # escrita atômica (tmp + replace): a prévia concorrente nunca lê JSON parcial.
-        tmp = p.with_suffix(p.suffix + ".tmp")
-        tmp.write_text(json.dumps(self._d, ensure_ascii=False), encoding="utf-8")
+        # escrita atômica (tmp único + replace): a prévia concorrente nunca lê JSON
+        # parcial. REVISÃO E9-16: o tmp precisa ter nome ÚNICO por escrita — dois
+        # ``salvar`` concorrentes no mesmo path disputavam o MESMO ``<path>.tmp``,
+        # e o ``os.replace`` de um consumia o tmp do outro antes do replace dele
+        # (FileNotFoundError). ``mkstemp`` no mesmo diretório (mesmo filesystem ⇒
+        # replace atômico) dá um tmp exclusivo a cada escrita.
+        dados = json.dumps(self._d, ensure_ascii=False)
+        fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(dados)
+        except BaseException:  # noqa: BLE001 — não deixa tmp órfão se a escrita falhar
+            os.unlink(tmp)
+            raise
         os.replace(tmp, p)
 
 
