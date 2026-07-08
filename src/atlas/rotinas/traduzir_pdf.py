@@ -9,29 +9,66 @@ barra de progresso do web shell (ADR-0029).
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 
 from atlas.executor import CollectResult, ContextoExecucao
-from atlas.ia import invocar
+from atlas.ia import InvocarErro, invocar
 from atlas.retomada import campos_pausa
 from atlas.rotinas import registrar
 from atlas.traducao.pipeline import traduzir_pdf
 from atlas.traducao.pool import pool_global
-from atlas.traducao.traducao_ia import CacheTraducao, ConfigTraducao, resolver_agente_refino
+from atlas.traducao.traducao_ia import (
+    CacheTraducao,
+    ConfigTraducao,
+    _classificar_erro,
+    resolver_agente_refino,
+)
 
 _log = logging.getLogger(__name__)
 
 
-def _invocar_sem_fallback_de_motor(
-    prompt: str, modelo: str | None = None, timeout: int = 60, motor: str = "claude"
-) -> str:
-    """``invocar`` sem o fallback bidirecional (ADR-0045): tradução é um lote
-    longo (um livro inteiro) — trocar de motor no meio, mesmo como rede de
-    segurança, mistura estilo/tom entre blocos e (motor="ollama") queima cota
-    do Claude às escondidas. O motor pedido em ``Traducao.spec.motor`` é
-    respeitado à risca; falhas caem no mecanismo de retry/pausa (ADR-0039)."""
-    return invocar(prompt, modelo=modelo, timeout=timeout, motor=motor, fallback=False)
+def montar_invocar_escalavel(cfg: ConfigTraducao, on_escala=None, lock=None):
+    """Wrapper de ``ia.invocar`` com escalada de MOTOR no nível do job (E9-16/ADR-0048).
+
+    Contrato (substitui o `fallback=False` cru do ADR-0045):
+    - Nunca troca de motor por chamada às escondidas (o problema que o 0045 evitou).
+    - Motor pedido (``cfg.motor``, default ollama) é usado à risca enquanto funciona.
+    - Erro de CONEXÃO no ollama (endpoint fora): tenta rápido até
+      ``cfg.escalonar_apos_falhas`` vezes; esgotado, muta ``cfg.motor`` para
+      ``cfg.escalonar_para`` (Claude) — o RESTANTE do job vai pro Claude, visível
+      via ``on_escala`` — e retenta ESTA chamada no novo motor (modelo=None, nunca
+      herda o modelo do outro motor). ``cfg.motor`` é a fonte única do motor atual,
+      relida pelo pipeline a cada lote, então a escalada vale pro resto do job.
+    - Timeout/erro no ollama propaga direto: o pipeline aplica o retry/pausa do
+      ADR-0039 (Ollama ocupado ≠ Ollama fora; cota do Claude recupera com o tempo).
+    - Já em Claude (pedido ou escalado): comportamento do 0039 intacto.
+    """
+    lock = lock or threading.Lock()
+
+    def inv(prompt, modelo=None, timeout=60, motor="claude"):
+        motor_atual = motor  # == cfg.motor no momento da chamada (pipeline relê)
+        if motor_atual != "ollama":
+            return invocar(prompt, modelo=modelo, timeout=timeout, motor=motor_atual, fallback=False)
+        ultimo: Exception | None = None
+        for _ in range(max(1, cfg.escalonar_apos_falhas)):
+            try:
+                return invocar(prompt, modelo=modelo, timeout=timeout, motor="ollama", fallback=False)
+            except InvocarErro as exc:
+                if _classificar_erro(exc) != "conexao":
+                    raise  # timeout/erro → ADR-0039 no pipeline
+                ultimo = exc
+        # esgotou as tentativas de conexão no ollama → escala o restante do job.
+        with lock:
+            if cfg.motor == "ollama":
+                cfg.motor = cfg.escalonar_para
+                cfg.modelo = None  # não herda modelo do ollama no motor de destino
+                if on_escala is not None:
+                    on_escala("ollama", cfg.escalonar_para, str(ultimo))
+        return invocar(prompt, modelo=None, timeout=timeout, motor=cfg.escalonar_para, fallback=False)
+
+    return inv
 
 
 def _saida_para(origem: str, idioma_destino: str) -> str:
@@ -135,6 +172,22 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         cfg.modelo = modelo_ag
     if instrucao_ag:
         cfg.instrucao_refino = instrucao_ag
+
+    def _on_escala(de: str, para: str, motivo: str) -> None:
+        atual = store.get("Traducao", t.name).status or {}
+        log = list(atual.get("log") or [])
+        log.append(_evento(f"⚡ motor {de} indisponível — escalado p/ {para}"))
+        _status(
+            store, t, ctx,
+            {
+                "motor_efetivo": para,
+                "escalonado_em": ctx.agora.isoformat(),
+                "escalonado_motivo": (motivo or "")[:200],
+                "log": log[-40:],
+            },
+        )
+
+    invocar_escalavel = montar_invocar_escalavel(cfg, on_escala=_on_escala)
     # tentativas curtas por timeout até aqui (ADR-0039) — persistido, sobrevive a restart.
     tentativas_timeout = int((t.status or {}).get("tentativas_timeout") or 0)
 
@@ -152,6 +205,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             "atividade": "abrindo PDF e preparando a tradução…",
             "log": [_evento("▶ tradução iniciada")],
             "pausar_solicitado": False,  # reseta um pedido de pausa de um run anterior
+            "motor_efetivo": cfg.motor,  # E9-16: motor realmente em uso (muda se escalar)
         },
     )
 
@@ -216,7 +270,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             origem,
             saida,
             cfg,
-            invocar_fn=_invocar_sem_fallback_de_motor,
+            invocar_fn=invocar_escalavel,
             on_progress=on_progress,
             cache=cache,
             cache_path=cache_path,
