@@ -15,13 +15,17 @@ function _trShell(r) {
   const io = s.idioma_origem || 'en';
   const id = s.idioma_destino || 'pt-BR';
   const motor = s.motor || 'ollama';
+  // Motor efetivo (E9-16): o status pode escalar o motor pedido (ex.: ollama →
+  // claude quando o local está indisponível); reusa o `st` já lido acima.
+  const motorEfetivo = st.motor_efetivo || motor;
+  const escalado = motorEfetivo !== motor;
   return `<div class="tr-wrap" style="padding:16px;max-width:720px">
     <div class="tr-header" style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <span style="font-size:20px">📖</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:16px">${esc(r.name)}</div>
         <div style="color:var(--muted);font-size:12px">
-          <span class="ag-badge ${esc(motor)}">${esc(motor)}</span>
+          <span class="ag-badge ${esc(motorEfetivo)}" title="${escalado ? 'escalado: ' + esc(st.escalonado_motivo || 'motor pedido indisponível') : 'motor pedido'}">${esc(motor)}${escalado ? ' → ' + esc(motorEfetivo) + ' ⚡' : ''}</span>
           ${esc(io)} → ${esc(id)}
         </div>
       </div>
