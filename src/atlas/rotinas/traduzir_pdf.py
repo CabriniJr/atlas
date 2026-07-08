@@ -155,7 +155,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
         assunto=t.spec.get("assunto", ""),
         glossario=list(t.spec.get("glossario", []) or []),
         glossario_auto=_verdade(t.spec.get("glossario_auto", False)),
-        motor=t.spec.get("motor", "claude"),
+        motor=t.spec.get("motor", "ollama"),  # ADR-0045/0048: Ollama é o padrão da tradução
         modelo=t.spec.get("modelo") or None,
         refino=_verdade(t.spec.get("refino", True)),
         timeout=int(t.spec.get("timeout") or 60),
