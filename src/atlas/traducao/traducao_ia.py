@@ -269,8 +269,9 @@ def traduzir_blocos(
     if pendentes:
         prompt = montar_prompt(pendentes, cfg)
         # cfg.modelo pode ser None → usa o padrão do motor (invocar não aceita None).
+        motor_lote = cfg.motor  # lê uma vez: evita torn read se outro worker escalar no meio (E9-16)
         resposta = invocar_fn(
-            prompt, modelo=cfg.modelo or modelo_padrao(cfg.motor), motor=cfg.motor
+            prompt, modelo=cfg.modelo or modelo_padrao(motor_lote), motor=motor_lote
         )
         traducoes = parsear_resposta(resposta, [b.id for b in pendentes])
         for b in pendentes:
@@ -403,10 +404,11 @@ def refinar_blocos(
         lote_idx += 1
         pares = [(b.id, b.texto, brutos.get(b.id, b.texto)) for b in lote]
         prompt = montar_prompt_refino(pares, cfg)
-        modelo = cfg.modelo or modelo_padrao(cfg.motor)
+        motor_lote = cfg.motor  # lê uma vez: evita torn read se outro worker escalar no meio (E9-16)
+        modelo = cfg.modelo or modelo_padrao(motor_lote)
         t0 = time.monotonic()
         try:
-            resposta = invocar_fn(prompt, modelo=modelo, timeout=cfg.timeout, motor=cfg.motor)
+            resposta = invocar_fn(prompt, modelo=modelo, timeout=cfg.timeout, motor=motor_lote)
         except Exception as exc:  # noqa: BLE001 — tokens/timeout: pausa e mantém resumível
             _emitir(
                 on_evento,
