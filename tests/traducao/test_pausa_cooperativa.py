@@ -54,18 +54,61 @@ def test_pausa_paralela_para_e_marca_manual(tmp_path):
     )
     assert res.parcial
     assert res.motivo_pausa == "manual"
-    # nenhuma (ou quase nenhuma) página processada: a pausa é vista já na 1ª checagem
-    assert processadas["n"] < 12
+    # a pausa é vista já na 1ª checagem (antes da chamada de IA): nenhuma página
+    # chega a invocar a IA. Guard forte: pega quem mover a checagem para DEPOIS.
+    assert processadas["n"] == 0
 
 
 def test_paralelo_sem_pausa_traduz_tudo(tmp_path):
     """Regressão: sem pausa, o paralelo continua traduzindo todas as páginas."""
     src = _pdf_com_n_paginas(tmp_path, 6)
     out = tmp_path / "out.pdf"
+
+    lock = threading.Lock()
+    processadas = {"n": 0}
+
+    def conta_e_traduz(prompt, modelo=None, timeout=60, motor="claude"):
+        with lock:
+            processadas["n"] += 1
+        return _fake_invocar(prompt)
+
     res = traduzir_pdf(
         src, str(out), ConfigTraducao(),
-        invocar_fn=_fake_invocar, bruto_fn=_fake_bruto,
+        invocar_fn=conta_e_traduz, bruto_fn=_fake_bruto,
         paralelismo=3, checar_pausa=lambda: False,
     )
     assert res.paginas_prontas == 6
     assert not res.parcial
+    # cada página faz 1 chamada de IA (refino) — todas as 6 rodaram de fato.
+    assert processadas["n"] == 6
+
+
+def test_pausa_paralela_mid_run(tmp_path):
+    """Pausa pedida no meio do run: as primeiras páginas concluem, mas o restante
+    é pulado — parcial + motivo_pausa='manual'."""
+    src = _pdf_com_n_paginas(tmp_path, 10)
+    out = tmp_path / "out.pdf"
+
+    lock = threading.Lock()
+    estado = {"checagens": 0, "processadas": 0}
+
+    def conta_e_traduz(prompt, modelo=None, timeout=60, motor="claude"):
+        with lock:
+            estado["processadas"] += 1
+        return _fake_invocar(prompt)
+
+    def pausa_no_meio():
+        # False nas primeiras checagens, True depois: força pausa após arrancar.
+        with lock:
+            estado["checagens"] += 1
+            return estado["checagens"] > 3
+
+    res = traduzir_pdf(
+        src, str(out), ConfigTraducao(),
+        invocar_fn=conta_e_traduz, bruto_fn=_fake_bruto,
+        paralelismo=2, checar_pausa=pausa_no_meio,
+    )
+    assert res.parcial
+    assert res.motivo_pausa == "manual"
+    # robusto a nondeterminismo de escalonamento: algumas rodaram, nem todas.
+    assert 0 < estado["processadas"] < 10

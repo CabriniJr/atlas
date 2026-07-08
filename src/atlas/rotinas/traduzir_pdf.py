@@ -223,7 +223,7 @@ def collect(ctx: ContextoExecucao) -> CollectResult:
             somente_render=_verdade(t.spec.get("somente_render", False)),
             on_evento=on_evento,
             paralelismo=pool_global.max_concorrente,  # ADR-0039: réplicas também dentro do job
-            checar_pausa=checar_pausa,  # ADR-0045: só honrado com paralelismo=1
+            checar_pausa=checar_pausa,  # E9-16: honrado nos dois loops (sequencial + paralelo)
             preferir_bruto=_verdade(t.spec.get("preferir_bruto", False)),  # E9-15
         )
     except Exception as exc:  # noqa: BLE001 — nunca derruba o loop (ADR-0006)
