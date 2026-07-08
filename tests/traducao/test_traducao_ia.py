@@ -134,3 +134,12 @@ def test_prompt_refino_instrui_preservar_enfase_inline():
     prompt = montar_prompt_refino(pares, ConfigTraducao())
     assert "**" in prompt and "_" in prompt
     assert "marcador" in prompt.lower()
+
+
+def test_classificar_erro_tres_classes():
+    from atlas.traducao.traducao_ia import _classificar_erro
+
+    assert _classificar_erro(Exception("timeout após 60s invocando IA")) == "timeout"
+    assert _classificar_erro(Exception("ollama: <urlopen error [Errno 111] Connection refused>")) == "conexao"
+    assert _classificar_erro(Exception("ollama: <urlopen error [Errno -2] Name or service not known>")) == "conexao"
+    assert _classificar_erro(Exception("rate limit exceeded")) == "erro"

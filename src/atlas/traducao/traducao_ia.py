@@ -336,9 +336,31 @@ def resolver_agente_refino(traducao_res, store) -> tuple[str | None, str | None,
 
 
 def _classificar_erro(exc: Exception) -> str:
-    """``"timeout"`` (transitório, elegível a retry curto — ADR-0039) ou ``"erro"``
-    (outra falha — ex.: rate-limit explícito do CLI — vai direto pra escassez)."""
-    return "timeout" if "timeout" in str(exc).lower() else "erro"
+    """Classifica a falha do motor de IA em três classes:
+
+    - ``"timeout"``: transitório, elegível a retry curto (ADR-0039).
+    - ``"conexao"``: endpoint fora do ar (connection refused/DNS/unreachable) —
+      motor local caído; alimenta a escalada Ollama→Claude (E9-16/ADR-0048), não
+      a espera de cota (esperar não ressuscita um servidor local fora).
+    - ``"erro"``: outra falha (ex.: rate-limit explícito) → escassez confirmada.
+    """
+    low = str(exc).lower()
+    if "timeout" in low:
+        return "timeout"
+    marcadores_conexao = (
+        "connection refused",
+        "urlopen error",
+        "connection error",
+        "name or service not known",
+        "no route to host",
+        "network is unreachable",
+        "errno 111",
+        "errno -2",
+        "max retries",
+    )
+    if any(m in low for m in marcadores_conexao):
+        return "conexao"
+    return "erro"
 
 
 def refinar_blocos(
