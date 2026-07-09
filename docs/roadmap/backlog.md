@@ -224,6 +224,21 @@ atualizado-em: 2026-06-23
 | E9-15 | **Fim do fallback silencioso ollama→claude na tradução** (`ia.invocar(fallback=False)`, motor pedido respeitado à risca) + **Ollama como motor padrão** (`ConfigTraducao.motor`, UI) + **controle real do job**: `POST /_traduzir_pausar` (pausa entre páginas, sem retomada automática — *só honrada no loop sequencial; corrigido para os dois loops em E9-16*), `POST /_traduzir_recomecar` (apaga cache, do zero), `POST /_traduzir_rerefinar` (`CacheTraducao.remover`, mantém a MT bruta) — botões ⏸/🔁/♻️ na UI | **feito** — `ia.py` (`invocar(fallback=)`), `rotinas/traduzir_pdf.py` (`pausar_traducao`, `reiniciar_traducao`, `re_refinar_traducao`), `traducao/pipeline.py` (`checar_pausa`), `api.py` (`/_traduzir_pausar`/`_recomecar`/`_rerefinar`), `kinds/traducao.js` | [ADR-0045](../arquitetura/adr/ADR-0045-controle-real-e-ollama-por-padrao-na-traducao.md) |
 | E9-16 | **Refino do controle + fallback escalado** (fecha o gap da pausa manual e do "cai pro Claude"): (1) **pausa cooperativa honrada nos dois loops** — o ⏸ era silenciosamente ignorado com `paralelismo>1` (só valia no sequencial); (2) **escalada visível Ollama→Claude no nível do job** — `_classificar_erro` ganha classe `"conexao"`, wrapper `montar_invocar_escalavel` tenta rápido no Ollama e, endpoint fora, muta `cfg.motor` e migra o RESTANTE pro Claude (`status.motor_efetivo` + badge `ollama → claude ⚡`), sem switch por chamada; timeout segue o retry/pausa do 0039; leitura atômica de `cfg.motor` por lote (evita torn read); (3) **UI**: abas roláveis (wheel→scroll horizontal no `#tabbar`); (4) **serialização**: `CacheTraducao.salvar` com tmp único (`mkstemp`) — corrige `FileNotFoundError` sob `salvar` concorrente; revisão de sanidade do render editorial (fallback de bloco/geometria/escaping/fólio verificados) | **feito** — `pipeline.py` (`_processar_paginas_paralelo` honra `checar_pausa`), `traducao_ia.py` (`_classificar_erro` 3 classes, `escalonar_*`, `salvar` atômico), `rotinas/traduzir_pdf.py` (`montar_invocar_escalavel`, `motor_efetivo`), `dashboard` (`style.css`/`main.js`/`kinds/traducao.js`) | [ADR-0048](../arquitetura/adr/ADR-0048-fallback-escalado-e-pausa-cooperativa.md) |
 
+## ⭐ Épico E10 — Torrent (download headless + conversa stateful no Telegram) {#épico-torrent}
+
+> Norte do PO: **mandar um `.torrent` pelo Telegram** (ou pela CLI) e o Atlas
+> **verificar**, **perguntar**, **baixar headless no computador do PO** (sem abrir
+> app), avisar em marcos (10/50/90%) e ao terminar. Primeiro fluxo
+> **conversacional stateful** do Atlas. Kind `Torrent` genérico (não é de
+> tradução). Reusa o `torrent-scan.py`/`torrent-safe` que o PO já tinha.
+
+| ID | Item | Estado | Ref |
+|---|---|---|---|
+| E10-01 | **Kind `Torrent` + scan + download headless + conversa stateful**: recebe o `.torrent` como anexo (com ou sem `/torrent`) → `scan.py` (bencode puro, risco 0/1/2, infohash) → **pergunta** sim/não (risco 2 exige `SIM`) → download via `qbittorrent-nox` (sem GUI; kill-switch VPN, anônimo, no-seed, WebUI de progresso) → notificações proativas 10/50/90% + conclusão; `progresso`/`cancelar`/`/torrents`/`/torrent <id>`; estado no recurso (sobrevive a restart, recuperação de órfão no boot); **paridade CLI** `python -m atlas torrent <arq> [--sim\|--dir\|--vpn\|--no-vpn]`; meta no `api_schema` + `dashboard/kinds/torrent.js` | **feito** — `atlas/torrent/{scan,download,servico,cli}.py`, `torrent_cmd.py`, `telegram.py` (`baixar_arquivo`), `app.py` (anexo+dispatch+boot), 44 testes | [ADR-0049](../arquitetura/adr/ADR-0049-kind-torrent-e-conversa-stateful-telegram.md) |
+| E10-02 | **VPN kill-switch ligado por padrão** quando o PO tiver VPN no desktop (hoje `permitir_sem_vpn=true` por decisão do PO) | proposto | ADR-0049 §Pendências |
+| E10-03 | **Antivírus opcional pós-download** (`torrent-scan.py --clam` no conteúdo baixado) | proposto | ADR-0049 §Pendências |
+| E10-04 | **Concorrência de torrents** (pool à la ADR-0038; hoje um por vez) | proposto | ADR-0049 §Pendências |
+
 ## Dívida de documentação
 | ID | Item | Estado |
 |---|---|---|
