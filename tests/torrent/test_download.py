@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from atlas.torrent import download
 from atlas.torrent.download import ConfigDownload, Progresso
 
@@ -112,6 +114,15 @@ def test_sem_vpn_e_proibido_nao_inicia(tmp_path):
     )
     assert r.ok is False
     assert cli.iniciou is False
+
+
+def test_config_dir_usa_layout_do_profile(tmp_path):
+    """Regressão: qbittorrent-nox v5 com --profile=<dir> lê a config em
+    <dir>/qBittorrent/config/qBittorrent.conf. Escrever em <dir>/config/qBittorrent
+    (o layout do Flatpak) faz o nox IGNORAR a config e subir a WebUI na porta
+    padrão 8080 — que colide com a API do Atlas — quebrando o progresso."""
+    cli = download.QBittorrentNox(profile=str(tmp_path / "prof"))
+    assert cli._config_dir() == os.path.join(str(tmp_path / "prof"), "qBittorrent", "config")
 
 
 def test_config_conf_reflete_seguranca(tmp_path):

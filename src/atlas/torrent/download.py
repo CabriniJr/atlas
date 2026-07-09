@@ -205,7 +205,12 @@ class QBittorrentNox:
         return f"http://127.0.0.1:{WEBUI_PORT}/api/v2"
 
     def _config_dir(self) -> str:
-        return os.path.join(self.profile, "config", "qBittorrent")
+        # qBittorrent v5 com --profile=<dir> usa o layout portátil
+        # <dir>/qBittorrent/{config,data,downloads}. A config precisa ficar em
+        # <dir>/qBittorrent/config/qBittorrent.conf — escrever em
+        # <dir>/config/qBittorrent (layout do Flatpak) faz o nox ignorá-la e
+        # subir a WebUI na porta padrão 8080 (colide com a API do Atlas).
+        return os.path.join(self.profile, "qBittorrent", "config")
 
     def iniciar(self, torrent_path: str, cfg: ConfigDownload, infohash: str) -> None:
         cfg_dir = self._config_dir()
