@@ -7,12 +7,19 @@
 const _TR_FASE = {
   verificando: ['🔎 verificando', 'var(--muted)'],
   aguardando_confirmacao: ['⏸️ aguardando confirmação', 'var(--yellow, #b58900)'],
+  fila: ['🕒 na fila', 'var(--yellow, #b58900)'],
   baixando: ['⬇️ baixando', 'var(--blue)'],
   concluido: ['✅ concluído', 'var(--green, #159f4a)'],
   erro: ['❌ erro', 'var(--red, #d1242f)'],
   recusado: ['🚫 recusado', 'var(--muted)'],
   cancelado: ['🛑 cancelado', 'var(--muted)'],
 };
+
+function _trtIntegridade(st) {
+  if (st.integridade === 'ok') return '<span style="color:var(--green,#159f4a)">integridade ✅</span>';
+  if (st.integridade === 'falha') return '<span style="color:var(--red,#d1242f)">integridade ⚠️ invalid pfs0</span>';
+  return '';
+}
 
 registerRender('Torrent', function renderTorrent(r, container) {
   container.innerHTML = _trtShell(r);
@@ -50,6 +57,7 @@ function _trtShell(r) {
       <div style="font-size:11px;color:var(--muted);margin-top:8px">
         📁 ${esc(s.destino || '')}${st.concluido_em ? ` · concluído ${esc(st.concluido_em)}` : ''}
       </div>
+      ${st.integridade ? `<div style="font-size:11px;margin-top:4px">${_trtIntegridade(st)}${st.integridade_detalhe && st.integridade === 'falha' ? ` — <span style="color:var(--muted)">${esc(st.integridade_detalhe)}</span>` : ''}</div>` : ''}
       <div style="font-size:11px;color:var(--muted);margin-top:6px">
         Operação pelo Telegram: mande o <code>.torrent</code>, responda <b>sim/não</b>,
         peça <b>progresso</b> ou <b>cancelar</b>.

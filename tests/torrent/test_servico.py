@@ -157,9 +157,99 @@ def test_cancelar_sinaliza_flag(store, tmp_path):
     assert t.status["cancelar"] is True and t.status["fase"] == servico.CANCELADO
 
 
-def test_recuperar_orfaos_no_boot(store, tmp_path):
+def test_retomar_no_boot_auto_resume(store, tmp_path):
+    """Persistência (ADR-0049): um torrent que estava baixando retoma sozinho
+    após restart — re-despachado, não volta pra confirmação."""
+    from atlas.torrent.pool import TorrentPool
+
     res, _ = _criar(store, tmp_path)
     store.set_status("Torrent", res.name, {**res.status, "fase": servico.BAIXANDO}, datetime.now())
-    n = servico.recuperar_orfaos_no_boot(store, datetime.now())
+    disparados = []
+    n = servico.retomar_no_boot(
+        store, datetime.now(), dispatch=disparados.append, pool=TorrentPool(3)
+    )
     assert n == 1
-    assert store.get("Torrent", res.name).status["fase"] == servico.AGUARDANDO
+    assert disparados == [res.name]  # re-despachado (retomou)
+    assert store.get("Torrent", res.name).status["fase"] == servico.BAIXANDO
+
+
+def test_confirmar_alem_do_teto_vai_pra_fila(monkeypatch, store, tmp_path):
+    from atlas.torrent.pool import TorrentPool
+
+    monkeypatch.setattr(download, "motor_disponivel", lambda: True)
+    pool = TorrentPool(max_concorrente=1)
+    a, _ = servico.criar_do_bytes(
+        store, _torrent_bytes(nome="a.mkv"), "a.torrent", 1, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    # 2º torrent (infohash diferente)
+    b, _ = servico.criar_do_bytes(
+        store, _torrent_bytes(nome="b.mkv", tam=123), "b.torrent", 1, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    disparados = []
+    d = disparados.append
+    ok1, _ = servico.confirmar(store, a.name, datetime.now(), dispatch=d, pool=pool)
+    ok2, msg2 = servico.confirmar(store, b.name, datetime.now(), dispatch=d, pool=pool)
+    assert ok1 and ok2
+    assert disparados == [a.name]  # só o 1º baixa
+    assert store.get("Torrent", a.name).status["fase"] == servico.BAIXANDO
+    assert store.get("Torrent", b.name).status["fase"] == servico.FILA
+    assert "fila" in msg2.lower()
+
+
+def test_ao_concluir_slot_despacha_proximo(store, tmp_path):
+    from atlas.torrent.pool import TorrentPool
+
+    pool = TorrentPool(max_concorrente=1)
+    a, _ = servico.criar_do_bytes(
+        store, _torrent_bytes(nome="a.mkv"), "a.torrent", 1, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    b, _ = servico.criar_do_bytes(
+        store, _torrent_bytes(nome="b.mkv", tam=9), "b.torrent", 1, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    pool.tentar_iniciar(a.name)
+    pool.tentar_iniciar(b.name)  # b na fila
+    store.set_status("Torrent", b.name, {**b.status, "fase": servico.FILA}, datetime.now())
+    prox = servico.ao_concluir_slot(store, a.name, pool=pool)
+    assert prox == b.name
+    assert store.get("Torrent", b.name).status["fase"] == servico.BAIXANDO
+
+
+def test_cancelar_da_fila(monkeypatch, store, tmp_path):
+    from atlas.torrent.pool import TorrentPool
+
+    pool = TorrentPool(max_concorrente=1)
+    res, _ = _criar(store, tmp_path)
+    pool.tentar_iniciar("ocupa-o-slot")
+    pool.tentar_iniciar(res.name)  # vai pra fila
+    store.set_status("Torrent", res.name, {**res.status, "fase": servico.FILA}, datetime.now())
+    ok, msg = servico.cancelar(store, res.name, datetime.now(), pool=pool)
+    assert ok and "fila" in msg.lower()
+    assert store.get("Torrent", res.name).status["fase"] == servico.CANCELADO
+    assert pool.posicao_na_fila(res.name) is None
+
+
+def test_executar_download_verifica_integridade_falha(store, tmp_path):
+    """Ao concluir, um .nsz sem magic PFS0 → integridade=falha + aviso."""
+    res, _ = _criar(store, tmp_path, chat=7)
+    dest = tmp_path / "dl"
+    (dest / res.spec["nome"]).mkdir(parents=True)
+    (dest / res.spec["nome"] / "jogo.nsz").write_bytes(b"LIXO" + b"\x00" * 10)
+    store.set_status(
+        "Torrent", res.name,
+        {**res.status, "fase": servico.BAIXANDO, "destino": str(dest)}, datetime.now(),
+    )
+    # o spec.destino também precisa apontar pro dest
+    store.patch("Torrent", res.name, {"destino": str(dest)}, datetime.now())
+    avisos = []
+    servico.executar_download(
+        store, res.name, notificar=lambda c, m: avisos.append(m),
+        cliente=object(), baixar_fn=_fake_baixar_ok, intervalo_s=0,
+    )
+    t = store.get("Torrent", res.name)
+    assert t.status["fase"] == servico.CONCLUIDO
+    assert t.status["integridade"] == "falha"
+    assert any("integridade falhou" in m.lower() or "invalid pfs0" in m.lower() for m in avisos)

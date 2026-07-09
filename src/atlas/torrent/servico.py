@@ -15,8 +15,9 @@ from pathlib import Path
 
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
-from atlas.torrent import download, scan
+from atlas.torrent import download, integridade, scan
 from atlas.torrent.download import ConfigDownload
+from atlas.torrent.pool import TorrentPool, pool_torrent
 from atlas.torrent.scan import ResultadoScan
 
 _log = logging.getLogger("atlas.torrent")
@@ -28,6 +29,7 @@ DESTINO_DEFAULT = "~/Documents/torrent"
 # Fases
 VERIFICANDO = "verificando"
 AGUARDANDO = "aguardando_confirmacao"
+FILA = "fila"
 BAIXANDO = "baixando"
 CONCLUIDO = "concluido"
 ERRO = "erro"
@@ -128,17 +130,20 @@ def confirmar(
     agora: datetime,
     *,
     dispatch: Callable[[str], None],
+    pool: TorrentPool | None = None,
     forte: bool = False,
 ) -> tuple[bool, str]:
-    """Move ``aguardando_confirmacao`` → ``baixando`` e dispara o download.
+    """Confirma o download: se há slot no pool baixa já (``baixando``), senão
+    entra na ``fila`` (ADR-0049). O próximo é despachado sozinho quando um termina.
 
     Risco alto (nível 2) exige ``forte=True`` (o usuário digitou 'SIM' maiúsculo),
     espelhando o ``torrent-safe``.
     """
+    pool = pool or pool_torrent
     t = store.get(KIND, name)
     if t is None:
         return False, "torrent não encontrado"
-    if (t.status or {}).get("fase") != AGUARDANDO:
+    if (t.status or {}).get("fase") not in (AGUARDANDO, FILA):
         return False, "esse torrent não está aguardando confirmação"
     if (t.status or {}).get("risco", 0) >= 2 and not forte:
         return False, "🚨 risco ALTO. Para confirmar mesmo assim, responda: SIM (maiúsculo)"
@@ -147,10 +152,27 @@ def confirmar(
             "motor de download indisponível. Instale uma vez:\n"
             "  sudo dnf install -y qbittorrent-nox"
         )
-    _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
-    dispatch(name)
     nome = t.spec.get("nome") or name
-    return True, f"⬇️ baixando: {nome}\nAcompanhe com: progresso"
+    if pool.tentar_iniciar(name):
+        _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
+        dispatch(name)
+        return True, f"⬇️ baixando: {nome}\nAcompanhe com: progresso"
+    _patch_status(store, name, {"fase": FILA, "cancelar": False, "mensagem": ""}, agora)
+    pos = pool.posicao_na_fila(name)
+    return True, f"🕒 na fila (posição {pos}): {nome}\nComeça quando um slot liberar."
+
+
+def ao_concluir_slot(
+    store: ResourceStore, name: str, *, pool: TorrentPool | None = None
+) -> str | None:
+    """Chamado quando um download termina: libera o slot e devolve o próximo da
+    fila (já marcado ``baixando``), que o chamador deve despachar. ``None`` se a
+    fila está vazia."""
+    pool = pool or pool_torrent
+    prox = pool.liberar(name)
+    if prox is not None:
+        _patch_status(store, prox, {"fase": BAIXANDO, "cancelar": False})
+    return prox
 
 
 def recusar(store: ResourceStore, name: str, agora: datetime) -> tuple[bool, str]:
@@ -161,16 +183,24 @@ def recusar(store: ResourceStore, name: str, agora: datetime) -> tuple[bool, str
     return True, "👍 ok, não vou baixar."
 
 
-def cancelar(store: ResourceStore, name: str, agora: datetime) -> tuple[bool, str]:
-    """Sinaliza cancelamento cooperativo (o loop de download lê a flag)."""
+def cancelar(
+    store: ResourceStore, name: str, agora: datetime, *, pool: TorrentPool | None = None
+) -> tuple[bool, str]:
+    """Cancela: se está na ``fila``, tira da fila; se ``baixando``, sinaliza o
+    cancelamento cooperativo (o loop de download lê a flag)."""
+    pool = pool or pool_torrent
     t = store.get(KIND, name)
     if t is None:
         return False, "torrent não encontrado"
     fase = (t.status or {}).get("fase")
-    if fase not in (BAIXANDO, AGUARDANDO):
-        return False, f"nada para cancelar (fase: {fase})"
-    _patch_status(store, name, {"cancelar": True, "fase": CANCELADO}, agora)
-    return True, "🛑 cancelado."
+    if fase == FILA:
+        pool.cancelar_da_fila(name)
+        _patch_status(store, name, {"fase": CANCELADO}, agora)
+        return True, "🛑 removido da fila."
+    if fase in (BAIXANDO, AGUARDANDO):
+        _patch_status(store, name, {"cancelar": True, "fase": CANCELADO}, agora)
+        return True, "🛑 cancelado."
+    return False, f"nada para cancelar (fase: {fase})"
 
 
 def linha_progresso(t: Resource) -> str:
@@ -184,13 +214,25 @@ def linha_progresso(t: Resource) -> str:
             f"  {s.get('progresso_pct', 0):.1f}%  ·  {s.get('velocidade') or '—'}"
             f"  ·  seeds: {s.get('seeds', 0)}"
         )
+    if fase == FILA:
+        return f"🕒 {nome} — na fila"
     if fase == CONCLUIDO:
-        return f"✅ {nome} — concluído ({s.get('concluido_em') or ''})"
+        selo = _selo_integridade(s)
+        return f"✅ {nome} — concluído ({s.get('concluido_em') or ''}){selo}"
     if fase == AGUARDANDO:
         return f"⏸️ {nome} — aguardando você confirmar (sim/não)"
     if fase == ERRO:
         return f"❌ {nome} — erro: {s.get('mensagem') or '?'}"
     return f"{nome} — {fase}"
+
+
+def _selo_integridade(s: dict) -> str:
+    integ = s.get("integridade")
+    if integ == "ok":
+        return "  · integridade ✅"
+    if integ == "falha":
+        return "  · integridade ⚠️ (invalid pfs0)"
+    return ""
 
 
 def executar_download(
@@ -214,7 +256,15 @@ def executar_download(
         permitir_sem_vpn=bool(spec.get("permitir_sem_vpn", True)),
         semear=bool(spec.get("semear", False)),
     )
-    cli = cliente if cliente is not None else download.QBittorrentNox()
+    infohash = spec.get("infohash") or name
+    if cliente is not None:
+        cli = cliente
+    else:
+        # cada download concorrente: porta WebUI + profile próprios (ADR-0049).
+        # O profile por-infohash preserva a sessão p/ retomar após restart.
+        porta = download.alocar_porta()
+        cfg = ConfigDownload(**{**cfg.__dict__, "porta_webui": porta})
+        cli = download.QBittorrentNox(profile=download.profile_para(infohash), porta=porta)
     chat = spec.get("origem_chat")
     nome_t = spec.get("nome") or name
     marcos_pendentes = list(MARCOS)  # notifica ao cruzar cada um, uma vez
@@ -262,16 +312,32 @@ def executar_download(
 
     nome = spec.get("nome") or name
     if r.ok and r.concluido:
+        # Verificação de integridade por magic header (ADR-0049): pega conteúdo
+        # fake/corrompido na fonte que o hash do torrent não detecta (invalid pfs0).
+        alvo = os.path.join(cfg.destino_expandido(), nome)
+        integ = integridade.verificar(alvo)
         _patch_status(
             store, name,
             {
                 "fase": CONCLUIDO,
                 "progresso_pct": 100.0,
                 "concluido_em": _agora().isoformat(timespec="seconds"),
+                "integridade": "ok" if integ.ok else "falha",
+                "integridade_detalhe": integ.humano(),
             },
         )
         if notificar and chat is not None:
-            notificar(int(chat), f"✅ baixado: {nome}\n📁 em {cfg.destino_expandido()}")
+            if integ.ok:
+                notificar(
+                    int(chat),
+                    f"✅ baixado: {nome}\n📁 em {cfg.destino_expandido()}\n{integ.humano()}",
+                )
+            else:
+                notificar(
+                    int(chat),
+                    f"⚠️ baixado, MAS integridade falhou: {nome}\n{integ.humano()}\n"
+                    f"📁 em {cfg.destino_expandido()} (arquivos mantidos)",
+                )
     elif r.motivo == "cancelado":
         _patch_status(store, name, {"fase": CANCELADO})
     else:
@@ -280,20 +346,40 @@ def executar_download(
             notificar(int(chat), f"❌ falhou: {nome}\n{r.motivo}")
 
 
-def recuperar_orfaos_no_boot(store: ResourceStore, agora: datetime) -> int:
-    """Um restart mata o P2P; um ``Torrent`` preso em ``baixando`` volta para
-    ``aguardando_confirmacao`` (o dono reconfirma). Devolve quantos recuperou."""
+def retomar_no_boot(
+    store: ResourceStore,
+    agora: datetime,
+    *,
+    dispatch: Callable[[str], None],
+    pool: TorrentPool | None = None,
+) -> int:
+    """Persistência (ADR-0049): um restart mata o processo do nox, mas o
+    ``.torrent`` fica salvo e os dados parciais ficam no destino — então um
+    ``Torrent`` que estava ``baixando``/``fila`` **retoma sozinho** (o nox
+    recontinua do parcial em disco). Respeita o teto do pool: até
+    ``max_concorrente`` voltam a baixar, o resto reentra na fila. Devolve quantos
+    foram re-enfileirados/retomados."""
+    pool = pool or pool_torrent
+    pendentes = [
+        t for t in store.list(KIND) if (t.status or {}).get("fase") in (BAIXANDO, FILA)
+    ]
+    # ordem estável: retoma primeiro os que já estavam baixando, por criado_em.
+    pendentes.sort(
+        key=lambda t: (
+            0 if (t.status or {}).get("fase") == BAIXANDO else 1,
+            (t.status or {}).get("criado_em") or "",
+        )
+    )
     n = 0
-    for t in store.list(KIND):
-        if (t.status or {}).get("fase") == BAIXANDO:
+    for t in pendentes:
+        if pool.tentar_iniciar(t.name):
             _patch_status(
                 store, t.name,
-                {
-                    "fase": AGUARDANDO,
-                    "mensagem": "reiniciado — confirme para retomar",
-                    "cancelar": False,
-                },
+                {"fase": BAIXANDO, "cancelar": False, "mensagem": "retomado após reinício"},
                 agora,
             )
-            n += 1
+            dispatch(t.name)
+        else:
+            _patch_status(store, t.name, {"fase": FILA, "cancelar": False}, agora)
+        n += 1
     return n

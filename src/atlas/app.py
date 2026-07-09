@@ -113,14 +113,20 @@ def _atender_torrent_documento(upd: Update, adapter: Adapter, store: ResourceSto
 
 def _montar_dispatch_torrent(adapter: Adapter, store: ResourceStore):
     """Devolve o ``dispatch(name)`` que sobe o download em background com o
-    notificador de progresso/término apontando para o Telegram (ADR-0049)."""
+    notificador de progresso/término no Telegram e, ao terminar, libera o slot
+    do pool e despacha o próximo da fila (ADR-0049)."""
     from atlas.torrent import servico
 
     def dispatch(name: str) -> None:
         def _run() -> None:
-            servico.executar_download(
-                store, name, notificar=lambda chat, msg: adapter.enviar(chat, msg)
-            )
+            try:
+                servico.executar_download(
+                    store, name, notificar=lambda chat, msg: adapter.enviar(chat, msg)
+                )
+            finally:
+                prox = servico.ao_concluir_slot(store, name)
+                if prox is not None:
+                    dispatch(prox)
 
         threading.Thread(target=_run, daemon=True, name=f"torrent-{name[:8]}").start()
 
@@ -240,16 +246,20 @@ def run(config: Config | None = None) -> None:
     except Exception:  # noqa: BLE001
         _log.exception("Falha ao recuperar jobs órfãos no boot; seguindo.")
 
-    # Torrents órfãos (ADR-0049): o P2P não sobrevive ao restart, então um Torrent
-    # preso em "baixando" volta para "aguardando_confirmacao" (o dono reconfirma).
+    # Torrents: persistência (ADR-0049). O restart mata o nox, mas o .torrent fica
+    # salvo e os dados parciais ficam no destino — retomamos os que estavam
+    # baixando/na fila (o nox recontinua do parcial em disco), respeitando o teto
+    # do pool. Best-effort — não pode derrubar o boot.
     try:
         from atlas.torrent import servico as _torrent_servico
 
-        n_torrent = _torrent_servico.recuperar_orfaos_no_boot(store, datetime.now())
+        n_torrent = _torrent_servico.retomar_no_boot(
+            store, datetime.now(), dispatch=_montar_dispatch_torrent(adapter, store)
+        )
         if n_torrent:
-            _log.warning("Boot: %d torrent(s) órfão(s) voltaram p/ confirmação.", n_torrent)
+            _log.warning("Boot: %d torrent(s) retomado(s)/enfileirado(s).", n_torrent)
     except Exception:  # noqa: BLE001
-        _log.exception("Falha ao recuperar torrents órfãos no boot; seguindo.")
+        _log.exception("Falha ao retomar torrents no boot; seguindo.")
 
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
     disparar_retomada = montar_disparo_retomada(store)  # ADR-0035: retoma jobs pausados

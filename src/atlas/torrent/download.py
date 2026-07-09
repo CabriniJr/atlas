@@ -20,7 +20,7 @@ import subprocess
 import time
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -83,6 +83,31 @@ def iface_ativa(iface: str) -> bool:
 
 def motor_disponivel() -> bool:
     return shutil.which(_NOX_BIN) is not None
+
+
+PROFILE_BASE = os.path.expanduser("~/.local/share/atlas-torrent")
+
+
+def profile_para(infohash: str) -> str:
+    """Perfil dedicado por torrent — isola sessão/config de downloads concorrentes
+    e preserva o estado p/ retomar após restart (ADR-0049)."""
+    return os.path.join(PROFILE_BASE, infohash)
+
+
+def alocar_porta(inicio: int = WEBUI_PORT, tentativas: int = 20) -> int:
+    """Acha uma porta TCP livre em 127.0.0.1 a partir de ``inicio`` (cada download
+    concorrente sobe a própria WebUI). 8080 é do Atlas; começamos em 8099."""
+    import socket
+
+    for porta in range(inicio, inicio + tentativas):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(("127.0.0.1", porta))
+                return porta
+            except OSError:
+                continue
+    return inicio
 
 
 def baixar(
@@ -194,15 +219,17 @@ class QBittorrentNox:
     """Cliente real: escreve a config, lança o daemon headless e fala com a WebUI.
 
     ``profile`` isola o perfil (config/dados) para não pisar num qBittorrent do
-    usuário. Default: perfil dedicado do Atlas.
+    usuário nem num outro download concorrente. ``porta`` é a da WebUI — cada
+    download simultâneo precisa da sua (ADR-0049: até N baixando juntos).
     """
 
     profile: str = field(default_factory=lambda: os.path.expanduser("~/.local/share/atlas-torrent"))
+    porta: int = WEBUI_PORT
     _proc: subprocess.Popen | None = None
 
     @property
     def _api(self) -> str:
-        return f"http://127.0.0.1:{WEBUI_PORT}/api/v2"
+        return f"http://127.0.0.1:{self.porta}/api/v2"
 
     def _config_dir(self) -> str:
         # qBittorrent v5 com --profile=<dir> usa o layout portátil
@@ -215,6 +242,9 @@ class QBittorrentNox:
     def iniciar(self, torrent_path: str, cfg: ConfigDownload, infohash: str) -> None:
         cfg_dir = self._config_dir()
         os.makedirs(cfg_dir, exist_ok=True)
+        # a porta da WebUI é a do cliente (autoritativa) — garante que a config
+        # gravada bate com a porta que ``_api`` consulta.
+        cfg = replace(cfg, porta_webui=self.porta)
         with open(os.path.join(cfg_dir, "qBittorrent.conf"), "w") as f:
             f.write(_config_conf(cfg))
         # --profile isola tudo; passamos o .torrent como argumento posicional.
