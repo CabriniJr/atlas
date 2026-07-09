@@ -533,6 +533,30 @@ _KIND_SCHEMA: dict[str, dict[str, Any]] = {
         ],
         "labels": [{"k": "dominio", "label": "Domínio", "hint": "estudo · trabalho · geral"}],
     },
+    "Torrent": {
+        "meta": {
+            "icon": "📥",
+            "desc": "Download de torrents headless com verificação (ADR-0049)",
+        },
+        "spec": [
+            {"k": "nome", "type": "text", "label": "Nome", "hint": "Nome do conteúdo"},
+            {"k": "destino", "type": "text", "label": "Destino", "hint": "Pasta de download"},
+            {
+                "k": "vpn",
+                "type": "text",
+                "label": "VPN (iface)",
+                "hint": "Interface exigida (kill-switch). Vazio = sem VPN",
+            },
+            {
+                "k": "semear",
+                "type": "select",
+                "label": "Semear",
+                "opts": ["false", "true"],
+                "hint": "false = para o P2P ao chegar a 100% (padrão)",
+            },
+        ],
+        "labels": [{"k": "dominio", "label": "Domínio", "hint": "geral"}],
+    },
 }
 
 # Ações de domínio por kind (ADR-0017). ``verbo`` indica para qual endpoint a

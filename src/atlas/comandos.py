@@ -47,6 +47,9 @@ COMANDOS: list[tuple[str, str]] = [
     ("desativar", "Alias PT-BR para /deactivate"),
     # --- repo ---
     ("repo", "Repo ops: /repo backfill <label>"),
+    # --- torrents (ADR-0049) ---
+    ("torrents", "Lista os torrents; mande um .torrent para baixar (sim/não)"),
+    ("torrent", "Detalhe: /torrent <id>  ·  progresso · cancelar"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
     ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Repo|Diff|Doc)"),

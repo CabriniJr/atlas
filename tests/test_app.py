@@ -13,11 +13,15 @@ from atlas.scheduler import tick
 
 
 class _FakeAdapter:
-    def __init__(self) -> None:
+    def __init__(self, arquivo: bytes = b"") -> None:
         self.enviados: list[tuple[int, str]] = []
+        self._arquivo = arquivo
 
     def enviar(self, chat_id: int, texto: str) -> None:
         self.enviados.append((chat_id, texto))
+
+    def baixar_arquivo(self, file_id: str) -> bytes:
+        return self._arquivo
 
 
 _CFG = Config(telegram_token="x", allowed_user_id=42)
@@ -64,6 +68,42 @@ def test_estranho_e_ignorado():
 
     assert adapter.enviados == []
     assert db.connection.execute("SELECT COUNT(*) AS n FROM activities").fetchone()["n"] == 0
+
+
+# ── Anexo .torrent (ADR-0049) ───────────────────────────────────────────────
+
+
+def test_normalizar_extrai_documento():
+    from atlas.app import _normalizar
+
+    upd = _normalizar({
+        "update_id": 7,
+        "message": {"chat": {"id": 42}, "from": {"id": 42},
+                    "document": {"file_id": "F1", "file_name": "x.torrent"}},
+    })
+    assert upd is not None and upd.documento == {"file_id": "F1", "file_name": "x.torrent"}
+
+
+def test_anexo_torrent_verifica_e_pergunta(tmp_path, monkeypatch):
+    from atlas.core.store import ResourceStore
+    from atlas.torrent import servico
+    from atlas.torrent.scan import bencode
+
+    monkeypatch.setattr(servico, "DIR_TORRENTS", str(tmp_path / "torr"))
+    info = {b"piece length": 262144, b"name": b"pasta",
+            b"files": [{b"length": 700 * 1024 * 1024, b"path": [b"filme.mkv"]}]}
+    dados = bencode({b"announce": b"http://t/x", b"info": info})
+
+    store = ResourceStore(":memory:")
+    adapter = _FakeAdapter(arquivo=dados)
+    # Sem legenda/comando: só o arquivo .torrent (texto="") já dispara a operação.
+    upd = Update(update_id=1, chat_id=42, user_id=42, texto="",
+                 documento={"file_id": "F1", "file_name": "filme.torrent"})
+
+    processar_update(upd, _CFG, Database(":memory:"), adapter, agora=datetime.now(), store=store)
+
+    assert adapter.enviados and "sim / não" in adapter.enviados[0][1]
+    assert servico.pendente_confirmacao(store) is not None
 
 
 # ── ciclo_scheduler roda independente do Telegram (regressão) ───────────────

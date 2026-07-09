@@ -58,6 +58,23 @@ class TelegramAdapter:
         except Exception:  # noqa: BLE001
             _log.warning("Não foi possível remover o webhook (segue mesmo assim).")
 
+    def baixar_arquivo(self, file_id: str) -> bytes:
+        """Baixa os bytes de um anexo (``document``) do Telegram (ADR-0049).
+
+        Dois passos: ``getFile`` devolve o ``file_path``; o conteúdo vem de
+        ``/file/bot<token>/<file_path>`` como bytes crus (não JSON). Usa
+        ``urllib`` direto — o ``transport`` injetável do adapter devolve dict e
+        não serve para binário.
+        """
+        meta = self._transport(self._url("getFile") + f"?file_id={file_id}", None)
+        if not isinstance(meta, dict) or not meta.get("ok"):
+            raise RuntimeError(f"getFile falhou: {meta}")
+        file_path = meta["result"]["file_path"]
+        url = f"https://api.telegram.org/file/bot{self._token}/{file_path}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 (host fixo da API)
+            return resp.read()
+
     def registrar_comandos(self, comandos: list[dict[str, str]]) -> None:
         """Registra o menu de comandos do bot (``setMyCommands``)."""
         dados = urllib.parse.urlencode({"commands": json.dumps(comandos)}).encode("utf-8")

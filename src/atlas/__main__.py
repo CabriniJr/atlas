@@ -16,6 +16,10 @@ def main(argv: list[str] | None = None) -> int:
         from atlas.apply import cli_apply
 
         return cli_apply(argv[1:])
+    if argv and argv[0] == "torrent":
+        from atlas.torrent.cli import cli_torrent
+
+        return cli_torrent(argv[1:])
     run()
     return 0
 

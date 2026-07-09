@@ -34,6 +34,10 @@ ERRO = "erro"
 RECUSADO = "recusado"
 CANCELADO = "cancelado"
 
+# Marcos de progresso que geram notificação proativa (%). 100% = notificação de
+# conclusão ("✅ baixado"), tratada à parte.
+MARCOS = (10, 50, 90)
+
 
 def _agora() -> datetime:
     return datetime.now()
@@ -212,6 +216,8 @@ def executar_download(
     )
     cli = cliente if cliente is not None else download.QBittorrentNox()
     chat = spec.get("origem_chat")
+    nome_t = spec.get("nome") or name
+    marcos_pendentes = list(MARCOS)  # notifica ao cruzar cada um, uma vez
 
     def _on_progress(p: download.Progresso) -> None:
         _patch_status(
@@ -224,6 +230,14 @@ def executar_download(
                 "estado_motor": p.estado,
             },
         )
+        # Notificações proativas de marco (10/50/90%): dispara a cada limiar
+        # cruzado uma única vez (se pular vários num tick, notifica só o maior).
+        cruzados = [m for m in marcos_pendentes if p.pct >= m]
+        if cruzados and notificar and chat is not None:
+            maior = max(cruzados)
+            notificar(int(chat), f"📥 {nome_t}: {maior}%  ·  {p.velocidade or '—'}")
+        for m in cruzados:
+            marcos_pendentes.remove(m)
 
     def _cancelado() -> bool:
         cur = store.get(KIND, name)

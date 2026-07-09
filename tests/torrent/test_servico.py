@@ -108,7 +108,30 @@ def test_executar_download_conclui_e_notifica(store, tmp_path):
     t = store.get("Torrent", res.name)
     assert t.status["fase"] == servico.CONCLUIDO
     assert t.status["progresso_pct"] == 100.0
-    assert len(avisos) == 1 and avisos[0][0] == 77 and "baixado" in avisos[0][1]
+    # última notificação é a de conclusão
+    assert avisos[-1][0] == 77 and "baixado" in avisos[-1][1]
+
+
+def test_notifica_marcos_10_50_90(store, tmp_path):
+    res, _ = _criar(store, tmp_path, chat=9)
+    store.set_status("Torrent", res.name, {**res.status, "fase": servico.BAIXANDO}, datetime.now())
+
+    def _baixar_marcos(*a, **k):
+        on = k["on_progress"]
+        for pct in (5, 12, 55, 92, 100):  # cruza 10, 50, 90 e conclui
+            on(Progresso(pct=pct, velocidade="2.0 MB/s", concluido=pct >= 100))
+        return download.ResultadoDownload(True, concluido=True, destino="/tmp/x")
+
+    marcos = []
+    servico.executar_download(
+        store, res.name, notificar=lambda c, m: marcos.append(m),
+        cliente=object(), baixar_fn=_baixar_marcos, intervalo_s=0,
+    )
+    texto = "\n".join(marcos)
+    assert "10%" in texto and "50%" in texto and "90%" in texto
+    assert "baixado" in texto  # conclusão
+    # cada marco só uma vez
+    assert texto.count("10%") == 1 and texto.count("50%") == 1 and texto.count("90%") == 1
 
 
 def test_executar_download_erro_notifica(store, tmp_path):

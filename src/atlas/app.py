@@ -37,6 +37,7 @@ from atlas.routines import Rotina, carregar_rotinas
 from atlas.scheduler import catch_up, tick
 from atlas.sync import sincronizar_store
 from atlas.telegram import TelegramAdapter
+from atlas.torrent_cmd import responder_conversa as responder_torrent
 
 _log = logging.getLogger("atlas")
 
@@ -49,10 +50,12 @@ class Update:
     chat_id: int
     user_id: int
     texto: str
+    documento: dict | None = None  # {file_id, file_name} — anexo (ADR-0049)
 
 
 class Adapter(Protocol):
     def enviar(self, chat_id: int, texto: str) -> None: ...
+    def baixar_arquivo(self, file_id: str) -> bytes: ...
 
 
 def processar_update(
@@ -67,21 +70,79 @@ def processar_update(
     if upd.user_id != config.allowed_user_id:
         _log.warning("Mensagem ignorada de user_id=%s (não é o dono)", upd.user_id)
         return
+    agora = agora or datetime.now()
+
+    # Anexo .torrent (ADR-0049): verifica, cria o Kind Torrent e pergunta.
+    if upd.documento is not None and store is not None:
+        _atender_torrent_documento(upd, adapter, store, agora)
+        return
+
     if not upd.texto:
         return
-    resposta = responder(upd.texto, db, agora or datetime.now(), store=store)
+
+    # Conversa stateful do Torrent (sim/não/progresso/cancelar, /torrents) — só
+    # intercepta se a mensagem tem a ver com torrent; senão segue o roteador base.
+    if store is not None:
+        resposta_torrent = responder_torrent(
+            upd.texto, store, agora, dispatch=_montar_dispatch_torrent(adapter, store)
+        )
+        if resposta_torrent is not None:
+            adapter.enviar(upd.chat_id, resposta_torrent)
+            return
+
+    resposta = responder(upd.texto, db, agora, store=store)
     adapter.enviar(upd.chat_id, resposta)
+
+
+def _atender_torrent_documento(upd: Update, adapter: Adapter, store: ResourceStore, agora) -> None:
+    """Baixa o anexo do Telegram, verifica e cria o Torrent (ADR-0049)."""
+    from atlas import torrent_cmd
+
+    doc = upd.documento or {}
+    try:
+        dados = adapter.baixar_arquivo(doc.get("file_id"))
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha ao baixar anexo do Telegram")
+        adapter.enviar(upd.chat_id, "❌ não consegui baixar esse arquivo do Telegram.")
+        return
+    msg = torrent_cmd.receber_documento(
+        store, dados, doc.get("file_name") or "", upd.chat_id, agora
+    )
+    adapter.enviar(upd.chat_id, msg)
+
+
+def _montar_dispatch_torrent(adapter: Adapter, store: ResourceStore):
+    """Devolve o ``dispatch(name)`` que sobe o download em background com o
+    notificador de progresso/término apontando para o Telegram (ADR-0049)."""
+    from atlas.torrent import servico
+
+    def dispatch(name: str) -> None:
+        def _run() -> None:
+            servico.executar_download(
+                store, name, notificar=lambda chat, msg: adapter.enviar(chat, msg)
+            )
+
+        threading.Thread(target=_run, daemon=True, name=f"torrent-{name[:8]}").start()
+
+    return dispatch
 
 
 def _normalizar(update_cru: dict) -> Update | None:
     msg = update_cru.get("message") or update_cru.get("edited_message")
-    if not msg or "text" not in msg:
+    if not msg:
+        return None
+    documento = None
+    doc = msg.get("document")
+    if doc:
+        documento = {"file_id": doc.get("file_id"), "file_name": doc.get("file_name")}
+    if "text" not in msg and documento is None:
         return None
     return Update(
         update_id=update_cru["update_id"],
         chat_id=msg["chat"]["id"],
         user_id=msg["from"]["id"],
-        texto=msg["text"],
+        texto=msg.get("text", ""),
+        documento=documento,
     )
 
 
@@ -178,6 +239,17 @@ def run(config: Config | None = None) -> None:
             )
     except Exception:  # noqa: BLE001
         _log.exception("Falha ao recuperar jobs órfãos no boot; seguindo.")
+
+    # Torrents órfãos (ADR-0049): o P2P não sobrevive ao restart, então um Torrent
+    # preso em "baixando" volta para "aguardando_confirmacao" (o dono reconfirma).
+    try:
+        from atlas.torrent import servico as _torrent_servico
+
+        n_torrent = _torrent_servico.recuperar_orfaos_no_boot(store, datetime.now())
+        if n_torrent:
+            _log.warning("Boot: %d torrent(s) órfão(s) voltaram p/ confirmação.", n_torrent)
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha ao recuperar torrents órfãos no boot; seguindo.")
 
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
     disparar_retomada = montar_disparo_retomada(store)  # ADR-0035: retoma jobs pausados
