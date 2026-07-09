@@ -17,6 +17,7 @@ substituido-por: —
 |--------|------------|-----------|---------|--------------|
 | 0.1    | 2026-07-09 | Tech Lead | Proposta | — |
 | 1.0    | 2026-07-09 | Tech Lead | **Aprovada pelo PO** (design no brainstorm: motor `qbittorrent-nox`, sem VPN por ora, destino `~/Documents/torrent`, entrega completa) | PO/PM |
+| 1.1    | 2026-07-09 | Tech Lead | **Extensão (aprovada pelo PO):** fila + concorrência (cap 3), persistência (retoma após restart) e verificação de integridade pós-download por magic header ("invalid pfs0") | PO/PM |
 
 ---
 
@@ -127,6 +128,24 @@ via gerenciador de pacotes).
   por um restart volta para `aguardando_confirmacao` (o P2P não sobrevive ao
   processo; o PO reconfirma) — evita estado fantasma.
 
+### 9. Fila + concorrência + persistência + integridade (v1.1)
+- **Fila/concorrência** (`torrent/pool.py`, padrão do ADR-0038): até
+  `ATLAS_TORRENT_MAX_CONCURRENT` (**default 3**) baixam juntos; o resto entra na
+  **fase `fila`** (FIFO) e é despachado sozinho quando um slot libera
+  (`ao_concluir_slot`). Cada download concorrente recebe **porta WebUI própria**
+  (`alocar_porta`, a partir de 8099) e **profile por-infohash** (`profile_para`) —
+  sem isso, duas instâncias do nox colidiriam na porta/sessão.
+- **Persistência** (`retomar_no_boot`): o `.torrent` fica salvo e os dados
+  parciais no destino, então um Torrent que estava `baixando`/`fila` **retoma
+  sozinho** após restart (o nox recontinua do parcial em disco), respeitando o
+  teto do pool. Substitui a postura v1.0 de "voltar para confirmação".
+- **Integridade pós-download** (`torrent/integridade.py`): ao chegar a 100%,
+  valida o *magic header* de cada arquivo de tipo conhecido (`.nsp`/`.nsz`→`PFS0`,
+  `.xci`→`HEAD`@0x100, `.zip`→`PK`, `.pdf`→`%PDF`, `.7z`, `.iso`, `.xz`, …). O
+  torrent baixa bit-a-bit conferido (hash por peça), mas isso não pega conteúdo
+  **fake/corrompido na fonte** (o erro "invalid pfs0"). Falha → `status.integridade
+  = falha` + notificação; **mantém os arquivos** (decisão do PO: avisar, não apagar).
+
 ## Alternativas consideradas
 | Alternativa | Prós | Contras | Por que não |
 |---|---|---|---|
@@ -155,6 +174,6 @@ via gerenciador de pacotes).
   default quando o PO tiver uma VPN no desktop.
 - **Antivírus opcional** no conteúdo baixado (`torrent-scan.py --clam`) fica fora
   desta entrega — sugerido como follow-up no backlog.
-- **Múltiplos torrents simultâneos**: esta entrega processa serialmente (um por
-  vez, o mais recente pendente). Pool de concorrência (à la ADR-0038) fica em
-  backlog se o PO precisar.
+- **Múltiplos torrents simultâneos**: entregue na v1.1 (fila + concorrência cap 3
+  + persistência). Falta apenas escalar o teto pela UI/Telegram (o pool já é
+  escalável em runtime; falta o endpoint/comando).
