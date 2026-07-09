@@ -349,6 +349,7 @@ _AREA_MIN_DESENHO = 400.0  # ignora linhas finas/sublinhados (ADR-0041)
 _LARGURA_MIN_REGIAO = 80.0
 _ALTURA_MIN_REGIAO = 40.0
 _PALAVRAS_MIN_PROSA = 15  # bloco com >= isso é prosa (destaque), não rótulo de diagrama
+_LARGURA_MIN_FIGURA = 40.0  # pt — abaixo disso é ícone: renderiza no tamanho real, não infla
 
 
 _ESPESSURA_MAX_REGRA = 2.0  # pt — "espessura" de uma linha/régua (não uma caixa)
@@ -388,6 +389,7 @@ def _parece_tabela(regiao: fitz.Rect, retangulos: list) -> bool:
 
 
 _TOLERANCIA_CONTAINER = 3.0  # pt — forma igual à região inteira (contêiner) não conta como subforma
+_TOLERANCIA_FORA_PAGINA = 3.0  # pt — fill que extravasa a página é fundo espúrio (não callout)
 
 
 def _tem_subformas(regiao: fitz.Rect, retangulos: list) -> bool:
@@ -510,12 +512,25 @@ def _regioes_destaque(page, blocos: list, ids_diagrama: set) -> list[tuple]:
     # do numeral "fantasma" do capítulo e formem uma região que por acaso cobre
     # o BLOCO DO TÍTULO, fazendo o título de capítulo virar uma caixa de
     # destaque (achado real ao auditar Kubernetes in Action, ADR-0041 fix).
+    #
+    # Também ignoramos fills que EXTRAVASAM os limites da página: um callout real
+    # é desenhado dentro da página, enquanto o fundo de coluna/documento espúrio
+    # de um PDF recomprimido (``_compress``) é um retângulo gigante começando
+    # muito acima do topo (ex. ~468x11250pt em y=-5760) — sem esse guard, ele
+    # vira uma caixa e embrulha TODA a página em ``.destaque`` (achado real ao
+    # auditar Learning OpenTelemetry).
+    pr = page.rect
+    tol = _TOLERANCIA_FORA_PAGINA
     retangulos = [
-        fitz.Rect(d["rect"])
+        r
         for d in desenhos
-        if d.get("rect") is not None
-        and d.get("fill") is not None
-        and min(fitz.Rect(d["rect"]).width, fitz.Rect(d["rect"]).height) > _ESPESSURA_MAX_REGRA
+        if d.get("rect") is not None and d.get("fill") is not None
+        for r in [fitz.Rect(d["rect"])]
+        if min(r.width, r.height) > _ESPESSURA_MAX_REGRA
+        and r.y0 >= pr.y0 - tol
+        and r.y1 <= pr.y1 + tol
+        and r.x0 >= pr.x0 - tol
+        and r.x1 <= pr.x1 + tol
     ]
     if not retangulos:
         return []
@@ -1578,11 +1593,19 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
             if tipo == "img":
                 w, h, uri = obj
                 tw = geo["pw"] - geo["left"] - geo["right"]
-                pct = max(15, min(100, int(w / tw * 100))) if tw else 100
+                if w < _LARGURA_MIN_FIGURA:
+                    # imagem pequena (ícone/decoração de poucos pt, ex. bullets de 9pt):
+                    # renderiza no TAMANHO REAL. Sem isso, o piso de 15% da largura de
+                    # figura a INFLA num borrão gigante no meio do texto (achado real
+                    # ao auditar Learning OpenTelemetry: numeral 9x9 estourado no código).
+                    estilo_img = f"width:{w:.0f}pt"
+                else:
+                    pct = max(15, min(100, int(w / tw * 100))) if tw else 100
+                    estilo_img = f"width:{pct}%"
                 fecha_lista()
                 heading_aberto = None
                 ultimo_texto_p = None
-                partes.append(f'<figure><img src="{uri}" style="width:{pct}%"></figure>')
+                partes.append(f'<figure><img src="{uri}" style="{estilo_img}"></figure>')
                 continue
             if tipo == "destaque":
                 fecha_lista()

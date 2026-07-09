@@ -1131,6 +1131,74 @@ def test_regioes_destaque_ignora_regua_fina_perto_de_fundo_decorativo(tmp_path):
     doc.close()
 
 
+def test_regioes_destaque_ignora_fundo_espurio_fora_da_pagina(tmp_path):
+    """Achado real ao auditar Learning OpenTelemetry: o PDF recomprimido
+    (``_compress``) tem UM retângulo preenchido gigante por página — ~468x11250pt
+    começando em y=-5760 (14 páginas de altura, origem muito acima do topo) — um
+    fundo de coluna/documento espúrio do compressor, NÃO um callout. Sem guard,
+    ``_regioes_destaque`` o trata como caixa e embrulha TODA a página (prosa
+    normal inclusa) num ``.destaque`` cinza. Uma caixa de destaque real cabe
+    dentro da página; um fill que extravasa os limites é artefato e deve ser
+    ignorado."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _regioes_destaque
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    # fundo espúrio: preenchido, largo, mas extravasando muito acima/abaixo da página.
+    page.draw_rect(fitz.Rect(72, -5760, 540, 5490), color=None, fill=(0.95, 0.95, 0.95), width=0)
+    page.insert_text(
+        (80, 200),
+        "Paragrafo comum de corpo que por acaso cai sobre o fundo espurio gigante.",
+        fontname="helv",
+        fontsize=11,
+    )
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    regioes = _regioes_destaque(doc[0], blocos, ids_diagrama=set())
+    assert regioes == []
+    doc.close()
+
+
+def test_montar_html_nao_infla_imagem_pequena(tmp_path):
+    """Achado real ao auditar Learning OpenTelemetry: um ícone/decoração de 9x9pt
+    era INFLADO pelo piso de 15% da largura de figura, virando um borrão gigante
+    no meio do texto. Imagem pequena deve sair no tamanho real (pt), preservada
+    (nunca perde conteúdo, ADR-0031), mas sem estourar."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import extrair_pagina
+
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_text(
+        (72, 120), "Paragrafo de corpo antes do icone decorativo.", fontname="helv", fontsize=11
+    )
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 9, 9))
+    pix.set_rect(pix.irect, (10, 20, 30))
+    page.insert_image(fitz.Rect(300, 130, 309, 139), pixmap=pix)  # 9x9pt
+    p = tmp_path / "s.pdf"
+    doc.save(str(p))
+    doc.close()
+
+    doc = fitz.open(str(p))
+    blocos = extrair_pagina(doc[0], 0)
+    render_paginas = {0: (blocos, {b.id: b.texto for b in blocos if not b.skip})}
+    html = montar_html(doc, render_paginas, _geometria(doc, render_paginas))
+    doc.close()
+    # a imagem é preservada (figura presente) mas NÃO inflada a 15%.
+    assert "<figure><img" in html
+    assert "width:15%" not in html
+    assert "width:9pt" in html
+
+
 def test_montar_html_envolve_caixa_de_destaque_em_div(tmp_path):
     import fitz
 
