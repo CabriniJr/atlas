@@ -9,6 +9,8 @@ import { KindActions } from "./resource/KindActions";
 import { CommandPalette } from "./cmd/CommandPalette";
 import { getResource, deleteResource } from "./api/client";
 import type { Resource } from "./api/types";
+import { Button } from "./ui";
+import "./App.css";
 
 type View = { mode: "vazio" } | { mode: "card"; res: Resource } | { mode: "novo"; kind: string };
 
@@ -37,10 +39,14 @@ export default function App() {
   const kinds = schema ? Object.keys(schema.kinds) : [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "sans-serif" }}>
-      <header style={{ padding: "8px 12px", borderBottom: "1px solid #ddd", display: "flex", gap: 12, alignItems: "center" }}>
-        <strong>Atlas</strong>
-        <select value="" onChange={(e) => e.target.value && setView({ mode: "novo", kind: e.target.value })}>
+    <div className="app">
+      <header className="app__header">
+        <span className="app__brand">Atlas</span>
+        <select
+          className="app__novo"
+          value=""
+          onChange={(e) => e.target.value && setView({ mode: "novo", kind: e.target.value })}
+        >
           <option value="">+ Novo…</option>
           {kinds.map((k) => (
             <option key={k} value={k}>
@@ -48,26 +54,36 @@ export default function App() {
             </option>
           ))}
         </select>
-        {erroSchema && <span style={{ color: "crimson" }}>{erroSchema}</span>}
+        <span className="app__spacer" />
+        {erroSchema && <span className="app__erro">{erroSchema}</span>}
       </header>
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+      <div className="app__body">
         <Explorer key={chave} onSelect={abrir} />
-        <main style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-          {view.mode === "vazio" && <p style={{ color: "#888" }}>Selecione um recurso ou crie um novo.</p>}
+        <main className="app__main">
+          {view.mode === "vazio" && (
+            <p className="app__empty">Selecione um recurso ou crie um novo.</p>
+          )}
           {view.mode === "card" && schema && (
             <>
-              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <button onClick={() => setView({ mode: "card", res: view.res })}>↻</button>
-                <button onClick={() => remover(view.res)} style={{ color: "crimson" }}>
+              <div className="app__actions">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title="Recarregar"
+                  onClick={() => void abrir(view.res.kind, view.res.name)}
+                >
+                  ↻ Recarregar
+                </Button>
+                <Button variant="danger" size="sm" onClick={() => remover(view.res)}>
                   Apagar
-                </button>
+                </Button>
               </div>
               <ResourceCard res={view.res} />
               {schema.kinds[view.res.kind] && (
                 <KindActions res={view.res} actions={schema.kinds[view.res.kind].actions} />
               )}
               {schema.kinds[view.res.kind] && (
-                <details style={{ marginTop: 16 }}>
+                <details className="app__editar">
                   <summary>Editar</summary>
                   <ResourceForm
                     kind={view.res.kind}

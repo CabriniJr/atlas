@@ -1,0 +1,89 @@
+/* Atlas Design System — tokens (FONTE DE VERDADE).
+ * Dark-first. O `_tokens.css` do projeto Claude Design (claude.ai/design) é um
+ * espelho compacto deste arquivo, mantido em sincronia via /design-sync.
+ * Nada de valores mágicos nos componentes: tudo sai daqui. */
+:root {
+  /* superfícies / fundo */
+  --color-bg: #0b0e14;
+  --color-surface: #12161f;
+  --color-surface-2: #1a2030;
+  --color-surface-3: #232b3d;
+  --color-border: #262d3d;
+  --color-border-strong: #38415a;
+
+  /* texto */
+  --color-text: #e6e9ef;
+  --color-text-muted: #9aa4b8;
+  --color-text-subtle: #5d6577;
+  --color-text-on-accent: #fff;
+
+  /* acento */
+  --color-accent: #5b9dff;
+  --color-accent-hover: #74acff;
+  --color-accent-active: #3f86ee;
+  --color-accent-soft: rgba(91, 157, 255, 0.14);
+  --color-accent-border: rgba(91, 157, 255, 0.45);
+
+  /* semânticos */
+  --color-success: #3fb950;
+  --color-success-soft: rgba(63, 185, 80, 0.14);
+  --color-warning: #d29922;
+  --color-warning-soft: rgba(210, 153, 34, 0.16);
+  --color-danger: #f85149;
+  --color-danger-soft: rgba(248, 81, 73, 0.14);
+  --color-info: #58a6ff;
+  --color-info-soft: rgba(88, 166, 255, 0.14);
+
+  /* elevação */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+
+  /* tipografia */
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.625rem;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* espaçamento */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* forma */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* movimento */
+  --dur-fast: 120ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* baseline da aplicação (equivale ao body do espelho) */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+* {
+  box-sizing: border-box;
+}

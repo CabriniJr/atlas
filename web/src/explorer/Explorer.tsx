@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { listKinds, listKind } from "../api/client";
 import type { Resource } from "../api/types";
+import { Badge } from "../ui";
+import "./Explorer.css";
 
 export function Explorer({ onSelect }: { onSelect: (kind: string, name: string) => void }) {
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -31,22 +33,21 @@ export function Explorer({ onSelect }: { onSelect: (kind: string, name: string) 
   }
 
   return (
-    <nav style={{ width: 260, borderRight: "1px solid #ddd", overflowY: "auto", padding: 8 }}>
-      {erro && <p style={{ color: "crimson" }}>{erro}</p>}
+    <nav className="explorer">
+      {erro && <p className="explorer__erro">{erro}</p>}
       {Object.entries(counts).map(([kind, n]) => (
         <div key={kind}>
-          <button
-            onClick={() => toggle(kind)}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 4px", border: "none", background: "none", cursor: "pointer", fontWeight: 600 }}
-          >
-            {aberto === kind ? "▾" : "▸"} {kind} <span style={{ color: "#888" }}>({n})</span>
+          <button className="explorer__kind" onClick={() => toggle(kind)}>
+            <span className="explorer__caret">{aberto === kind ? "▾" : "▸"}</span>
+            <span className="explorer__kind-name">{kind}</span>
+            <Badge variant="neutral">{n}</Badge>
           </button>
           {aberto === kind &&
             (recursos[kind] ?? []).map((r) => (
               <button
                 key={r.name}
+                className="explorer__res"
                 onClick={() => onSelect(kind, r.name)}
-                style={{ display: "block", width: "100%", textAlign: "left", padding: "4px 4px 4px 22px", border: "none", background: "none", cursor: "pointer" }}
               >
                 {r.name}
               </button>

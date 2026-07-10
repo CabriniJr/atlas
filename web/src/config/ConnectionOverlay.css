@@ -1,0 +1,18 @@
+.conn-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.conn-box {
+  width: 360px;
+  max-width: 100%;
+}
+.conn-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

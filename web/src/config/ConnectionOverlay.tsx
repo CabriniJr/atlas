@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { getConnection, setConnection } from "./connection";
+import { Button, Card, CardBody, CardHeader, Field, Input } from "../ui";
+import "./ConnectionOverlay.css";
 
 export function ConnectionOverlay({ onSaved }: { onSaved: () => void }) {
   const current = getConnection();
@@ -20,42 +22,39 @@ export function ConnectionOverlay({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <div role="dialog" aria-label="Conexão com a API" style={overlay}>
-      <div style={box}>
-        <h2>Conectar ao Atlas</h2>
-        <label>
-          URL da API
-          <input
-            value={apiUrl}
-            onChange={(e) => setApiUrl(e.target.value)}
-            placeholder="https://pi.<tailnet>.ts.net"
-          />
-        </label>
-        <label>
-          Token
-          <input type="password" value={token} onChange={(e) => setToken(e.target.value)} />
-        </label>
-        {erro && <p style={{ color: "crimson" }}>{erro}</p>}
-        <button onClick={conectar}>Conectar</button>
-      </div>
+    <div role="dialog" aria-label="Conexão com a API" className="conn-overlay">
+      <Card className="conn-box">
+        <CardHeader title="Conectar ao Atlas" subtitle="URL da API + token de acesso" icon="🔌" />
+        <CardBody>
+          <div className="conn-form">
+            <Field label="URL da API">
+              {({ id }) => (
+                <Input
+                  id={id}
+                  value={apiUrl}
+                  onChange={(e) => setApiUrl(e.target.value)}
+                  placeholder="https://pi.<tailnet>.ts.net"
+                />
+              )}
+            </Field>
+            <Field label="Token" error={erro || undefined}>
+              {({ id, describedBy }) => (
+                <Input
+                  id={id}
+                  type="password"
+                  value={token}
+                  invalid={!!erro}
+                  aria-describedby={describedBy}
+                  onChange={(e) => setToken(e.target.value)}
+                />
+              )}
+            </Field>
+            <Button variant="primary" onClick={conectar}>
+              Conectar
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
     </div>
   );
 }
-
-const overlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,.6)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-const box: React.CSSProperties = {
-  background: "#fff",
-  padding: "2rem",
-  borderRadius: 8,
-  display: "flex",
-  flexDirection: "column",
-  gap: ".75rem",
-  minWidth: 320,
-};
