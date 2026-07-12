@@ -107,6 +107,56 @@ def _cor_hex(color: int) -> str:
     return f"#{(color & 0xFFFFFF):06x}"
 
 
+def _luminancia(color: int) -> float:
+    """Luminância relativa (0=preto, 1=branco) do RGB — pra decidir se a cor é
+    clara demais pra ler no fundo branco do render."""
+    r = ((color >> 16) & 0xFF) / 255
+    g = ((color >> 8) & 0xFF) / 255
+    b = (color & 0xFF) / 255
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _cor_clara(color: int) -> bool:
+    """``True`` se a cor é clara demais pra ler em fundo branco (ex.: o branco de
+    uma legenda de listagem que, no original, fica sobre uma barra colorida). Azul
+    de link, vermelho, etc. (luminância baixa/média) continuam legíveis."""
+    return _luminancia(color) > 0.7
+
+
+def _fill_hex(fill) -> str:
+    """``(r, g, b)`` em floats 0..1 (cor de preenchimento do fitz) → ``#rrggbb``."""
+    r, g, b = (max(0, min(255, round(c * 255))) for c in fill[:3])
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _faixas_por_bloco(page, blocos: list) -> dict:
+    """``{block_id: "#rrggbb"}`` pros blocos de texto CLARO que, no original,
+    ficam sobre uma FAIXA preenchida (ex.: legenda "Listagem N.N" da Manning,
+    texto branco sobre barra azul). Sem reproduzir a barra, o texto claro fica
+    invisível no fundo branco do render — o ``<pre>`` de código já sai certo, mas
+    o rótulo da listagem sumia junto (achado real, Kubernetes in Action)."""
+    alvos = [b for b in blocos if b.bbox and b.spans and _cor_clara(_estilo(b)["color"])]
+    if not alvos:
+        return {}
+    try:
+        desenhos = page.get_drawings()
+    except Exception:  # noqa: BLE001 — best-effort (ADR-0006)
+        return {}
+    barras = [
+        (fitz.Rect(d["rect"]), d["fill"])
+        for d in desenhos
+        if d.get("rect") is not None and d.get("fill") is not None
+    ]
+    out: dict = {}
+    for b in alvos:
+        largura_bloco = b.bbox[2] - b.bbox[0]
+        for reg, fill in barras:
+            if _fracao_contida(b.bbox, reg) > 0.6 and reg.width >= largura_bloco * 0.9:
+                out[b.id] = _fill_hex(fill)
+                break
+    return out
+
+
 # Piso de largura/altura útil: abaixo disso a margem calculada não é confiável
 # (documento com pouco texto/páginas esparsas) — evita coluna estreita demais,
 # que faz o texto traduzido (mais longo) colidir/paginar em cima do folio.
@@ -1344,11 +1394,26 @@ def _elemento(
     anchor: str = "",
     link=None,
     apos_rotulo: bool = False,
+    fundo: str | None = None,
 ) -> str:
     """HTML de um bloco conforme papel/estilo, com âncora, hyperlink e fonte
-    real (ADR-0041)."""
+    real (ADR-0041). ``fundo`` (opcional): cor da faixa que ficava atrás do bloco
+    no original (legenda de listagem sobre barra colorida) — reproduzida como
+    ``background`` pra manter o texto claro legível."""
     cor = _cor_hex(est["color"])
-    cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
+    if fundo:
+        # legenda/rótulo sobre barra colorida do original: reproduz a barra e
+        # mantém o texto claro (branco) — senão sairia branco em fundo branco.
+        cor_css = f"color:{cor};"
+        fundo_css = f"background:{fundo};padding:.14em .4em;border-radius:2px;"
+    elif _cor_clara(est["color"]):
+        # texto claro sem barra atrás (nada a reproduzir): cai no preto padrão —
+        # nunca deixa texto invisível no fundo branco do render.
+        cor_css = ""
+        fundo_css = ""
+    else:
+        cor_css = "" if cor in ("#000000", "#000") else f"color:{cor};"
+        fundo_css = ""
     fonte_css = _fonte_css(est["font"])
     ida = f' id="{anchor}"' if anchor else ""
     # rótulo de capítulo/parte ("CHAPTER N"/"PART N", ADR-0041): força a
@@ -1396,7 +1461,7 @@ def _elemento(
     sz = est["size"]
     nivel = nivel_titulo(sz, clusters) if len(texto.split()) <= 14 else None
     if nivel:
-        style = f"font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}{pos_rotulo_css}"
+        style = f"font-size:{sz:.1f}pt;{cor_css}{fundo_css}{fonte_css}{rotulo_css}{pos_rotulo_css}"
         return f'<{nivel}{ida} style="{style}">{conteudo}</{nivel}>'
     tipo_li = _tipo_lista(b.texto)
     if tipo_li == "ul":
@@ -1414,7 +1479,7 @@ def _elemento(
             item = f'<span class="it">{item}</span>'
         return f'<li{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}">{item}</li>'
     return (
-        f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fonte_css}{rotulo_css}'
+        f'<p{ida} style="font-size:{sz:.1f}pt;{cor_css}{fundo_css}{fonte_css}{rotulo_css}'
         f'{pos_rotulo_css}">{conteudo}</p>'
     )
 
@@ -1530,6 +1595,9 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
         # continuam traduzidos normalmente, só ganham um contêiner (ADR-0041 fix).
         destaques = _regioes_destaque(page, blocos, blocos_em_diagrama)
         blocos_em_destaque = {b.id for _reg, contidos in destaques for b in contidos}
+        # legenda de listagem sobre barra colorida (texto claro): reproduz a barra
+        # como fundo do elemento pra o rótulo não sumir no branco (ver _faixas_por_bloco).
+        faixas = _faixas_por_bloco(page, blocos)
 
         # continuação de nota de rodapé que estourou pro topo desta página (fora
         # da faixa de margem que _e_rodape_nativo reconhece): gruda no final da
@@ -1699,6 +1767,7 @@ def montar_html(doc, paginas: dict, geo: dict) -> str:
                 anchor=_anchor(idx, b.id),
                 link=link,
                 apos_rotulo=rotulo_capitulo_anterior,
+                fundo=faixas.get(b.id),
             )
             rotulo_capitulo_anterior = getattr(b, "papel", None) == "rotulo_capitulo"
             tag_atual = _tag_heading(el)

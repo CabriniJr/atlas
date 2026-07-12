@@ -366,6 +366,74 @@ def test_montar_html_nao_funde_codigo_pre_na_legenda_anterior():
     doc.close()
 
 
+def test_cor_clara_detecta_texto_ilegivel_em_fundo_branco():
+    from atlas.traducao.editorial_html import _cor_clara
+
+    assert _cor_clara(0xFFFFFF) is True  # branco
+    assert _cor_clara(0xF2F2F2) is True  # cinza claríssimo
+    assert _cor_clara(0x000000) is False  # preto
+    assert _cor_clara(0x4472C4) is False  # azul de link — legível no branco
+
+
+def test_montar_html_reproduz_barra_colorida_da_legenda():
+    """Legenda de listagem Manning é texto BRANCO sobre uma faixa azul. Sem
+    reproduzir a faixa, o texto claro fica invisível no fundo branco do render
+    (achado real, Kubernetes in Action). Detecta o retângulo preenchido atrás do
+    bloco de texto claro e o reproduz como ``background`` do elemento."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    page = doc.new_page()
+    # barra azul (fill) atrás da legenda, cobrindo a largura da coluna.
+    page.draw_rect(fitz.Rect(72, 198, 460, 214), fill=(0.44, 0.65, 0.80), color=None)
+    sp = Span(
+        text="Listagem 7.7 Referindo-se a uma variável de ambiente dentro de outra",
+        bbox=(80, 200, 452, 212),
+        font="FranklinGothic-Demi",
+        size=9.0,
+        color=0xFFFFFF,
+        flags=1 << 4,
+    )
+    legenda = BlocoTraducao(id=0, pagina=0, bbox=sp.bbox, texto=sp.text, spans=[sp])
+    paginas = {0: ([legenda], {0: legenda.texto})}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+
+    assert "background:#" in html  # a faixa foi reproduzida
+    assert "color:#ffffff" in html  # texto claro preservado (agora sobre a faixa)
+    doc.close()
+
+
+def test_montar_html_remapeia_texto_claro_sem_barra_para_legivel():
+    """Texto claro SEM uma faixa colorida atrás (nada a reproduzir) nunca pode
+    sair branco em fundo branco — é remapeado pra cor legível."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    doc.new_page()
+    sp = Span(
+        text="Um rótulo que por acaso ficou branco sem barra atrás dele.",
+        bbox=(80, 200, 452, 212),
+        font="Times",
+        size=10.0,
+        color=0xFFFFFF,
+        flags=0,
+    )
+    b = BlocoTraducao(id=0, pagina=0, bbox=sp.bbox, texto=sp.text, spans=[sp])
+    paginas = {0: ([b], {0: b.texto})}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+
+    assert "color:#ffffff" not in html  # não ficou branco/invisível
+    doc.close()
+
+
 def test_montar_html_nao_gruda_paragrafos_distintos():
     """Não pode grudar quando o anterior TERMINA a frase e o próximo começa em
     maiúscula (parágrafos de verdade, separados)."""
