@@ -893,8 +893,12 @@ def _suprimir_break_before(el: str) -> str:
 
 def _e_paragrafo_prosa(el: str) -> bool:
     """``True`` se ``el`` é um ``<p>`` de prosa comum (não sumário, não nota) —
-    tem tag ``<p`` e a abertura não carrega ``class`` (toc/rodapé têm classe)."""
-    if not el.startswith("<p"):
+    tem tag ``<p>``/``<p ...>`` e a abertura não carrega ``class`` (toc/rodapé têm
+    classe). ``<pre>`` de código também começa com ``<p``, mas NÃO é prosa: sem
+    essa distinção o merge de "parágrafo cortado" fundia o ``<pre>`` no ``<p>``
+    anterior (código perdia quebras/indentação, herdava a cor da legenda e sumia —
+    achado real, Kubernetes in Action pág. 198)."""
+    if not (el.startswith("<p>") or el.startswith("<p ")):
         return False
     fim = el.find(">")
     return fim > 0 and 'class="' not in el[:fim]

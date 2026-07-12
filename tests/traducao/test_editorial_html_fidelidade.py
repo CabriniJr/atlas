@@ -296,6 +296,76 @@ def test_montar_html_gruda_paragrafo_cortado_na_virada_de_pagina():
     doc.close()
 
 
+def test_e_paragrafo_prosa_nao_confunde_pre_de_codigo():
+    """``<pre>`` (código) começa com ``<p`` como um ``<p>`` de prosa — mas NÃO é
+    parágrafo. Sem distinguir, a heurística de "grudar parágrafo cortado" (virada
+    de página) trata o bloco de código como prosa e o funde no ``<p>`` anterior,
+    perdendo o ``<pre>`` (quebras/indentação viram texto corrido) e herdando a cor
+    da legenda — o código some (achado real, Kubernetes in Action pág. 198)."""
+    from atlas.traducao.editorial_html import _e_paragrafo_prosa
+
+    assert _e_paragrafo_prosa("<pre>env:\n- name: FIRST_VAR</pre>") is False
+    assert _e_paragrafo_prosa('<pre id="u3_3">env:</pre>') is False
+
+
+def test_montar_html_nao_funde_codigo_pre_na_legenda_anterior():
+    """Legenda de listagem ("Listagem 7.7 …") termina aberta (sem ponto final) e
+    o código logo abaixo começa em minúscula ("env:") — sem tratar ``<pre>`` à
+    parte, o merge de "parágrafo cortado" fundia o código no ``<p>`` da legenda:
+    o ``<pre>`` sumia, o código virava texto corrido com a cor branca da legenda
+    (invisível) e sobrava um ``</`` malformado (achado real, Kubernetes in Action
+    pág. 198: "está sem os códigos")."""
+    import fitz
+
+    from atlas.traducao.editorial_html import _geometria, montar_html
+    from atlas.traducao.extracao import BlocoTraducao, Span
+
+    doc = fitz.open()
+    doc.new_page()
+
+    legenda_sp = Span(
+        text="Listagem 7.7 Referindo-se a uma variável de ambiente dentro de outra",
+        bbox=(72, 200, 460, 212),
+        font="FranklinGothic-Demi",
+        size=9.0,
+        color=0xFFFFFF,  # legenda Manning: texto branco sobre a barra colorida
+        flags=1 << 4,
+    )
+    legenda = BlocoTraducao(
+        id=12,
+        pagina=0,
+        bbox=legenda_sp.bbox,
+        texto=legenda_sp.text,
+        spans=[legenda_sp],
+    )
+    codigo_txt = 'env:\n- name: FIRST_VAR\n  value: "foo"\n- name: SECOND_VAR'
+    codigo_sp = Span(
+        text=codigo_txt, bbox=(72, 214, 460, 260), font="Courier", size=9.0, color=0, flags=0
+    )
+    codigo = BlocoTraducao(
+        id=3,
+        pagina=0,
+        bbox=codigo_sp.bbox,
+        texto=codigo_txt,
+        spans=[codigo_sp],
+        skip=True,
+        papel="imutavel",
+    )
+    blocos = [legenda, codigo]
+    paginas = {0: (blocos, {legenda.id: legenda.texto})}
+    geo = _geometria(doc, paginas)
+    html = montar_html(doc, paginas, geo)
+
+    assert "<pre" in html  # o código sai como bloco de código próprio
+    assert "env:\n- name: FIRST_VAR" in html  # quebras de linha preservadas
+    assert "</</p>" not in html  # sem tag malformada
+    # o código NÃO ficou dentro do <p> branco da legenda (senão seria invisível):
+    # a legenda fecha o próprio <p> ANTES do <pre> começar.
+    assert "</p>" in html[: html.index("<pre")]
+    assert "env:" not in html[: html.index("<pre")]  # nenhum código antes do <pre>
+    doc.close()
+
+
 def test_montar_html_nao_gruda_paragrafos_distintos():
     """Não pode grudar quando o anterior TERMINA a frase e o próximo começa em
     maiúscula (parágrafos de verdade, separados)."""
