@@ -131,3 +131,40 @@ def test_config_conf_reflete_seguranca(tmp_path):
     assert "Encryption=1" in conf
     assert "GlobalMaxSeedingMinutes=0" in conf  # não semeia
     assert "PortForwardingEnabled=false" in conf
+
+
+def test_esta_completo_espera_o_move_do_temp_para_o_destino():
+    """Bug real (ADR-0049): com TempPath, o qBittorrent chega a progress=1.0 mas
+    ainda MOVE os arquivos de .incompleto p/ o destino (estado 'moving'/'checkingUP').
+    Dar como concluído aí e matar o daemon deixa a pasta final vazia/truncada. Só
+    é concluído quando baixou 100% E não está mais trabalhando (movendo/verificando)."""
+    from atlas.torrent.download import _esta_completo
+
+    # 100% de download mas ainda movendo/verificando: NÃO concluído.
+    assert _esta_completo(1.0, "moving") is False
+    assert _esta_completo(1.0, "checkingUP") is False
+    assert _esta_completo(1.0, "checkingResumeData") is False
+    # 99.9% NÃO é 100% — não pode ser dado como concluído (bug do limiar 0.999).
+    assert _esta_completo(0.999, "downloading") is False
+    assert _esta_completo(0.999, "stalledDL") is False
+    # baixou 100% e já terminou de mover (semeando/pausado): concluído.
+    assert _esta_completo(1.0, "pausedUP") is True
+    assert _esta_completo(1.0, "stalledUP") is True
+    assert _esta_completo(1.0, "uploading") is True
+
+
+def test_progresso_real_nao_conclui_durante_moving(monkeypatch):
+    """A implementação real (QBittorrentNox) não pode reportar concluído enquanto
+    o estado for 'moving' mesmo com progress=1.0."""
+    import json
+
+    cli = download.QBittorrentNox(profile="/tmp/x", porta=9)
+    payload = json.dumps([{"hash": "abc", "progress": 1.0, "state": "moving", "dlspeed": 0}])
+    monkeypatch.setattr(cli, "_get", lambda rota: payload)
+    p = cli.progresso("abc")
+    assert p.pct == 100.0
+    assert p.concluido is False  # ainda movendo
+
+    payload2 = json.dumps([{"hash": "abc", "progress": 1.0, "state": "pausedUP", "dlspeed": 0}])
+    monkeypatch.setattr(cli, "_get", lambda rota: payload2)
+    assert cli.progresso("abc").concluido is True

@@ -30,6 +30,35 @@ WEBUI_PORT = 8099
 _WEBUI_TIMEOUT_S = 30
 _NOX_BIN = "qbittorrent-nox"
 
+# Estados do qBittorrent em que o torrent AINDA está trabalhando: baixando,
+# verificando (hash) ou MOVENDO os arquivos do TempPath (.incompleto) p/ o
+# destino final. Durante 'moving'/'checkingUP' o progress já é 1.0, mas os
+# arquivos NÃO estão no destino — encerrar aqui deixa a pasta final vazia ou
+# truncada (bug real, ADR-0049: jogos dados como 100% chegavam corrompidos).
+_ESTADOS_TRABALHANDO = frozenset(
+    {
+        "downloading",
+        "stalleddl",
+        "metadl",
+        "queueddl",
+        "forceddl",
+        "checkingdl",
+        "allocating",
+        "moving",
+        "checkingup",
+        "checkingresumedata",
+    }
+)
+
+
+def _esta_completo(progress: float, estado: str) -> bool:
+    """``True`` só quando o torrent baixou 100% (``progress == 1.0``) E não está
+    mais trabalhando — nem baixando, nem verificando, nem MOVENDO do temp p/ o
+    destino. O limiar antigo (``>= 0.999``) dava 99.9% como concluído (até dezenas
+    de MB faltando num jogo grande), e não esperar sair de 'moving' matava o
+    daemon no meio da cópia — pasta final vazia/truncada (ADR-0049 fix)."""
+    return progress >= 0.99999 and estado.strip().lower() not in _ESTADOS_TRABALHANDO
+
 
 @dataclass
 class Progresso:
@@ -280,12 +309,13 @@ class QBittorrentNox:
         pct = float(t.get("progress", 0.0))
         d = float(t.get("dlspeed", 0.0))
         spd = _velocidade_humana(d)
+        estado = str(t.get("state", "?"))
         return Progresso(
             pct=pct * 100,
-            estado=str(t.get("state", "?")),
+            estado=estado,
             velocidade=spd,
             seeds=int(t.get("num_seeds", 0)),
-            concluido=pct >= 0.999,
+            concluido=_esta_completo(pct, estado),
         )
 
     def parar_p2p(self) -> None:

@@ -253,3 +253,28 @@ def test_executar_download_verifica_integridade_falha(store, tmp_path):
     assert t.status["fase"] == servico.CONCLUIDO
     assert t.status["integridade"] == "falha"
     assert any("integridade falhou" in m.lower() or "invalid pfs0" in m.lower() for m in avisos)
+
+
+def test_executar_download_reprova_truncado_mesmo_com_magic_ok(store, tmp_path):
+    """Caso real (ADR-0049): arquivo com header PFS0 correto (passa no magic) mas
+    TRUNCADO — o move do qBittorrent foi morto no meio. O magic sozinho dava ✅ e o
+    jogo chegava corrompido; a checagem de completude por tamanho reprova."""
+    res, _ = _criar(store, tmp_path, chat=7)  # torrent declara 700 MB
+    dest = tmp_path / "dl"
+    (dest / res.spec["nome"]).mkdir(parents=True)
+    # header válido, mas só 104 bytes (muito menor que os 700 MB do .torrent)
+    (dest / res.spec["nome"] / "jogo.nsp").write_bytes(b"PFS0" + b"\x00" * 100)
+    store.set_status(
+        "Torrent", res.name,
+        {**res.status, "fase": servico.BAIXANDO, "destino": str(dest)}, datetime.now(),
+    )
+    store.patch("Torrent", res.name, {"destino": str(dest)}, datetime.now())
+    avisos = []
+    servico.executar_download(
+        store, res.name, notificar=lambda c, m: avisos.append(m),
+        cliente=object(), baixar_fn=_fake_baixar_ok, intervalo_s=0,
+    )
+    t = store.get("Torrent", res.name)
+    assert t.status["integridade"] == "falha"
+    assert "incompleto" in (t.status.get("integridade_detalhe") or "").lower()
+    assert any("incompleto" in m.lower() for m in avisos)

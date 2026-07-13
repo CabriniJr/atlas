@@ -80,6 +80,7 @@ def criar_do_bytes(
         "semear": False,
         "origem_chat": chat_id,
         "nome_arquivo": nome_arquivo,
+        "total_bytes": res_scan.total_bytes,  # p/ checar completude pós-download
     }
     status = {
         "fase": AGUARDANDO,
@@ -235,6 +236,23 @@ def _selo_integridade(s: dict) -> str:
     return ""
 
 
+def _tamanho_esperado(spec: dict) -> int:
+    """Tamanho total esperado do download (bytes) p/ checar completude. Usa o
+    ``total_bytes`` salvo no spec; se faltar (recurso antigo), relê do ``.torrent``.
+    Zero (desconhecido) desliga a checagem de completude — nunca reprova por falta
+    de dado."""
+    total = spec.get("total_bytes")
+    if isinstance(total, int) and total > 0:
+        return total
+    arquivo = spec.get("arquivo")
+    if arquivo and os.path.isfile(arquivo):
+        try:
+            return scan.analisar_arquivo(arquivo).total_bytes
+        except Exception:  # noqa: BLE001 — best-effort (ADR-0006)
+            return 0
+    return 0
+
+
 def executar_download(
     store: ResourceStore,
     name: str,
@@ -312,10 +330,12 @@ def executar_download(
 
     nome = spec.get("nome") or name
     if r.ok and r.concluido:
-        # Verificação de integridade por magic header (ADR-0049): pega conteúdo
-        # fake/corrompido na fonte que o hash do torrent não detecta (invalid pfs0).
+        # Verificação de integridade (ADR-0049): magic header (conteúdo fake/
+        # corrompido na fonte, invalid pfs0) + completude por tamanho (download
+        # truncado no meio do move, que passava no magic mas quebrava a instalação).
         alvo = os.path.join(cfg.destino_expandido(), nome)
-        integ = integridade.verificar(alvo)
+        esperado = _tamanho_esperado(spec)
+        integ = integridade.verificar(alvo, tamanho_esperado=esperado)
         _patch_status(
             store, name,
             {

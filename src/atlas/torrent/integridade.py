@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from atlas.torrent.scan import _eh_padding, tamanho_humano
+
 # ext → lista de (offset, magic esperado). Basta um bater. Tipos desconhecidos
 # são pulados (não reprovam). Switch: NSP e NSZ são contêineres PFS0; XCI é HFS0
 # com "HEAD" em 0x100.
@@ -40,13 +42,18 @@ class ResultadoIntegridade:
     verificados: int = 0
     pulados: int = 0
     falhas: list[str] = field(default_factory=list)  # "arquivo: esperado PFS0"
+    incompleto: bool = False  # tamanho em disco < esperado (download truncado)
 
     def humano(self) -> str:
-        if self.verificados == 0 and not self.falhas:
+        if self.ok and self.verificados == 0 and not self.falhas:
             return "integridade: — (nenhum tipo conhecido p/ checar)"
         if self.ok:
             return f"integridade: ✅ ok ({self.verificados} arquivo(s) checado(s))"
-        linhas = ["integridade: ⚠️ FALHOU (invalid pfs0 / corrompido)"]
+        if self.incompleto:
+            cabec = "integridade: ⚠️ FALHOU — download INCOMPLETO (arquivos truncados)"
+        else:
+            cabec = "integridade: ⚠️ FALHOU (invalid pfs0 / corrompido)"
+        linhas = [cabec]
         for f in self.falhas[:6]:
             linhas.append(f"  • {f}")
         return "\n".join(linhas)
@@ -81,8 +88,18 @@ def verificar_arquivo(caminho: str) -> tuple[bool | None, str]:
     return False, f"{os.path.basename(caminho)}: esperado magic {legivel!r}"
 
 
-def verificar(alvo: str) -> ResultadoIntegridade:
-    """Verifica um arquivo ou (recursivamente) todos os arquivos de uma pasta."""
+def verificar(alvo: str, tamanho_esperado: int = 0) -> ResultadoIntegridade:
+    """Verifica um arquivo ou (recursivamente) todos os arquivos de uma pasta.
+
+    Duas checagens complementares:
+
+    - **magic header** por tipo conhecido (pega conteúdo fake/corrompido na fonte
+      que o hash do torrent não vê — ``invalid pfs0``);
+    - **completude por tamanho** (``tamanho_esperado`` > 0, vindo do ``.torrent``):
+      um download interrompido no meio do move tem o header certo (passa no magic)
+      mas está TRUNCADO — o magic sozinho dava ✅. Se o total em disco (excluindo
+      padding e parciais) for MENOR que o esperado, reprova como incompleto
+      (ADR-0049 fix: jogos dados como 100% chegavam corrompidos)."""
     r = ResultadoIntegridade(ok=True)
     caminhos: list[str] = []
     if os.path.isdir(alvo):
@@ -92,10 +109,16 @@ def verificar(alvo: str) -> ResultadoIntegridade:
     elif os.path.isfile(alvo):
         caminhos.append(alvo)
 
+    total_disco = 0
     for c in caminhos:
-        # ignora arquivos de trabalho do qBittorrent (parciais/incompletos)
-        if c.endswith((".!qB", ".parts")) or "/.incompleto/" in c:
+        # ignora arquivos de trabalho do qBittorrent (parciais/incompletos) e
+        # padding do libtorrent (não conta no tamanho, o scan também o exclui).
+        if c.endswith((".!qB", ".parts")) or "/.incompleto/" in c or _eh_padding(c):
             continue
+        try:
+            total_disco += os.path.getsize(c)
+        except OSError:
+            pass
         ok, detalhe = verificar_arquivo(c)
         if ok is None:
             r.pulados += 1
@@ -105,4 +128,12 @@ def verificar(alvo: str) -> ResultadoIntegridade:
             r.verificados += 1
             r.ok = False
             r.falhas.append(detalhe)
+
+    if tamanho_esperado > 0 and total_disco < tamanho_esperado:
+        r.ok = False
+        r.incompleto = True
+        r.falhas.append(
+            f"download incompleto: {tamanho_humano(total_disco)} de "
+            f"{tamanho_humano(tamanho_esperado)} em disco"
+        )
     return r
