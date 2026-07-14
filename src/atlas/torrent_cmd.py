@@ -59,9 +59,13 @@ def responder_conversa(
     agora: datetime,
     *,
     dispatch: Callable[[str], None],
+    cliente=None,
 ) -> str | None:
     """Resolve mensagens de texto ligadas a torrents. Devolve ``None`` se a
-    mensagem não tem a ver com torrent (deixa o roteador base seguir)."""
+    mensagem não tem a ver com torrent (deixa o roteador base seguir).
+
+    ``cliente`` (``ClienteContainer``, ADR-0051), se dado, usa o client único em
+    container (fila nativa) em vez do modelo nox+pool."""
     t = texto.strip()
     low = t.lower()
 
@@ -76,7 +80,10 @@ def responder_conversa(
     if pend is not None:
         if t == "SIM" or low in _SIM:
             forte = t == "SIM"
-            _ok, msg = servico.confirmar(store, pend.name, agora, dispatch=dispatch, forte=forte)
+            _ok, msg = servico.confirmar(
+                store, pend.name, agora, dispatch=dispatch, forte=forte,
+                container=cliente is not None,
+            )
             return msg
         if low in _NAO:
             _ok, msg = servico.recusar(store, pend.name, agora)
@@ -93,7 +100,7 @@ def responder_conversa(
         alvo = andando or pend
         if alvo is None:
             return "nenhum download em andamento para cancelar."
-        _ok, msg = servico.cancelar(store, alvo.name, agora)
+        _ok, msg = servico.cancelar(store, alvo.name, agora, cliente=cliente)
         return msg
 
     return None

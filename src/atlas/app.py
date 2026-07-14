@@ -104,7 +104,9 @@ def processar_update(
     # a mensagem tem a ver com torrent; senão segue o roteador base.
     if store is not None:
         resposta_torrent = responder_torrent(
-            upd.texto, store, agora, dispatch=_montar_dispatch_torrent(adapter, store)
+            upd.texto, store, agora,
+            dispatch=_montar_dispatch_torrent(adapter, store),
+            cliente=_obter_cliente_torrent(),
         )
         if resposta_torrent is not None:
             adapter.enviar(upd.chat_id, resposta_torrent)
@@ -205,11 +207,44 @@ def _entregar_traducao(adapter: Adapter, store: ResourceStore, label, chat_id, p
         adapter.enviar(chat_id, f"❌ {label}: {s.get('erro') or 'falhou na tradução'}")
 
 
+# Client de torrent em container (ADR-0051): singleton compartilhado. Sentinela
+# distingue "ainda não decidi" de "decidi que é None (sem podman → fallback nox)".
+_NAO_DECIDIDO = object()
+_cliente_torrent = _NAO_DECIDIDO
+_monitor_torrent_iniciado = False
+
+
+def _obter_cliente_torrent():
+    """``ClienteContainer`` compartilhado quando ``podman`` existe; ``None`` cai no
+    fallback ``qbittorrent-nox`` (ADR-0051). Decidido uma vez por processo."""
+    global _cliente_torrent
+    if _cliente_torrent is _NAO_DECIDIDO:
+        import os
+
+        from atlas.torrent import container
+        from atlas.torrent.servico import DESTINO_DEFAULT
+
+        if container.disponivel():
+            _cliente_torrent = container.ClienteContainer(
+                dir_downloads=os.path.expanduser(DESTINO_DEFAULT),
+                max_ativos=int(os.environ.get("ATLAS_TORRENT_MAX_CONCURRENT", "3")),
+            )
+            _log.info("Torrent: usando client em container (podman).")
+        else:
+            _cliente_torrent = None
+    return _cliente_torrent
+
+
 def _montar_dispatch_torrent(adapter: Adapter, store: ResourceStore):
-    """Devolve o ``dispatch(name)`` que sobe o download em background com o
-    notificador de progresso/término no Telegram e, ao terminar, libera o slot
-    do pool e despacha o próximo da fila (ADR-0049)."""
+    """``dispatch(name)`` que inicia um download. No modo **container** (ADR-0051)
+    apenas adiciona o ``.torrent`` ao client único (a fila é nativa e o monitor
+    único dirige o resto). No fallback **nox** (ADR-0049), sobe o loop por-download
+    e, ao terminar, libera o slot do pool e despacha o próximo da fila."""
     from atlas.torrent import servico
+
+    cliente = _obter_cliente_torrent()
+    if cliente is not None:
+        return _montar_dispatch_torrent_container(adapter, store, cliente)
 
     def dispatch(name: str) -> None:
         def _run() -> None:
@@ -225,6 +260,87 @@ def _montar_dispatch_torrent(adapter: Adapter, store: ResourceStore):
         threading.Thread(target=_run, daemon=True, name=f"torrent-{name[:8]}").start()
 
     return dispatch
+
+
+def _montar_dispatch_torrent_container(adapter: Adapter, store: ResourceStore, cliente):
+    """``dispatch`` do modo container: garante o container no ar, faz o gate de VPN
+    no host (a rede do container não enxerga a iface) e adiciona o ``.torrent`` ao
+    client. O monitor único cuida de progresso/conclusão/auto-envio."""
+    import os
+
+    from atlas.torrent import download, servico
+
+    def dispatch(name: str) -> None:
+        def _run() -> None:
+            t = store.get(servico.KIND, name)
+            if t is None:
+                return
+            arquivo = t.spec.get("arquivo")
+            vpn = t.spec.get("vpn") or ""
+            if vpn and not download.iface_ativa(vpn):
+                _falha_torrent(adapter, store, name, f"VPN '{vpn}' não está ativa")
+                return
+            if not cliente.garantir_no_ar():
+                _falha_torrent(adapter, store, name, "container do torrent não subiu")
+                return
+            try:
+                with open(arquivo, "rb") as f:
+                    dados = f.read()
+            except OSError as exc:
+                _falha_torrent(adapter, store, name, str(exc))
+                return
+            if not cliente.adicionar(dados, os.path.basename(arquivo or name)):
+                _falha_torrent(adapter, store, name, "falha ao adicionar no client")
+
+        threading.Thread(target=_run, daemon=True, name=f"torrent-add-{name[:8]}").start()
+
+    return dispatch
+
+
+def _falha_torrent(adapter: Adapter, store: ResourceStore, name: str, motivo: str) -> None:
+    from atlas.torrent import servico
+
+    servico._patch_status(store, name, {"fase": servico.ERRO, "mensagem": motivo})
+    t = store.get(servico.KIND, name)
+    chat = (t.spec.get("origem_chat") if t else None)
+    nome = (t.spec.get("nome") if t else None) or name
+    if chat is not None:
+        adapter.enviar(int(chat), f"❌ falhou: {nome}\n{motivo}")
+
+
+def _iniciar_monitor_torrent(adapter: Adapter, store: ResourceStore) -> None:
+    """Sobe a thread única do monitor de torrents em container (ADR-0051): poll do
+    client → atualiza recursos → auto-envia ao concluir. No-op sem podman (o modo
+    nox tem um loop por-download). Uma vez por processo."""
+    global _monitor_torrent_iniciado
+    if _monitor_torrent_iniciado:
+        return
+    cliente = _obter_cliente_torrent()
+    if cliente is None:
+        return
+    from atlas.torrent import monitor
+
+    def _enviar(chat_id: int, caminho: str, nome: str) -> None:
+        _auto_enviar_torrent(adapter, chat_id, caminho, nome)
+
+    monitor.monitorar(store, cliente, notificar=adapter.enviar, enviar=_enviar)
+    _monitor_torrent_iniciado = True
+
+
+def _auto_enviar_torrent(adapter: Adapter, chat_id: int, caminho: str, nome: str) -> None:
+    """Auto-envio ao concluir (ADR-0051): arquivo único que cabe no Telegram vai
+    como documento; pasta/arquivo grande já foi anunciado por caminho na
+    notificação de conclusão — aqui fica em silêncio para não duplicar."""
+    import os
+
+    from atlas.conversa.acoes import preparar_envio
+
+    if os.path.isdir(caminho):
+        return  # pasta (jogo/ISO): a notificação de conclusão já deu o caminho
+    enviar_doc = getattr(adapter, "enviar_documento", None)
+    modo, detalhe = preparar_envio(caminho)
+    if modo == "arquivo" and enviar_doc is not None:
+        enviar_doc(chat_id, detalhe, f"📎 {nome}")
 
 
 def _normalizar(update_cru: dict) -> Update | None:
@@ -356,8 +472,13 @@ def run(config: Config | None = None) -> None:
     try:
         from atlas.torrent import servico as _torrent_servico
 
+        _cli_torrent = _obter_cliente_torrent()
+        _iniciar_monitor_torrent(adapter, store)  # ADR-0051: monitor único (container)
         n_torrent = _torrent_servico.retomar_no_boot(
-            store, datetime.now(), dispatch=_montar_dispatch_torrent(adapter, store)
+            store,
+            datetime.now(),
+            dispatch=_montar_dispatch_torrent(adapter, store),
+            container=_cli_torrent is not None,
         )
         if n_torrent:
             _log.warning("Boot: %d torrent(s) retomado(s)/enfileirado(s).", n_torrent)

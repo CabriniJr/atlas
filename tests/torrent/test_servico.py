@@ -278,3 +278,54 @@ def test_executar_download_reprova_truncado_mesmo_com_magic_ok(store, tmp_path):
     assert t.status["integridade"] == "falha"
     assert "incompleto" in (t.status.get("integridade_detalhe") or "").lower()
     assert any("incompleto" in m.lower() for m in avisos)
+
+
+# --- caminho container (ADR-0051) -------------------------------------------
+
+
+class _CliContainerFake:
+    def __init__(self):
+        self.parados = []
+        self.removidos = []
+
+    def parar_p2p(self, infohash):
+        self.parados.append(infohash)
+
+    def remover(self, infohash, apagar_dados=False):
+        self.removidos.append(infohash)
+
+
+def test_confirmar_container_adiciona_e_marca_baixando(store, tmp_path):
+    """Modo container: sempre adiciona (fila nativa), sem checar motor nox."""
+    res, _ = _criar(store, tmp_path)
+    disparados = []
+    ok, msg = servico.confirmar(
+        store, res.name, datetime.now(), dispatch=disparados.append, container=True
+    )
+    assert ok and disparados == [res.name]
+    assert store.get("Torrent", res.name).status["fase"] == servico.BAIXANDO
+    assert "baixando" in msg
+
+
+def test_cancelar_container_remove_do_client(store, tmp_path):
+    res, _ = _criar(store, tmp_path)
+    store.set_status("Torrent", res.name, {**res.status, "fase": servico.BAIXANDO}, datetime.now())
+    cli = _CliContainerFake()
+    ok, _ = servico.cancelar(store, res.name, datetime.now(), cliente=cli)
+    assert ok
+    infohash = res.spec["infohash"]
+    assert cli.parados == [infohash] and cli.removidos == [infohash]
+    assert store.get("Torrent", res.name).status["fase"] == servico.CANCELADO
+
+
+def test_retomar_no_boot_container_readiciona_todos(store, tmp_path):
+    """Container: TODOS os pendentes são re-adicionados (fila nativa decide)."""
+    a, _ = _criar(store, tmp_path)
+    for fase in (servico.BAIXANDO, servico.FILA):
+        store.set_status("Torrent", a.name, {**a.status, "fase": fase}, datetime.now())
+    disparados = []
+    n = servico.retomar_no_boot(
+        store, datetime.now(), dispatch=disparados.append, container=True
+    )
+    assert n == 1 and disparados == [a.name]
+    assert store.get("Torrent", a.name).status["fase"] == servico.BAIXANDO

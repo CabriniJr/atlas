@@ -133,9 +133,15 @@ def confirmar(
     dispatch: Callable[[str], None],
     pool: TorrentPool | None = None,
     forte: bool = False,
+    container: bool = False,
 ) -> tuple[bool, str]:
-    """Confirma o download: se há slot no pool baixa já (``baixando``), senão
-    entra na ``fila`` (ADR-0049). O próximo é despachado sozinho quando um termina.
+    """Confirma o download.
+
+    - **Container (ADR-0051):** ``container=True`` → adiciona ao client único
+      (``dispatch`` faz o ``adicionar``); a **fila é nativa** do qBittorrent, então
+      marca ``baixando`` e o monitor corrige para ``fila`` se ficar ``queuedDL``.
+    - **Nox (ADR-0049):** senão, se há slot no ``pool`` baixa já, senão entra na
+      ``fila`` (o próximo é despachado quando um termina).
 
     Risco alto (nível 2) exige ``forte=True`` (o usuário digitou 'SIM' maiúsculo),
     espelhando o ``torrent-safe``.
@@ -148,12 +154,16 @@ def confirmar(
         return False, "esse torrent não está aguardando confirmação"
     if (t.status or {}).get("risco", 0) >= 2 and not forte:
         return False, "🚨 risco ALTO. Para confirmar mesmo assim, responda: SIM (maiúsculo)"
+    nome = t.spec.get("nome") or name
+    if container:
+        _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
+        dispatch(name)  # adiciona ao container; o monitor único cuida do resto
+        return True, f"⬇️ baixando: {nome}\nAcompanhe com: progresso"
     if not download.motor_disponivel():
         return False, (
             "motor de download indisponível. Instale uma vez:\n"
             "  sudo dnf install -y qbittorrent-nox"
         )
-    nome = t.spec.get("nome") or name
     if pool.tentar_iniciar(name):
         _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
         dispatch(name)
@@ -185,15 +195,36 @@ def recusar(store: ResourceStore, name: str, agora: datetime) -> tuple[bool, str
 
 
 def cancelar(
-    store: ResourceStore, name: str, agora: datetime, *, pool: TorrentPool | None = None
+    store: ResourceStore,
+    name: str,
+    agora: datetime,
+    *,
+    pool: TorrentPool | None = None,
+    cliente=None,
 ) -> tuple[bool, str]:
-    """Cancela: se está na ``fila``, tira da fila; se ``baixando``, sinaliza o
-    cancelamento cooperativo (o loop de download lê a flag)."""
+    """Cancela o download.
+
+    - **Container (ADR-0051):** ``cliente`` dado → para o P2P e remove o torrent do
+      client (mantém o parcial em disco); marca ``cancelado``.
+    - **Nox (ADR-0049):** se ``fila``, tira da fila; se ``baixando``, sinaliza o
+      cancelamento cooperativo (o loop de download lê a flag).
+    """
     pool = pool or pool_torrent
     t = store.get(KIND, name)
     if t is None:
         return False, "torrent não encontrado"
     fase = (t.status or {}).get("fase")
+    if cliente is not None:
+        if fase in (BAIXANDO, FILA, AGUARDANDO):
+            infohash = t.spec.get("infohash") or name
+            try:
+                cliente.parar_p2p(infohash)
+                cliente.remover(infohash, apagar_dados=False)
+            except Exception:  # noqa: BLE001 — best-effort (ADR-0006)
+                _log.exception("cancelar container %s falhou", name)
+            _patch_status(store, name, {"cancelar": True, "fase": CANCELADO}, agora)
+            return True, "🛑 cancelado."
+        return False, f"nada para cancelar (fase: {fase})"
     if fase == FILA:
         pool.cancelar_da_fila(name)
         _patch_status(store, name, {"fase": CANCELADO}, agora)
@@ -372,13 +403,18 @@ def retomar_no_boot(
     *,
     dispatch: Callable[[str], None],
     pool: TorrentPool | None = None,
+    container: bool = False,
 ) -> int:
-    """Persistência (ADR-0049): um restart mata o processo do nox, mas o
-    ``.torrent`` fica salvo e os dados parciais ficam no destino — então um
-    ``Torrent`` que estava ``baixando``/``fila`` **retoma sozinho** (o nox
-    recontinua do parcial em disco). Respeita o teto do pool: até
-    ``max_concorrente`` voltam a baixar, o resto reentra na fila. Devolve quantos
-    foram re-enfileirados/retomados."""
+    """Persistência: um restart mata o client, mas o ``.torrent`` fica salvo e os
+    dados parciais ficam no destino — então um ``Torrent`` que estava
+    ``baixando``/``fila`` **retoma sozinho** (recontinua do parcial em disco).
+
+    - **Container (ADR-0051):** re-adiciona TODOS os pendentes ao client único
+      (fila nativa decide quem baixa já vs ``queuedDL``); o monitor dirige.
+    - **Nox (ADR-0049):** respeita o teto do pool — até ``max_concorrente`` voltam
+      a baixar, o resto reentra na fila.
+
+    Devolve quantos foram re-enfileirados/retomados."""
     pool = pool or pool_torrent
     pendentes = [
         t for t in store.list(KIND) if (t.status or {}).get("fase") in (BAIXANDO, FILA)
@@ -390,6 +426,15 @@ def retomar_no_boot(
             (t.status or {}).get("criado_em") or "",
         )
     )
+    if container:
+        for t in pendentes:
+            _patch_status(
+                store, t.name,
+                {"fase": BAIXANDO, "cancelar": False, "mensagem": "retomado após reinício"},
+                agora,
+            )
+            dispatch(t.name)
+        return len(pendentes)
     n = 0
     for t in pendentes:
         if pool.tentar_iniciar(t.name):
