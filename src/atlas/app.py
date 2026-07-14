@@ -80,8 +80,26 @@ def processar_update(
     if not upd.texto:
         return
 
-    # Conversa stateful do Torrent (sim/não/progresso/cancelar, /torrents) — só
-    # intercepta se a mensagem tem a ver com torrent; senão segue o roteador base.
+    # Camada NL global (ADR-0050): progresso agregado, busca cross-kind, enviar
+    # traduzido, sync. Data-driven (Binding). Roda ANTES da conversa do torrent
+    # para o "progresso" ser global; sim/não/cancelar não casam verbo/nome e caem
+    # adiante. None → segue para a conversa do torrent / roteador base.
+    if store is not None:
+        from atlas.conversa import responder as responder_conversa
+        from atlas.conversa.router import Contexto as _CtxConversa
+
+        ctx_conv = _CtxConversa(
+            agora=agora,
+            chat_id=upd.chat_id,
+            enviar_documento=getattr(adapter, "enviar_documento", None),
+        )
+        resposta_conv = responder_conversa(upd.texto, store, ctx_conv)
+        if resposta_conv is not None:
+            adapter.enviar(upd.chat_id, resposta_conv)
+            return
+
+    # Conversa stateful do Torrent (sim/não/cancelar, /torrents) — só intercepta se
+    # a mensagem tem a ver com torrent; senão segue o roteador base.
     if store is not None:
         resposta_torrent = responder_torrent(
             upd.texto, store, agora, dispatch=_montar_dispatch_torrent(adapter, store)
@@ -260,6 +278,16 @@ def run(config: Config | None = None) -> None:
             _log.warning("Boot: %d torrent(s) retomado(s)/enfileirado(s).", n_torrent)
     except Exception:  # noqa: BLE001
         _log.exception("Falha ao retomar torrents no boot; seguindo.")
+
+    # Camada NL global (ADR-0050): semeia os Binding default e carimba
+    # interface=telegram nos recursos participantes. Idempotente, best-effort.
+    try:
+        from atlas.conversa import binding as _binding
+
+        _binding.aplicar_seeds(store, datetime.now())
+        _binding.carimbar_participacao(store, datetime.now())
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha ao semear a camada NL (Binding); seguindo.")
 
     disparar = montar_disparo(db, adapter, config.allowed_user_id, store=store)
     disparar_retomada = montar_disparo_retomada(store)  # ADR-0035: retoma jobs pausados
