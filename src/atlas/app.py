@@ -300,6 +300,15 @@ def run(config: Config | None = None) -> None:
     """Inicia o loop de operação do bot (bloqueante)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = config or Config.from_env()
+
+    # Keep-awake (ADR-0050): a máquina não suspende enquanto o Atlas roda.
+    from atlas import keepawake
+
+    _inibidor = keepawake.iniciar()
+    import atexit
+
+    atexit.register(keepawake.parar, _inibidor)
+
     db = Database(config.db_path)
     adapter = TelegramAdapter(config.telegram_token, poll_timeout=config.poll_timeout)
 
