@@ -56,8 +56,9 @@ def test_run_args_monta_volumes_userns_e_publica_local(tmp_path):
     # config/data com relabel SELinux
     assert "/cfg:/app/config:Z" in args
     assert "/data:/app/data:Z" in args
-    # rootless: lê os jogos do host com o dono correto
-    assert "--userns=keep-id" in args
+    # Ownfoil roda como root dentro do container (faz chown /app): SEM keep-id, senão
+    # o entrypoint cai pra sudo e o container sai com erro (ao contrário do torrent).
+    assert not any(str(a).startswith("--userns") for a in args)
     # segredos (admin) vêm de env-file, nunca inline no argv (não vazam no ps)
     assert "--env-file" in args and "/s/o.env" in args
     assert not any(str(a).startswith("USER_ADMIN_PASSWORD=") for a in args)

@@ -71,14 +71,18 @@ def montar_run_args(
 
     - **``:Z`` nos volumes** — relabela o SELinux; sem isso o enforcing nega acesso.
     - Acervo montado **``ro``** (a loja só serve, nunca escreve nos jogos).
-    - **``--userns=keep-id``** — lê o acervo do host com o dono correto.
+    - **SEM ``--userns=keep-id``** (ao contrário do torrent/ADR-0051): o entrypoint do
+      Ownfoil roda **como root** dentro do container e faz ``chown /app``; com
+      ``keep-id`` o processo vira o usuário do host (não-root) e o ``chown`` falha
+      (``Operation not permitted`` → cai pra ``sudo`` → sai com erro). No podman
+      rootless, o root do container já mapeia para o **usuário do host**, então lê o
+      acervo e escreve config/data com o dono certo.
     - **``--env-file``** — admin (``USER_ADMIN_NAME``/``USER_ADMIN_PASSWORD``) fora
       do ``argv``, para não vazar no ``ps``/``inspect``.
     - Publica a WebUI só em ``127.0.0.1`` (o Funnel expõe publicamente).
     """
     args = [
         _RUNTIME, "run", "-d", "--replace", "--name", nome,
-        "--userns=keep-id",
         "-p", f"127.0.0.1:{porta}:{porta}",
         "-e", "TZ=Etc/UTC",
     ]
