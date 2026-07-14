@@ -131,7 +131,13 @@ notificação de progresso curta e o resumo final.
 `systemd-inhibit` → loga e segue (ADR-0006). Também `scripts/keep-awake.sh` avulso.
 Bloqueia suspensão/idle/fechar-tampa; **não** bloqueia desligar de propósito.
 
-## Torrent — cliente único com fila nativa (refactor)
+## Torrent — cliente único com fila nativa (refactor) — DIFERIDO
+
+> **Status: diferido** (2026-07-14). Entregue: camada NL, progresso global, busca,
+> sync, tradução via Telegram, keep-awake. Este refactor reescreve a orquestração
+> de download e só se valida com um download real — fica para um incremento com
+> smoke test do PO (não arriscar o caminho recém-corrigido, commit c794e49).
+
 
 Hoje: `pool_torrent` (slots em memória) + 1 `QBittorrentNox` por download (profile
 por infohash, porta por download). Novo:

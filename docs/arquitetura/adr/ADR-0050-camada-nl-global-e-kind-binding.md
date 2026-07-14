@@ -75,6 +75,13 @@ ADR-0030/0031 (Tradução), ADR-0038 (pool). Design detalhado:
   é parcialmente revisado (o `torrent_cmd` vira um `Binding`; o pool em memória sai).
 
 ## Pendências
+- **Torrent cliente-único (decisão 5): DIFERIDO.** A camada NL, progresso global,
+  busca, sync, tradução via Telegram e keep-awake foram entregues e testados
+  (2026-07-13/14). O refactor do torrent para um `qbittorrent-nox` com fila nativa
+  reescreve a orquestração de download (daemon compartilhado + monitor único) e só
+  se valida com um download real — fica para um incremento com smoke test do PO,
+  para não arriscar o caminho de download recém-corrigido (commit c794e49). O
+  design está na spec; o modelo atual (1 daemon por download) segue funcionando.
 - Ação = shell com gate de segurança (backlog).
 - Selector de grupo de repos por label nomeado (por ora: todos).
 - Ampliar a busca a outros kinds além de Torrent/Traducao/Repo/Doc.
