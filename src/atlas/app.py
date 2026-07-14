@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -213,6 +214,12 @@ _NAO_DECIDIDO = object()
 _cliente_torrent = _NAO_DECIDIDO
 _monitor_torrent_iniciado = False
 
+# Loja Ownfoil em container (ADR-0052): singleton + flag do supervisor.
+_cliente_ownfoil = _NAO_DECIDIDO
+_supervisor_ownfoil_iniciado = False
+# Intervalo do tick do supervisor (mantém o container no ar e o status fresco).
+_OWNFOIL_TICK_S = 300
+
 
 def _obter_cliente_torrent():
     """``ClienteContainer`` compartilhado quando ``podman`` existe; ``None`` cai no
@@ -325,6 +332,46 @@ def _iniciar_monitor_torrent(adapter: Adapter, store: ResourceStore) -> None:
 
     monitor.monitorar(store, cliente, notificar=adapter.enviar, enviar=_enviar)
     _monitor_torrent_iniciado = True
+
+
+def _obter_cliente_ownfoil():
+    """``ClienteOwnfoil`` compartilhado quando ``podman`` existe; ``None`` sem podman
+    (a loja simplesmente não sobe). Decidido uma vez por processo (ADR-0052)."""
+    global _cliente_ownfoil
+    if _cliente_ownfoil is _NAO_DECIDIDO:
+        from atlas.ownfoil import container
+
+        _cliente_ownfoil = container.ClienteOwnfoil() if container.disponivel() else None
+        if _cliente_ownfoil is not None:
+            _log.info("Ownfoil: usando loja em container (podman).")
+    return _cliente_ownfoil
+
+
+def _iniciar_supervisor_ownfoil(store: ResourceStore) -> None:
+    """Sobe a thread única que garante a loja Ownfoil no ar (ADR-0052) e mantém o
+    recurso ``Ownfoil/loja`` fresco (rodando, nº de jogos). No-op sem podman. Uma
+    vez por processo. Best-effort — nunca derruba o boot."""
+    global _supervisor_ownfoil_iniciado
+    if _supervisor_ownfoil_iniciado:
+        return
+    cliente = _obter_cliente_ownfoil()
+    if cliente is None:
+        return
+    from atlas.ownfoil import servico
+
+    def _loop() -> None:
+        # 1º tick garante o container; ticks seguintes só ressincronizam o status
+        # (o próprio Ownfoil re-escaneia o acervo no scheduler dele).
+        servico.garantir(store, cliente, datetime.now())
+        while True:
+            time.sleep(_OWNFOIL_TICK_S)
+            try:
+                servico.garantir(store, cliente, datetime.now())
+            except Exception:  # noqa: BLE001
+                _log.exception("Ownfoil: falha no tick do supervisor; seguindo.")
+
+    threading.Thread(target=_loop, daemon=True, name="ownfoil-supervisor").start()
+    _supervisor_ownfoil_iniciado = True
 
 
 def _auto_enviar_torrent(adapter: Adapter, chat_id: int, caminho: str, nome: str) -> None:
@@ -484,6 +531,13 @@ def run(config: Config | None = None) -> None:
             _log.warning("Boot: %d torrent(s) retomado(s)/enfileirado(s).", n_torrent)
     except Exception:  # noqa: BLE001
         _log.exception("Falha ao retomar torrents no boot; seguindo.")
+
+    # Loja Ownfoil (ADR-0052): sobe o container e mantém o recurso Ownfoil/loja
+    # fresco. Best-effort — não pode derrubar o boot.
+    try:
+        _iniciar_supervisor_ownfoil(store)
+    except Exception:  # noqa: BLE001
+        _log.exception("Falha ao iniciar supervisor do Ownfoil no boot; seguindo.")
 
     # Camada NL global (ADR-0050): semeia os Binding default e carimba
     # interface=telegram nos recursos participantes. Idempotente, best-effort.
