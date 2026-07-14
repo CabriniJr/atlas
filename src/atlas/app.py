@@ -56,6 +56,7 @@ class Update:
 class Adapter(Protocol):
     def enviar(self, chat_id: int, texto: str) -> None: ...
     def baixar_arquivo(self, file_id: str) -> bytes: ...
+    def enviar_documento(self, chat_id: int, caminho: str, legenda: str = "") -> None: ...
 
 
 def processar_update(
@@ -72,9 +73,9 @@ def processar_update(
         return
     agora = agora or datetime.now()
 
-    # Anexo .torrent (ADR-0049): verifica, cria o Kind Torrent e pergunta.
+    # Anexo: .pdf → tradução (ADR-0050); .torrent (ou resto) → torrent (ADR-0049).
     if upd.documento is not None and store is not None:
-        _atender_torrent_documento(upd, adapter, store, agora)
+        _atender_documento(upd, adapter, store, agora)
         return
 
     if not upd.texto:
@@ -113,21 +114,95 @@ def processar_update(
     adapter.enviar(upd.chat_id, resposta)
 
 
-def _atender_torrent_documento(upd: Update, adapter: Adapter, store: ResourceStore, agora) -> None:
-    """Baixa o anexo do Telegram, verifica e cria o Torrent (ADR-0049)."""
-    from atlas import torrent_cmd
+def _atender_documento(upd: Update, adapter: Adapter, store: ResourceStore, agora) -> None:
+    """Baixa o anexo e roteia por tipo: PDF → tradução (ADR-0050); resto → torrent."""
+    from atlas import traducao_cmd
 
     doc = upd.documento or {}
+    nome = doc.get("file_name") or ""
     try:
         dados = adapter.baixar_arquivo(doc.get("file_id"))
     except Exception:  # noqa: BLE001
         _log.exception("Falha ao baixar anexo do Telegram")
         adapter.enviar(upd.chat_id, "❌ não consegui baixar esse arquivo do Telegram.")
         return
-    msg = torrent_cmd.receber_documento(
-        store, dados, doc.get("file_name") or "", upd.chat_id, agora
-    )
+    if traducao_cmd.e_pdf(nome, dados):
+        _atender_traducao_documento(upd, adapter, store, agora, dados, nome)
+    else:
+        _atender_torrent_documento(upd, adapter, store, agora, dados, nome)
+
+
+def _atender_torrent_documento(
+    upd: Update, adapter: Adapter, store: ResourceStore, agora, dados: bytes, nome: str
+) -> None:
+    """Verifica e cria o Torrent a partir dos bytes já baixados (ADR-0049)."""
+    from atlas import torrent_cmd
+
+    msg = torrent_cmd.receber_documento(store, dados, nome, upd.chat_id, agora)
     adapter.enviar(upd.chat_id, msg)
+
+
+def _atender_traducao_documento(
+    upd: Update, adapter: Adapter, store: ResourceStore, agora, dados: bytes, nome: str
+) -> None:
+    """Salva o PDF, cria o Traducao e dispara a tradução (auto-envio ao concluir)."""
+    from atlas import traducao_cmd
+
+    res, msg = traducao_cmd.receber_pdf(store, dados, nome, upd.chat_id, agora)
+    adapter.enviar(upd.chat_id, msg)
+    if res is not None:
+        _montar_dispatch_traducao(adapter, store)(res.name, upd.chat_id)
+
+
+def _montar_dispatch_traducao(adapter: Adapter, store: ResourceStore):
+    """Dispatch da tradução vinda do Telegram (ADR-0050): roda o collect
+    ``traduzir-pdf`` em thread e, ao concluir, ENVIA o PDF traduzido (ou o caminho
+    local se passar do limite do bot); avisa se pausou/errou."""
+    from atlas.conversa.acoes import preparar_envio
+
+    def dispatch(label: str, chat_id: int | None) -> None:
+        def _run() -> None:
+            from atlas.executor import ContextoExecucao
+            from atlas.rotinas import obter
+            from atlas.routines import Rotina
+
+            try:
+                collect = obter("traduzir-pdf")
+                rot = Rotina(nome=label, descricao="", label=label, coletar="traduzir-pdf")
+                ctx = ContextoExecucao(
+                    agora=datetime.now(), rotina=rot, origem="telegram", store=store
+                )
+                collect(ctx)
+            except Exception:  # noqa: BLE001 — status já é marcado pelo collect
+                _log.exception("tradução %s (telegram) falhou", label)
+            finally:
+                if chat_id is not None:
+                    _entregar_traducao(adapter, store, label, chat_id, preparar_envio)
+
+        threading.Thread(target=_run, daemon=True, name=f"traduzir-tg-{label}").start()
+
+    return dispatch
+
+
+def _entregar_traducao(adapter: Adapter, store: ResourceStore, label, chat_id, preparar_envio):
+    t = store.get("Traducao", label)
+    s = (t.status or {}) if t else {}
+    fase = s.get("fase")
+    if fase == "pronto" and not s.get("parcial"):
+        modo, detalhe = preparar_envio(s.get("saida") or "")
+        if modo == "arquivo":
+            adapter.enviar_documento(chat_id, detalhe, f"✅ traduzido: {label}")
+        elif modo == "grande":
+            adapter.enviar(
+                chat_id,
+                f"✅ traduzido: {label}\n📦 passou do limite do Telegram.\n📁 {detalhe}",
+            )
+        else:
+            adapter.enviar(chat_id, f"✅ traduzido: {label}, mas o arquivo sumiu do disco.")
+    elif fase == "pausado" or s.get("parcial"):
+        adapter.enviar(chat_id, f"⏸ {label}: pausei (tokens/timeout) — retomo sozinho e te aviso.")
+    else:
+        adapter.enviar(chat_id, f"❌ {label}: {s.get('erro') or 'falhou na tradução'}")
 
 
 def _montar_dispatch_torrent(adapter: Adapter, store: ResourceStore):

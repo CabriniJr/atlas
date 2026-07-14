@@ -15,6 +15,7 @@ from atlas.scheduler import tick
 class _FakeAdapter:
     def __init__(self, arquivo: bytes = b"") -> None:
         self.enviados: list[tuple[int, str]] = []
+        self.documentos: list[tuple[int, str, str]] = []
         self._arquivo = arquivo
 
     def enviar(self, chat_id: int, texto: str) -> None:
@@ -22,6 +23,9 @@ class _FakeAdapter:
 
     def baixar_arquivo(self, file_id: str) -> bytes:
         return self._arquivo
+
+    def enviar_documento(self, chat_id: int, caminho: str, legenda: str = "") -> None:
+        self.documentos.append((chat_id, caminho, legenda))
 
 
 _CFG = Config(telegram_token="x", allowed_user_id=42)
@@ -133,6 +137,26 @@ class _FakeStoreRetomada:
         for r in self._por_kind.get(kind, []):
             if r.name == name:
                 r.status = status
+
+
+def test_anexo_pdf_cria_traducao_e_dispara(tmp_path, monkeypatch):
+    from atlas.core.store import ResourceStore
+
+    store = ResourceStore(":memory:")
+    disparos = []
+    # não roda a tradução de verdade no teste — só verifica o roteamento/criação.
+    monkeypatch.setattr(
+        "atlas.app._montar_dispatch_traducao",
+        lambda adapter, store: (lambda label, chat: disparos.append((label, chat))),
+    )
+    adapter = _FakeAdapter(arquivo=b"%PDF-1.7 fake")
+    upd = Update(update_id=1, chat_id=42, user_id=42, texto="",
+                 documento={"file_id": "F1", "file_name": "Meu Livro.pdf"})
+    processar_update(upd, _CFG, Database(":memory:"), adapter, agora=datetime.now(), store=store)
+    assert store.get("Traducao", "Meu_Livro") is not None
+    assert store.get("Traducao", "Meu_Livro").labels.get("interface") == "telegram"
+    assert disparos == [("Meu_Livro", 42)]
+    assert any("recebido" in m for _, m in adapter.enviados)
 
 
 def test_ciclo_scheduler_dispara_retomada_sem_depender_do_telegram():
