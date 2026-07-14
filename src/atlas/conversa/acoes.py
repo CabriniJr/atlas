@@ -124,5 +124,15 @@ REGISTRY = {
 }
 
 
+def registrar(nome: str, fn) -> None:
+    """Registra uma ação built-in (usado por módulos de ação que importam este —
+    evita ciclo de import: ``acoes`` não conhece ``sync``, ``sync`` registra aqui)."""
+    REGISTRY[nome] = fn
+
+
 def acao_builtin(nome: str):
+    # importa os módulos de ação que se auto-registram (lazy, evita ciclo)
+    if nome not in REGISTRY:
+        from atlas.conversa import sync as _sync  # noqa: F401
+
     return REGISTRY.get(nome)

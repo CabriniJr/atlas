@@ -168,6 +168,49 @@ def test_seed_idempotente(store):
     assert n1 >= 3 and n2 == 0
 
 
+def test_agregar_sync_header_soma_commits(store):
+    from atlas.conversa import sync as sync_mod
+
+    _apply(store, "Repo", "repo-a")
+    _apply(store, "Repo", "repo-b")
+    repos = [store.get("Repo", "repo-a"), store.get("Repo", "repo-b")]
+
+    def fake(store, label, agora):
+        if label == "repo-a":
+            return 3, "  • repo-a: 3 commit(s) novos"
+        return 0, "  • repo-b: sem novidades"
+
+    txt = sync_mod.agregar_sync(store, repos, datetime.now(), sincronizar_fn=fake)
+    assert "sync de 2 repo(s) — 3 commit(s) novos" in txt
+    assert "repo-a: 3" in txt and "repo-b: sem novidades" in txt
+
+
+def test_sync_repos_ack_e_notifica(store):
+    from atlas.conversa import sync as sync_mod
+    from atlas.conversa.router import Contexto
+
+    _apply(store, "Repo", "repo-a")
+    avisos = []
+    ctx = Contexto(chat_id=9, notificar=lambda c, m: avisos.append((c, m)))
+    r = sync_mod.sync_repos(store, ctx, [store.get("Repo", "repo-a")], {})
+    assert "sincronizando 1 repo" in r.texto  # ack imediato
+
+
+def test_sync_repos_sem_repo(store):
+    from atlas.conversa import sync as sync_mod
+    from atlas.conversa.router import Contexto
+
+    r = sync_mod.sync_repos(store, Contexto(), [], {})
+    assert "nenhum repositório" in r.texto
+
+
+def test_router_sync_verbo_dispara(store):
+    _seed(store)
+    _apply(store, "Repo", "repo-a")
+    out = responder("sync", store)
+    assert out is not None and "sincronizando" in out
+
+
 def test_carimbo_participacao_idempotente(store):
     r = Resource(kind="Torrent", name="h", labels={}, spec={"nome": "X"}, status={})
     store.apply(r, datetime.now())

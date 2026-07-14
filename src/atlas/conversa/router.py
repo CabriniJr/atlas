@@ -35,6 +35,7 @@ class Contexto:
     agora: datetime = field(default_factory=datetime.now)
     chat_id: int | None = None
     enviar_documento: Callable[[int, str, str], None] | None = None
+    notificar: Callable[[int, str], None] | None = None  # p/ resultado de ação assíncrona
 
 
 def _alvos(store: ResourceStore, selector: dict) -> list[Resource]:

@@ -92,6 +92,7 @@ def processar_update(
             agora=agora,
             chat_id=upd.chat_id,
             enviar_documento=getattr(adapter, "enviar_documento", None),
+            notificar=adapter.enviar,
         )
         resposta_conv = responder_conversa(upd.texto, store, ctx_conv)
         if resposta_conv is not None:
