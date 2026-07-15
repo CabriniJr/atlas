@@ -31,7 +31,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from atlas import agente_ollama, credentials, curadoria, github_auth, scoping, sessions, users
+from atlas import (
+    agente_ollama,
+    credentials,
+    curadoria,
+    dispositivos,
+    github_auth,
+    scoping,
+    sessions,
+    users,
+)
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.traducao.pool import pool_global as _traducao_pool
@@ -76,6 +85,38 @@ def _html_dashboard() -> str:
     return (_DASHBOARD_DIR / "index.html").read_text(encoding="utf-8")
 
 
+def _html_pareamento(ip: str, codigo: str, atuais: int, teto: int) -> str:
+    """Página mostrada a um dispositivo da tailnet ainda não pareado (ADR-0054)."""
+    vagas = max(teto - atuais, 0)
+    aviso = (
+        f"<p class='warn'>⚠️ Limite de {teto} dispositivos atingido — revogue um antes.</p>"
+        if vagas == 0
+        else f"<p class='muted'>{atuais}/{teto} dispositivos autorizados · {vagas} vaga(s).</p>"
+    )
+    return f"""<!doctype html><html lang="pt-br"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas — parear dispositivo</title>
+<style>
+ :root{{color-scheme:dark}}
+ body{{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;
+   display:grid;place-items:center;min-height:100vh;margin:0;padding:1.5rem}}
+ .card{{background:#161b22;border:1px solid #30363d;border-radius:14px;
+   padding:2rem;max-width:26rem;text-align:center}}
+ h1{{font-size:1.25rem;margin:0 0 .5rem}}
+ .cod{{font-size:2.6rem;letter-spacing:.4rem;font-weight:700;margin:1rem 0;
+   color:#58a6ff;font-variant-numeric:tabular-nums}}
+ code{{background:#0d1117;padding:.15rem .4rem;border-radius:6px}}
+ .muted{{color:#8b949e;font-size:.85rem}} .warn{{color:#f0883e;font-size:.9rem}}
+</style></head><body><div class="card">
+ <h1>🔐 Dispositivo não autorizado</h1>
+ <p class="muted">Este aparelho (<code>{ip}</code>) ainda não pode acessar o Atlas.</p>
+ <div class="cod">{codigo}</div>
+ <p>No Telegram do Atlas, envie:<br><code>/autorizar {codigo}</code></p>
+ <p class="muted">O código expira em 5 minutos. Recarregue para um novo.</p>
+ {aviso}
+</div></body></html>"""
+
+
 def _dashboard_static(path: str) -> tuple[bytes, str] | None:
     """Serve static files under /dashboard/. Returns (data, content_type) or None."""
     rel = path.removeprefix("/dashboard/").lstrip("/")
@@ -103,11 +144,16 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: ANN401
         _log.debug(fmt, *args)
 
+    def _client_ip(self) -> str:
+        """IP do peer TCP. NÃO confia em X-Forwarded-For de propósito: o acesso é
+        direto pela tailnet (sem serve/proxy), então o peer JÁ é o IP Tailscale do
+        aparelho — confiar em XFF seria um bypass da auth por dispositivo."""
+        return self.client_address[0] if self.client_address else ""
+
     def _is_admin_token(self) -> bool:
         """Portador do ATLAS_API_TOKEN ou loopback ⇒ admin (retrocompat E0-05)."""
         if not _TOKEN:
-            ip = self.client_address[0]
-            return ip in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+            return self._client_ip() in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
         return self.headers.get("Authorization", "") == f"Bearer {_TOKEN}"
 
     def _session_token(self) -> str:
@@ -124,8 +170,12 @@ class _Handler(BaseHTTPRequestHandler):
         return morsel.value if morsel else ""
 
     def _identity(self) -> tuple[str | None, str | None]:
-        """``(user, role)`` do request: admin (token/loopback) ou sessão; senão ``(None, None)``."""
+        """``(user, role)`` do request: admin (token/loopback), **dispositivo pareado
+        na tailnet** (ADR-0054), ou sessão; senão ``(None, None)``."""
         if self._is_admin_token():
+            return (_DEFAULT_OWNER, "admin")
+        reg = dispositivos.registro()
+        if reg is not None and reg.autorizado(self._client_ip()):
             return (_DEFAULT_OWNER, "admin")
         sess = sessions.resolve_session(self._session_token())
         if sess:
@@ -324,6 +374,20 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0].rstrip("/")
 
         if path == "" or path == "/":
+            # Dispositivo da tailnet ainda não pareado (ADR-0054): em vez do
+            # dashboard, mostra o código pra autorizar via Telegram. Loopback,
+            # token, sessão e dispositivos já pareados caem direto no dashboard.
+            reg = dispositivos.registro()
+            if (
+                self._identity()[0] is None
+                and reg is not None
+                and dispositivos.ip_tailnet(self._client_ip())
+                and not reg.autorizado(self._client_ip())
+            ):
+                ip = self._client_ip()
+                codigo = reg.gerar_codigo(ip, datetime.now())
+                self._html(_html_pareamento(ip, codigo, len(reg.listar()), reg.max_dispositivos))
+                return
             self._html(_html_dashboard())
             return
         if path == "/health":
@@ -2339,6 +2403,9 @@ def iniciar(store: ResourceStore, port: int = _PORT) -> None:
     """Inicia o servidor HTTP em thread daemon. Chamado pelo app no boot."""
     global _store
     _store = store
+    # Registro de dispositivos pareados (ADR-0054): singleton compartilhado com o
+    # handler do Telegram (os códigos de pareamento vivem em memória).
+    dispositivos.init_registro(store)
 
     server = ThreadingHTTPServer(("0.0.0.0", port), _Handler)
 

@@ -123,6 +123,13 @@ def responder(texto: str, db: Database, agora: datetime, store: ResourceStore | 
     if resposta_repo is not None:
         return resposta_repo
 
+    # Dispositivos (ADR-0054): /autorizar, /dispositivos, /revogar.
+    from atlas import dispositivos
+
+    resposta_disp = dispositivos.responder_comando(texto, agora)
+    if resposta_disp is not None:
+        return resposta_disp
+
     if texto.startswith("/"):
         return "❓ unknown command. See /help"
 

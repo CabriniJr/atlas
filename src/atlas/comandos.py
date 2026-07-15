@@ -50,6 +50,10 @@ COMANDOS: list[tuple[str, str]] = [
     # --- torrents (ADR-0049) ---
     ("torrents", "Lista os torrents; mande um .torrent para baixar (sim/não)"),
     ("torrent", "Detalhe: /torrent <id>  ·  progresso · cancelar"),
+    # --- dispositivos (ADR-0054) ---
+    ("autorizar", "Autoriza dispositivo no dash: /autorizar <código> [nome]"),
+    ("dispositivos", "Lista dispositivos autorizados no dashboard"),
+    ("revogar", "Revoga um dispositivo: /revogar <ip ou nome>"),
     # --- docs ---
     ("docs", "Browse project docs: /docs [kinds|backlog|arch|adr <n>|spec <name>]"),
     ("snip", "Copy-paste template: /snip <Kind>  (Tracker|Goal|Timer|Alarm|Idea|Repo|Diff|Doc)"),
