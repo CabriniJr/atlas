@@ -113,6 +113,16 @@ def test_adicionar_faz_post_multipart_com_o_torrent(tmp_path):
     assert "multipart/form-data" in headers["Content-Type"]
 
 
+def test_adicionar_url_manda_magnet_no_campo_urls(tmp_path):
+    http = HttpFake()
+    cli = _cliente(tmp_path, RunnerFake(), http)
+    assert cli.adicionar_url("magnet:?xt=urn:btih:ABC") is True
+    url, corpo, headers = http.posts[-1]
+    assert url.endswith("/torrents/add")
+    assert b"urls=magnet" in corpo
+    assert "x-www-form-urlencoded" in headers["Content-Type"]
+
+
 def test_progresso_de_casa_por_infohash_e_usa_esta_completo(tmp_path):
     info = (
         '[{"hash":"ABC","progress":1.0,"state":"moving","dlspeed":0,"num_seeds":1},'

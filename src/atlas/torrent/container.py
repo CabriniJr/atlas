@@ -246,6 +246,19 @@ class ClienteContainer:
         resp = self.http_post(self._api + "/torrents/add", corpo, headers)
         return resp is not None
 
+    def adicionar_url(self, url: str) -> bool:
+        """Adiciona por **magnet** ou URL http(s) do ``.torrent`` (campo ``urls`` da
+        WebUI). Usado pelo ``enfileirar_torrent`` do MCP (ADR-0053)."""
+        import urllib.parse
+
+        corpo = urllib.parse.urlencode({"urls": url, "savepath": DESTINO_CONTAINER}).encode()
+        resp = self.http_post(
+            self._api + "/torrents/add",
+            corpo,
+            {"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        return resp is not None
+
     def listar(self) -> list[dict]:
         raw = self.http_get(self._api + "/torrents/info")
         if raw is None:
