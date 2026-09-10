@@ -44,3 +44,6 @@ repos/
 
 # snapshot automático do hook PreCompact (local; narrativa durável vai no dossie-handoff.md)
 docs/processos/handoff-auto.md
+
+# PDFs de origem (livros) — não versionar
+insumos/
