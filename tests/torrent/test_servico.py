@@ -329,3 +329,26 @@ def test_retomar_no_boot_container_readiciona_todos(store, tmp_path):
     )
     assert n == 1 and disparados == [a.name]
     assert store.get("Torrent", a.name).status["fase"] == servico.BAIXANDO
+
+
+def test_torrent_nasce_visivel_para_a_camada_nl(store, tmp_path):
+    """Regressão: um torrent criado em runtime precisa do label de participação.
+
+    O ``interface=telegram`` era aplicado SÓ pela retro-migração de boot
+    (``binding.carimbar_participacao``), então todo torrent criado depois do boot
+    ficava fora do selector da camada NL — `progresso` respondia "nada em
+    andamento" com download em curso, até o próximo restart.
+    """
+    from atlas.conversa import binding
+    from atlas.conversa.router import _alvos
+
+    res, sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "jogo.torrent", 42, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    assert res is not None
+    assert (res.labels or {}).get(binding.LABEL_INTERFACE) == binding.INTERFACE_TELEGRAM
+
+    # e o recurso recém-nascido entra nos alvos do Binding 'progresso'
+    sel = {binding.LABEL_INTERFACE: binding.INTERFACE_TELEGRAM}
+    assert any(a.name == sc.infohash for a in _alvos(store, sel))

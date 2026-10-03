@@ -21,6 +21,20 @@ INTERFACE_TELEGRAM = "telegram"
 KINDS_PARTICIPANTES = ("Torrent", "Traducao", "Repo", "Doc")
 
 
+def labels_com_participacao(kind: str, labels: dict | None = None) -> dict:
+    """Carimba ``interface=telegram`` nos labels de um recurso **nascendo** (puro).
+
+    ``carimbar_participacao`` é uma retro-migração que só roda no boot; um recurso
+    criado em runtime sem este carimbo fica **fora do selector** da camada NL até o
+    próximo restart (o `progresso` respondia "nada em andamento" com download em
+    curso). Quem cria recurso de kind participante deve passar por aqui.
+    """
+    out = dict(labels or {})
+    if kind in KINDS_PARTICIPANTES:
+        out.setdefault(LABEL_INTERFACE, INTERFACE_TELEGRAM)
+    return out
+
+
 def _binding(name: str, gatilho: dict, acao: dict, selector: dict) -> Resource:
     return Resource(
         kind=KIND,

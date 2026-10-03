@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from atlas.conversa import binding
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.torrent import download, integridade, scan
@@ -94,7 +95,10 @@ def criar_do_bytes(
         "criado_em": agora.isoformat(timespec="seconds"),
         "concluido_em": None,
     }
-    res = Resource(kind=KIND, name=infohash, labels={"dominio": "geral"}, spec=spec, status=status)
+    # Nasce já participando da camada NL (ADR-0050): sem isto o recurso só
+    # entraria no selector após o retro-carimbo do próximo boot.
+    labels = binding.labels_com_participacao(KIND, {"dominio": "geral"})
+    res = Resource(kind=KIND, name=infohash, labels=labels, spec=spec, status=status)
     store.apply(res, agora)
     return res, res_scan
 
