@@ -51,6 +51,11 @@ def montar_conf(*, porta: int, max_ativos: int, semear: bool) -> str:
     ``127.0.0.1:<porta>``); o whitelist ``0.0.0.0/0`` dispensa senha porque o único
     caminho de rede é o bind local. Fila nativa: até ``max_ativos`` baixam juntos,
     o resto fica ``queuedDL`` (substitui o ``TorrentPool``). Sem semear por default.
+
+    ``Session\\Encryption=0`` = **preferir** encriptação (não exigir): usa sempre que
+    o peer suporta, mas não descarta os que não suportam. Era ``1`` (exigir), herdado
+    do ``torrent-safe``, e isso cortava o pool de peers em torrents com pouco seed
+    (decisão do PO, 2026-10-03).
     """
     if semear:
         seed_min, seed_en = -1, "false"
@@ -63,7 +68,7 @@ FileLogger\\Enabled=false
 Session\\DefaultSavePath={DESTINO_CONTAINER}
 Session\\TempPath={DESTINO_CONTAINER}/.incompleto
 Session\\TempPathEnabled=true
-Session\\Encryption=1
+Session\\Encryption=0
 Session\\AnonymousModeEnabled=true
 Session\\QueueingSystemEnabled=true
 Session\\MaxActiveDownloads={max_ativos}

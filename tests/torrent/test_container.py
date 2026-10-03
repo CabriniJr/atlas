@@ -57,7 +57,8 @@ def test_conf_tem_fila_nativa_seguranca_e_auth_local():
     conf = container.montar_conf(porta=8099, max_ativos=3, semear=False)
     assert "Session\\QueueingSystemEnabled=true" in conf
     assert "Session\\MaxActiveDownloads=3" in conf
-    assert "Session\\Encryption=1" in conf
+    # 0 = preferir encriptação (não exigir): não corta peers sem suporte
+    assert "Session\\Encryption=0" in conf
     assert "Session\\AnonymousModeEnabled=true" in conf
     assert "Session\\PortForwardingEnabled=false" in conf
     # sem semear: para de semear assim que conclui
