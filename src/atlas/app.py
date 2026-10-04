@@ -330,7 +330,25 @@ def _iniciar_monitor_torrent(adapter: Adapter, store: ResourceStore) -> None:
     def _enviar(chat_id: int, caminho: str, nome: str) -> None:
         _auto_enviar_torrent(adapter, chat_id, caminho, nome)
 
-    monitor.monitorar(store, cliente, notificar=adapter.enviar, enviar=_enviar)
+    def _subir_nuvem(chat_id: int, caminho: str, nome: str) -> None:
+        """Sobe pra nuvem em thread: um jogo de 25GB levaria minutos e o monitor
+        é uma thread única — bloquear aqui pararia o progresso de TODOS (ADR-0056)."""
+        import threading
+
+        def _trabalho() -> None:
+            from atlas.nuvem import envio
+
+            if chat_id:
+                adapter.enviar(chat_id, f"☁️ subindo {nome} pra nuvem…")
+            r = envio.subir(caminho, nome)
+            if chat_id:
+                adapter.enviar(chat_id, r.mensagem if r.ok else f"⚠️ {r.mensagem}")
+
+        threading.Thread(target=_trabalho, daemon=True, name=f"nuvem-{nome[:16]}").start()
+
+    monitor.monitorar(
+        store, cliente, notificar=adapter.enviar, enviar=_enviar, subir_nuvem=_subir_nuvem
+    )
     _monitor_torrent_iniciado = True
 
 

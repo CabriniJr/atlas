@@ -33,7 +33,8 @@ def _receber(store, tmp_path, **kw):
 def test_receber_documento_pergunta_confirmacao(store, tmp_path, monkeypatch):
     monkeypatch.setattr(servico, "DIR_TORRENTS", str(tmp_path / "torr"))
     msg = _receber(store, tmp_path)
-    assert "sim / não" in msg
+    # ADR-0056: a pergunta passou de "sim / não" para a escolha de destino
+    assert "local / nuvem" in msg
     assert servico.pendente_confirmacao(store) is not None
 
 

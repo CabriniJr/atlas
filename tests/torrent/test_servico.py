@@ -414,6 +414,8 @@ def test_arquivar_ausentes_preserva_o_que_esta_no_disco(store, tmp_path):
     )
     destino = tmp_path / "destino"
     (destino / "jogo_y").mkdir(parents=True)
+    # "estar no disco" exige CONTEÚDO: pasta vazia é jogo desinstalado
+    (destino / "jogo_y" / "a.nsp").write_bytes(b"conteudo real")
     t = store.get("Torrent", res.name)
     novo = t.__class__(kind=t.kind, name=t.name, labels=t.labels,
                        spec={**t.spec, "nome": "jogo_y", "destino": str(destino)},
@@ -471,8 +473,9 @@ def test_sim_solto_com_varios_pendentes_pede_desambiguacao(store, tmp_path):
     # não confirmou nada às cegas
     assert chamadas == []
     assert len(servico.pendentes_confirmacao(store)) == 3
-    # e explica como escolher
-    assert "sim todos" in out and "sim <id>" in out
+    # e explica como escolher (agora com local/nuvem — ADR-0056)
+    assert "local <id>" in out and "nuvem <id>" in out
+    assert "todos" in out
 
 
 def test_sim_com_id_confirma_so_aquele(store, tmp_path):
@@ -510,3 +513,72 @@ def test_um_pendente_so_mantem_o_sim_simples(store, tmp_path):
     )
     assert out is not None
     assert store.get("Torrent", res.name).status["fase"] != servico.AGUARDANDO
+
+
+# ── #5: escolher Local ou Nuvem na confirmação (ADR-0056) ───────────────────
+def test_nuvem_confirma_e_marca_destino_nuvem(store, tmp_path):
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    out = torrent_cmd.responder_conversa(
+        "nuvem", store, datetime.now(), dispatch=lambda n: None, cliente=object()
+    )
+    assert out is not None
+    st = store.get("Torrent", res.name).status
+    assert st["fase"] != servico.AGUARDANDO
+    assert st["destino_nuvem"] is True
+
+
+def test_local_confirma_sem_marcar_nuvem(store, tmp_path):
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    torrent_cmd.responder_conversa(
+        "local", store, datetime.now(), dispatch=lambda n: None, cliente=object()
+    )
+    st = store.get("Torrent", res.name).status
+    assert st["fase"] != servico.AGUARDANDO
+    assert st.get("destino_nuvem") is False
+
+
+def test_sim_segue_valendo_como_local(store, tmp_path):
+    """Compatibilidade: quem já respondia 'sim' continua indo pro disco local."""
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    torrent_cmd.responder_conversa(
+        "sim", store, datetime.now(), dispatch=lambda n: None, cliente=object()
+    )
+    assert store.get("Torrent", res.name).status.get("destino_nuvem") is False
+
+
+def test_nuvem_todos_vale_para_a_fila_inteira(store, tmp_path):
+    nomes = _tres_pendentes(store, tmp_path)
+    out = torrent_cmd.responder_conversa(
+        "nuvem todos", store, datetime.now(), dispatch=lambda n: None, cliente=object()
+    )
+    assert out is not None
+    for n in nomes:
+        assert store.get("Torrent", n).status["destino_nuvem"] is True
+
+
+def test_pergunta_de_confirmacao_oferece_local_ou_nuvem(store, tmp_path):
+    msg = torrent_cmd.receber_documento(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    assert "local" in msg.lower() and "nuvem" in msg.lower()
+
+
+def test_arquivar_trata_pasta_vazia_como_ausente(store, tmp_path):
+    """Desinstalar jogo costuma deixar a pasta vazia; ela não é "estar no disco"."""
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    destino = tmp_path / "destino"
+    (destino / "jogo_vazio").mkdir(parents=True)  # existe, mas vazia
+    t = store.get("Torrent", res.name)
+    store.apply(t.__class__(kind=t.kind, name=t.name, labels=t.labels,
+                            spec={**t.spec, "nome": "jogo_vazio", "destino": str(destino)},
+                            status={**t.status, "fase": servico.CONCLUIDO}), datetime.now())
+    assert servico.arquivar_ausentes(store, datetime.now()) == 1
+    assert store.get("Torrent", res.name).status["fase"] == servico.ARQUIVADO

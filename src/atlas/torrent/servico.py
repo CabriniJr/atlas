@@ -152,6 +152,7 @@ def confirmar(
     pool: TorrentPool | None = None,
     forte: bool = False,
     container: bool = False,
+    nuvem: bool = False,
 ) -> tuple[bool, str]:
     """Confirma o download.
 
@@ -173,20 +174,37 @@ def confirmar(
     if (t.status or {}).get("risco", 0) >= 2 and not forte:
         return False, "🚨 risco ALTO. Para confirmar mesmo assim, responda: SIM (maiúsculo)"
     nome = t.spec.get("nome") or name
+    # `destino_nuvem` mora no status junto com o resto do estado de conversa
+    # (`fase`, `cancelar`): é a escolha do PO nesta confirmação, lida pelo
+    # monitor ao concluir para subir e liberar o disco (ADR-0056).
+    destino = {"destino_nuvem": bool(nuvem)}
+    selo = "  ☁️ vai pra nuvem ao terminar" if nuvem else ""
     if container:
-        _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
+        _patch_status(
+            store,
+            name,
+            {"fase": BAIXANDO, "cancelar": False, "mensagem": "", **destino},
+            agora,
+        )
         dispatch(name)  # adiciona ao container; o monitor único cuida do resto
-        return True, f"⬇️ baixando: {nome}\nAcompanhe com: progresso"
+        return True, f"⬇️ baixando: {nome}{selo}\nAcompanhe com: progresso"
     if not download.motor_disponivel():
         return False, (
             "motor de download indisponível. Instale uma vez:\n"
             "  sudo dnf install -y qbittorrent-nox"
         )
     if pool.tentar_iniciar(name):
-        _patch_status(store, name, {"fase": BAIXANDO, "cancelar": False, "mensagem": ""}, agora)
+        _patch_status(
+            store,
+            name,
+            {"fase": BAIXANDO, "cancelar": False, "mensagem": "", **destino},
+            agora,
+        )
         dispatch(name)
-        return True, f"⬇️ baixando: {nome}\nAcompanhe com: progresso"
-    _patch_status(store, name, {"fase": FILA, "cancelar": False, "mensagem": ""}, agora)
+        return True, f"⬇️ baixando: {nome}{selo}\nAcompanhe com: progresso"
+    _patch_status(
+        store, name, {"fase": FILA, "cancelar": False, "mensagem": "", **destino}, agora
+    )
     pos = pool.posicao_na_fila(name)
     return True, f"🕒 na fila (posição {pos}): {nome}\nComeça quando um slot liberar."
 
@@ -259,6 +277,20 @@ def alvo_em_disco(spec: dict) -> str:
     return os.path.join(destino, spec.get("nome") or "")
 
 
+def _tem_conteudo(alvo: str) -> bool:
+    """O conteúdo está realmente no disco?
+
+    Pasta **vazia** não conta: desinstalar um jogo (ou subi-lo pra nuvem)
+    costuma deixar o diretório para trás, e tratar isso como "está no disco"
+    é o que fazia jogo removido seguir aparecendo como pronto.
+    """
+    if os.path.isfile(alvo):
+        return os.path.getsize(alvo) > 0
+    if not os.path.isdir(alvo):
+        return False
+    return any(arquivos for _r, _d, arquivos in os.walk(alvo))
+
+
 def arquivar_ausentes(store: ResourceStore, agora: datetime) -> int:
     """``concluido`` cujo alvo não existe mais em disco → ``arquivado``.
 
@@ -271,7 +303,7 @@ def arquivar_ausentes(store: ResourceStore, agora: datetime) -> int:
         s = t.status or {}
         if s.get("fase") != CONCLUIDO:
             continue
-        if os.path.exists(alvo_em_disco(t.spec or {})):
+        if _tem_conteudo(alvo_em_disco(t.spec or {})):
             continue
         _patch_status(
             store,

@@ -20,7 +20,11 @@ from atlas.conversa.descritores import slugificar
 from atlas.core.store import ResourceStore
 from atlas.torrent import servico
 
-_SIM = {"sim", "s", "yes", "y", "pode", "bora", "baixa", "baixar"}
+# "Local ou Nuvem?" (ADR-0056). `sim` segue valendo como **local** p/ não quebrar
+# quem já conversava assim; `nuvem` sobe e libera o disco ao concluir.
+_LOCAL = {"local", "disco", "aqui"}
+_NUVEM = {"nuvem", "cloud", "onedrive", "drive"}
+_SIM = {"sim", "s", "yes", "y", "pode", "bora", "baixa", "baixar"} | _LOCAL
 _NAO = {"não", "nao", "n", "no", "cancela", "deixa"}
 _PROGRESSO = {"progresso", "progress", "status torrent", "andamento"}
 _CANCELAR = {"cancelar", "cancela download", "para", "parar", "stop"}
@@ -36,6 +40,7 @@ def receber_documento(
     destino: str = servico.DESTINO_DEFAULT,
     permitir_sem_vpn: bool = True,
     vpn: str = "",
+    dir_torrents: str = servico.DIR_TORRENTS,
 ) -> str:
     """Processa um `.torrent` recebido: verifica, cria o recurso e devolve a
     pergunta de confirmação (ou o erro do scan)."""
@@ -45,12 +50,16 @@ def receber_documento(
     res, sc = servico.criar_do_bytes(
         store, dados, nome_arquivo, chat_id, agora,
         destino=destino, permitir_sem_vpn=permitir_sem_vpn, vpn=vpn,
+        dir_torrents=dir_torrents,
     )
     if res is None:
         return f"❌ não consegui ler esse arquivo como .torrent.\n{sc.erro}"
-    pergunta = "Posso baixar? responda: sim / não"
+    pergunta = "Baixar onde? responda: local / nuvem  (ou não)"
     if sc.risco >= 2:
-        pergunta = "🚨 risco ALTO. Para baixar mesmo assim, responda: SIM (maiúsculo) — ou não"
+        pergunta = (
+            "🚨 risco ALTO. Para baixar mesmo assim responda SIM (maiúsculo), "
+            "ou `SIM nuvem` — ou não"
+        )
     return f"{sc.humano()}\n\n{pergunta}"
 
 
@@ -183,10 +192,15 @@ def _resolver_confirmacao(
     cab = partes[0]
     arg = partes[1].strip().lower() if len(partes) > 1 else ""
     low = cab.lower()
-    sim, nao = low in _SIM, low in _NAO
+    nuvem = low in _NUVEM
+    sim, nao = (low in _SIM or nuvem), low in _NAO
     if not (sim or nao):
         return None
     forte = cab == "SIM"
+    # `SIM nuvem` / `sim nuvem <id>`: a palavra nuvem pode vir no argumento
+    if arg.startswith(tuple(_NUVEM)):
+        nuvem = True
+        arg = arg.split(None, 1)[1].strip() if " " in arg else ""
 
     if arg in _TODOS and arg:
         alvos = list(reversed(pendentes))  # FIFO: o mais antigo primeiro
@@ -204,7 +218,8 @@ def _resolver_confirmacao(
         return (
             f"⏸️ {len(pendentes)} torrents aguardando — qual?\n"
             + "\n".join(f"  {_rotulo(p)}" for p in pendentes)
-            + "\n\nResponda `sim <id>` para um, ou `sim todos` para a fila inteira."
+            + "\n\nResponda `local <id>` ou `nuvem <id>` para um; "
+            "`local todos` / `nuvem todos` para a fila inteira."
         )
 
     msgs = []
@@ -214,7 +229,7 @@ def _resolver_confirmacao(
         else:
             _ok, msg = servico.confirmar(
                 store, alvo.name, agora, dispatch=dispatch, forte=forte,
-                container=cliente is not None,
+                container=cliente is not None, nuvem=nuvem,
             )
         msgs.append(msg if len(alvos) == 1 else f"{alvo.name[:8]}: {msg}")
     return "\n".join(msgs)

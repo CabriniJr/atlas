@@ -66,7 +66,9 @@ def _aplicar_progresso(store, t, p: Progresso, notificar) -> None:
     )
 
 
-def _concluir(store, t, cliente: ClienteContainer, notificar, enviar, agora_fn) -> None:
+def _concluir(
+    store, t, cliente: ClienteContainer, notificar, enviar, agora_fn, subir_nuvem=None
+) -> None:
     spec = t.spec
     infohash = spec.get("infohash") or t.name
     nome = spec.get("nome") or t.name
@@ -104,6 +106,13 @@ def _concluir(store, t, cliente: ClienteContainer, notificar, enviar, agora_fn) 
             enviar(int(chat), alvo, nome)
         except Exception:  # noqa: BLE001 — best-effort (ADR-0006)
             _log.exception("auto-envio de %s falhou", nome)
+    # Nuvem (ADR-0056): só sobe se o PO escolheu E a integridade passou. Subir um
+    # download corrompido e apagar o local perderia o jogo nas duas pontas.
+    if subir_nuvem and (t.status or {}).get("destino_nuvem") and integ.ok:
+        try:
+            subir_nuvem(int(chat) if chat is not None else 0, alvo, nome)
+        except Exception:  # noqa: BLE001 — best-effort (ADR-0006)
+            _log.exception("envio p/ nuvem de %s falhou", nome)
 
 
 def tick(
@@ -112,6 +121,7 @@ def tick(
     *,
     notificar: Callable[[int, str], None] | None = None,
     enviar: Callable[[int, str, str], None] | None = None,
+    subir_nuvem: Callable[[int, str, str], None] | None = None,
     agora_fn: Callable[[], datetime] = _agora,
 ) -> None:
     """Uma varredura: atualiza cada ``Torrent`` ativo pela listagem do client e
@@ -133,7 +143,7 @@ def tick(
             continue  # client ainda não conhece (recém-adicionado / já removido)
         _aplicar_progresso(store, t, p, notificar)
         if p.concluido:
-            _concluir(store, t, cliente, notificar, enviar, agora_fn)
+            _concluir(store, t, cliente, notificar, enviar, agora_fn, subir_nuvem)
 
 
 def monitorar(
@@ -142,6 +152,7 @@ def monitorar(
     *,
     notificar: Callable[[int, str], None] | None = None,
     enviar: Callable[[int, str, str], None] | None = None,
+    subir_nuvem: Callable[[int, str, str], None] | None = None,
     intervalo_s: float = 3.0,
     parar: Callable[[], bool] | None = None,
 ) -> threading.Thread:
@@ -150,7 +161,10 @@ def monitorar(
 
     def _loop() -> None:
         while not (parar and parar()):
-            tick(store, cliente, notificar=notificar, enviar=enviar)
+            tick(
+                store, cliente, notificar=notificar, enviar=enviar,
+                subir_nuvem=subir_nuvem,
+            )
             time.sleep(intervalo_s)
 
     th = threading.Thread(target=_loop, daemon=True, name="torrent-monitor")

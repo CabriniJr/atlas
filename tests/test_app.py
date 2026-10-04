@@ -106,7 +106,7 @@ def test_anexo_torrent_verifica_e_pergunta(tmp_path, monkeypatch):
 
     processar_update(upd, _CFG, Database(":memory:"), adapter, agora=datetime.now(), store=store)
 
-    assert adapter.enviados and "sim / não" in adapter.enviados[0][1]
+    assert adapter.enviados and "local / nuvem" in adapter.enviados[0][1]
     assert servico.pendente_confirmacao(store) is not None
 
 
