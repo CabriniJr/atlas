@@ -65,8 +65,10 @@ def test_progresso_global_so_ativos(store):
     _apply(store, "Torrent", "t3", spec={"nome": "Parado"}, status={"fase": "concluido"})
     alvos = [store.get("Torrent", "t1"), store.get("Traducao", "t2"), store.get("Torrent", "t3")]
     r = acoes.progresso_global(store, Contexto(), alvos, {})
-    assert "Jogo A" in r.texto and "Livro.pdf" in r.texto
-    assert "Parado" not in r.texto
+    # Torrent exibe id + nome em slug (pedido do PO); Traducao segue pelo basename
+    assert "jogo_a" in r.texto and "Livro.pdf" in r.texto
+    assert "t1" in r.texto  # id curto como indexador
+    assert "parado" not in r.texto
     assert "2 em andamento" in r.texto
 
 
@@ -124,7 +126,7 @@ def test_router_verbo_progresso(store):
     _seed(store)
     _apply(store, "Torrent", "t1", spec={"nome": "Jogo A"},
            status={"fase": "baixando", "progresso_pct": 20, "velocidade": "1 MB/s", "seeds": 1})
-    assert "Jogo A" in responder("progresso", store)
+    assert "jogo_a" in responder("progresso", store)
 
 
 def test_router_nome_solto_busca(store):

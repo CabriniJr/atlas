@@ -6,6 +6,7 @@ from datetime import datetime
 
 import pytest
 
+from atlas import torrent_cmd
 from atlas.core.store import ResourceStore
 from atlas.torrent import download, servico
 from atlas.torrent.download import Progresso
@@ -352,3 +353,160 @@ def test_torrent_nasce_visivel_para_a_camada_nl(store, tmp_path):
     # e o recurso recém-nascido entra nos alvos do Binding 'progresso'
     sel = {binding.LABEL_INTERFACE: binding.INTERFACE_TELEGRAM}
     assert any(a.name == sc.infohash for a in _alvos(store, sel))
+
+
+# ── display: id como indexador + nome em slug (pedido do PO, 2026-10-03) ──────
+def test_slugificar_gera_lower_com_underscore():
+    from atlas.conversa.descritores import slugificar
+    assert slugificar("Marvel vs Capcom Fighting Collection [NSP]") == (
+        "marvel_vs_capcom_fighting_collection_nsp"
+    )
+    assert slugificar("Pokémon Legends: Z-A") == "pokemon_legends_z_a"
+    assert slugificar("") == "sem_nome"
+
+
+def test_slug_nao_quebra_a_busca_por_nome_real(store, tmp_path):
+    """O slug é só display: `buscar` continua casando o nome humano com espaços."""
+    from atlas.conversa import binding
+    from atlas.conversa.acoes import buscar
+    from atlas.conversa.router import _alvos
+
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(nome="jogo.nsp"), "a.torrent", 1, datetime.now(),
+        dir_torrents=str(tmp_path),
+    )
+    t = store.get("Torrent", res.name)
+    novo = t.__class__(kind=t.kind, name=t.name, labels=t.labels,
+                       spec={**t.spec, "nome": "Marvel vs Capcom"}, status=t.status)
+    store.apply(novo, datetime.now())
+    alvos = _alvos(store, {binding.LABEL_INTERFACE: binding.INTERFACE_TELEGRAM})
+    # termo com espaço casa
+    assert "Marvel vs Capcom" in buscar(store, None, alvos, {"termo": "marvel vs"}).texto
+    # e termo em slug também casa (tolerância a underscore)
+    assert "Marvel vs Capcom" in buscar(store, None, alvos, {"termo": "marvel_vs"}).texto
+
+
+# ── #2: concluído cujos arquivos sumiram do disco vira `arquivado` ───────────
+def test_arquivar_ausentes_tira_jogo_desinstalado_da_lista(store, tmp_path, monkeypatch):
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    destino = tmp_path / "destino"
+    destino.mkdir()
+    t = store.get("Torrent", res.name)
+    novo = t.__class__(kind=t.kind, name=t.name, labels=t.labels,
+                       spec={**t.spec, "nome": "jogo_x", "destino": str(destino)},
+                       status={**t.status, "fase": servico.CONCLUIDO})
+    store.apply(novo, datetime.now())
+
+    # arquivos ainda não existem → arquiva
+    n = servico.arquivar_ausentes(store, datetime.now())
+    assert n == 1
+    assert store.get("Torrent", res.name).status["fase"] == servico.ARQUIVADO
+
+    # e sai da listagem do /torrents
+    assert "jogo_x" not in torrent_cmd._listar(store)
+
+
+def test_arquivar_ausentes_preserva_o_que_esta_no_disco(store, tmp_path):
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    destino = tmp_path / "destino"
+    (destino / "jogo_y").mkdir(parents=True)
+    t = store.get("Torrent", res.name)
+    novo = t.__class__(kind=t.kind, name=t.name, labels=t.labels,
+                       spec={**t.spec, "nome": "jogo_y", "destino": str(destino)},
+                       status={**t.status, "fase": servico.CONCLUIDO})
+    store.apply(novo, datetime.now())
+    assert servico.arquivar_ausentes(store, datetime.now()) == 0
+    assert store.get("Torrent", res.name).status["fase"] == servico.CONCLUIDO
+
+
+# ── #4b: a camada NL precisa mostrar quem está na fila ───────────────────────
+def test_progresso_nl_mostra_quem_esta_na_fila():
+    from atlas.conversa.descritores import _torrent_progresso
+    from atlas.core.resource import Resource
+    r = Resource(kind="Torrent", name="abc", labels={},
+                 spec={"nome": "Jogo Da Fila"}, status={"fase": servico.FILA})
+    linha = _torrent_progresso(r)
+    assert linha is not None
+    assert "fila" in linha.lower()
+
+
+# ── #4a: confirmar vários pendentes sem ambiguidade ──────────────────────────
+def _tres_pendentes(store, tmp_path):
+    """Três .torrent distintos aguardando confirmação (infohash difere pelo nome)."""
+    nomes = ["Jogo Um", "Jogo Dois", "Jogo Tres"]
+    criados = []
+    for i, n in enumerate(nomes):
+        dados = bencode({b"announce": b"http://t/x", b"info": {
+            b"piece length": 262144, b"name": f"pasta{i}".encode(),
+            b"files": [{b"length": 1000 + i, b"path": [b"a.nsp"]}]}})
+        res, _ = servico.criar_do_bytes(
+            store, dados, f"{i}.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+        )
+        t = store.get("Torrent", res.name)
+        store.apply(t.__class__(kind=t.kind, name=t.name, labels=t.labels,
+                                spec={**t.spec, "nome": n}, status=t.status), datetime.now())
+        criados.append(res.name)
+    return criados
+
+
+def test_pendentes_confirmacao_devolve_todos(store, tmp_path):
+    nomes = _tres_pendentes(store, tmp_path)
+    pend = servico.pendentes_confirmacao(store)
+    assert {p.name for p in pend} == set(nomes)
+    # o singular segue existindo (o mais recente) p/ o fluxo de um só
+    assert servico.pendente_confirmacao(store) is not None
+
+
+def test_sim_solto_com_varios_pendentes_pede_desambiguacao(store, tmp_path):
+    _tres_pendentes(store, tmp_path)
+    chamadas = []
+    out = torrent_cmd.responder_conversa(
+        "sim", store, datetime.now(), dispatch=lambda n: chamadas.append(n)
+    )
+    assert out is not None
+    # não confirmou nada às cegas
+    assert chamadas == []
+    assert len(servico.pendentes_confirmacao(store)) == 3
+    # e explica como escolher
+    assert "sim todos" in out and "sim <id>" in out
+
+
+def test_sim_com_id_confirma_so_aquele(store, tmp_path):
+    nomes = _tres_pendentes(store, tmp_path)
+    alvo = nomes[0]
+    chamadas = []
+    out = torrent_cmd.responder_conversa(
+        f"sim {alvo[:8]}", store, datetime.now(),
+        dispatch=lambda n: chamadas.append(n), cliente=object(),
+    )
+    assert out is not None
+    assert store.get("Torrent", alvo).status["fase"] != servico.AGUARDANDO
+    assert len(servico.pendentes_confirmacao(store)) == 2
+
+
+def test_sim_todos_confirma_a_fila_inteira(store, tmp_path):
+    _tres_pendentes(store, tmp_path)
+    chamadas = []
+    out = torrent_cmd.responder_conversa(
+        "sim todos", store, datetime.now(),
+        dispatch=lambda n: chamadas.append(n), cliente=object(),
+    )
+    assert out is not None
+    assert servico.pendentes_confirmacao(store) == []
+    assert len(chamadas) == 3
+
+
+def test_um_pendente_so_mantem_o_sim_simples(store, tmp_path):
+    """Regressão: com UM pendente, 'sim' continua confirmando direto."""
+    res, _sc = servico.criar_do_bytes(
+        store, _torrent_bytes(), "a.torrent", 1, datetime.now(), dir_torrents=str(tmp_path)
+    )
+    out = torrent_cmd.responder_conversa(
+        "sim", store, datetime.now(), dispatch=lambda n: None, cliente=object()
+    )
+    assert out is not None
+    assert store.get("Torrent", res.name).status["fase"] != servico.AGUARDANDO

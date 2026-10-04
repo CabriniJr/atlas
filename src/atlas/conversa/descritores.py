@@ -9,6 +9,7 @@ novo é adicionar um descritor aqui + carimbar o label ``interface=telegram``.
 from __future__ import annotations
 
 import os
+import re
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,9 +18,23 @@ from atlas.core.resource import Resource
 
 
 def normalizar(s: str) -> str:
-    """Minúsculo sem acento — base de comparação para busca/gatilho."""
-    base = unicodedata.normalize("NFD", (s or "").lower())
+    """Minúsculo sem acento — base de comparação para busca/gatilho.
+
+    ``_`` conta como espaço, para um termo em forma de slug (``marvel_vs``) casar
+    o nome humano (``Marvel vs Capcom``) — o slug é o que o PO vê na listagem.
+    """
+    base = unicodedata.normalize("NFD", (s or "").lower()).replace("_", " ")
     return "".join(c for c in base if unicodedata.category(c) != "Mn").strip()
+
+
+def slugificar(s: str) -> str:
+    """Nome legível → ``lower_com_underscore``, só para **exibição**.
+
+    Nunca use para casar busca: ``acoes.buscar`` compara o termo contra o
+    ``nome_exibicao`` (nome humano) normalizado.
+    """
+    base = re.sub(r"[^a-z0-9]+", "_", normalizar(s)).strip("_")
+    return base or "sem_nome"
 
 
 @dataclass
@@ -44,11 +59,18 @@ def _torrent_nome(r: Resource) -> str:
 
 
 def _torrent_progresso(r: Resource) -> str | None:
+    """``baixando`` e ``fila`` são ambos "em andamento": com instalação simultânea
+    os que esperam vaga na fila nativa precisam aparecer, senão parecem sumidos."""
     s = _st(r)
-    if s.get("fase") != "baixando":
+    fase = s.get("fase")
+    nome = slugificar(_torrent_nome(r))
+    ref = r.name[:8]
+    if fase == "fila":
+        return f"🕒 {ref}  {nome} — na fila"
+    if fase != "baixando":
         return None
     return (
-        f"⬇️ {_torrent_nome(r)} — {s.get('progresso_pct', 0):.0f}% · "
+        f"⬇️ {ref}  {nome} — {s.get('progresso_pct', 0):.0f}% · "
         f"{s.get('velocidade') or '—'} · seeds {s.get('seeds', 0)}"
     )
 

@@ -154,3 +154,12 @@ def test_remover_manda_delete_sem_apagar_dados(tmp_path):
     assert url.endswith("/torrents/delete")
     assert b"deleteFiles=false" in corpo
     assert b"hashes=abc" in corpo
+
+
+def test_limite_default_de_ativos_e_cinco():
+    """Instalação simultânea: 5 baixam juntos, o resto cai na fila nativa."""
+    c = container.ClienteContainer()
+    assert c.max_ativos == 5
+    conf = container.montar_conf(porta=8190, max_ativos=c.max_ativos, semear=False)
+    assert "Session\\MaxActiveDownloads=5" in conf
+    assert "Session\\QueueingSystemEnabled=true" in conf

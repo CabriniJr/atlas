@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from atlas.conversa import binding
+from atlas.conversa.descritores import slugificar
 from atlas.core.resource import Resource
 from atlas.core.store import ResourceStore
 from atlas.torrent import download, integridade, scan
@@ -36,6 +37,8 @@ CONCLUIDO = "concluido"
 ERRO = "erro"
 RECUSADO = "recusado"
 CANCELADO = "cancelado"
+# Concluído cujos arquivos não estão mais no disco (o PO desinstalou o jogo).
+ARQUIVADO = "arquivado"
 
 # Marcos de progresso que geram notificação proativa (%). 100% = notificação de
 # conclusão ("✅ baixado"), tratada à parte.
@@ -106,6 +109,17 @@ def criar_do_bytes(
 def pendente_confirmacao(store: ResourceStore) -> Resource | None:
     """O torrent aguardando confirmação mais recente (o alvo de um 'sim'/'não')."""
     return _mais_recente(store, AGUARDANDO)
+
+
+def pendentes_confirmacao(store: ResourceStore) -> list[Resource]:
+    """**Todos** os torrents aguardando confirmação, mais recente primeiro.
+
+    Instalação simultânea: com mais de um pendente, um "sim" solto é ambíguo —
+    o chamador desambigua por id (ver ``torrent_cmd``) em vez de confirmar o
+    mais recente às cegas.
+    """
+    pend = [t for t in store.list(KIND) if (t.status or {}).get("fase") == AGUARDANDO]
+    return sorted(pend, key=lambda t: (t.status or {}).get("criado_em") or "", reverse=True)
 
 
 def em_andamento(store: ResourceStore) -> Resource | None:
@@ -239,10 +253,43 @@ def cancelar(
     return False, f"nada para cancelar (fase: {fase})"
 
 
+def alvo_em_disco(spec: dict) -> str:
+    """Caminho onde o conteúdo do torrent deveria estar no host."""
+    destino = os.path.expanduser(spec.get("destino") or DESTINO_DEFAULT)
+    return os.path.join(destino, spec.get("nome") or "")
+
+
+def arquivar_ausentes(store: ResourceStore, agora: datetime) -> int:
+    """``concluido`` cujo alvo não existe mais em disco → ``arquivado``.
+
+    O recurso é histórico permanente, mas o jogo desinstalado não deve seguir
+    aparecendo como se estivesse pronto. Checar o disco é o sinal honesto (o
+    recurso sozinho não sabe que o PO apagou a pasta). Idempotente.
+    """
+    n = 0
+    for t in store.list(KIND):
+        s = t.status or {}
+        if s.get("fase") != CONCLUIDO:
+            continue
+        if os.path.exists(alvo_em_disco(t.spec or {})):
+            continue
+        _patch_status(
+            store,
+            t.name,
+            {"fase": ARQUIVADO, "arquivado_em": agora.isoformat(timespec="seconds")},
+            agora,
+        )
+        n += 1
+    return n
+
+
 def linha_progresso(t: Resource) -> str:
-    """Texto de progresso sob demanda para o Telegram."""
+    """Texto de progresso sob demanda para o Telegram.
+
+    Exibe o **id curto como indexador** e o nome em slug (``lower_com_underscore``)
+    — é o que o PO referencia em ``/torrent <id>``."""
     s = t.status or {}
-    nome = t.spec.get("nome") or t.name
+    nome = f"{t.name[:8]}  {slugificar(t.spec.get('nome') or t.name)}"
     fase = s.get("fase")
     if fase == BAIXANDO:
         return (
@@ -259,6 +306,8 @@ def linha_progresso(t: Resource) -> str:
         return f"⏸️ {nome} — aguardando você confirmar (sim/não)"
     if fase == ERRO:
         return f"❌ {nome} — erro: {s.get('mensagem') or '?'}"
+    if fase == ARQUIVADO:
+        return f"🗄️ {nome} — arquivado (arquivos não estão mais no disco)"
     return f"{nome} — {fase}"
 
 

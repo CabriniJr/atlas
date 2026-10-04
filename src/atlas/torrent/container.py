@@ -188,7 +188,8 @@ class ClienteContainer:
     dir_config: str = CONFIG_HOST_DEFAULT
     nome: str = NOME_CONTAINER
     imagem: str = IMAGEM_DEFAULT
-    max_ativos: int = 3
+    # 5 baixam juntos, o resto fica `queuedDL` (decisão do PO, 2026-10-03: era 3).
+    max_ativos: int = 5
     semear: bool = False
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     http_get: Callable[[str], str | None] = _http_get
