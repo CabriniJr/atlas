@@ -40,6 +40,9 @@ def _cliente(tmp_path, runner, http, env_file=None):
         env_file=env_file,
         runner=runner,
         http_get=http.get,
+        # nunca escrever no ~/.config/systemd/user real a partir de teste
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=False,
     )
 
 
@@ -116,8 +119,62 @@ def test_status_reflete_container_e_acervo(tmp_path):
     cli = ClienteOwnfoil(
         dir_games=str(g), dir_config=str(tmp_path / "c"), dir_data=str(tmp_path / "d"),
         runner=runner, http_get=HttpFake().get,
+        unit_dir=str(tmp_path / "units"), tem_systemd=False,
     )
     st = cli.status()
     assert st["rodando"] is True
     assert st["jogos"] == 1
     assert st["porta"] == container.PORT
+
+
+# ── ciclo de vida: systemd dono do container (2026-10-03) ───────────────────
+def test_garantir_no_ar_sobe_pela_unit_quando_ha_systemd(tmp_path):
+    """O Ownfoil também morria junto com o restart do atlas.service."""
+    chamadas = []
+
+    def runner(args, **kw):
+        chamadas.append(list(args))
+        class R:
+            stdout = ""
+            returncode = 0
+        return R()
+
+    c = container.ClienteOwnfoil(
+        dir_games=str(tmp_path / "games"),
+        dir_config=str(tmp_path / "cfg"),
+        dir_data=str(tmp_path / "data"),
+        env_file=None,
+        runner=runner,
+        http_get=lambda url: "ok",
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=True,
+    )
+    assert c.garantir_no_ar() is True
+    planas = [" ".join(a) for a in chamadas]
+    assert any("systemctl" in p and "start" in p for p in planas), planas
+    assert not any(p.startswith("podman run") for p in planas), planas
+    assert (tmp_path / "units" / "atlas-ownfoil.service").is_file()
+
+
+def test_garantir_no_ar_ownfoil_cai_pro_podman_sem_systemd(tmp_path):
+    chamadas = []
+
+    def runner(args, **kw):
+        chamadas.append(list(args))
+        class R:
+            stdout = ""
+            returncode = 0
+        return R()
+
+    c = container.ClienteOwnfoil(
+        dir_games=str(tmp_path / "games"),
+        dir_config=str(tmp_path / "cfg"),
+        dir_data=str(tmp_path / "data"),
+        env_file=None,
+        runner=runner,
+        http_get=lambda url: "ok",
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=False,
+    )
+    assert c.garantir_no_ar() is True
+    assert any(" ".join(a).startswith("podman run") for a in chamadas)

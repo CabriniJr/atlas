@@ -23,6 +23,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from atlas.core import unidade
 from atlas.torrent.download import Progresso, _esta_completo, _velocidade_humana
 
 _log = logging.getLogger("atlas.torrent")
@@ -129,6 +130,12 @@ def montar_run_args(
     ]
 
 
+# Ciclo de vida do container: o systemd é o dono (ver `core.unidade`).
+UNIT_DIR_DEFAULT = unidade.unit_dir_default()
+montar_unit = unidade.montar_unit
+tem_systemd_no_ar = unidade.tem_systemd_no_ar
+
+
 # -- HTTP mínimo (stdlib), injetável nos testes --------------------------------
 
 
@@ -191,6 +198,8 @@ class ClienteContainer:
     # 5 baixam juntos, o resto fica `queuedDL` (decisão do PO, 2026-10-03: era 3).
     max_ativos: int = 5
     semear: bool = False
+    unit_dir: str = UNIT_DIR_DEFAULT
+    tem_systemd: bool = field(default_factory=unidade.tem_systemd_no_ar)
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     http_get: Callable[[str], str | None] = _http_get
     http_post: Callable[[str, bytes, dict[str, str]], str | None] = _http_post
@@ -227,13 +236,29 @@ class ClienteContainer:
                 )
             )
 
+    @property
+    def unit(self) -> str:
+        return f"{self.nome}.service"
+
     def garantir_no_ar(self) -> bool:
         """Idempotente: se o container já roda, só espera a WebUI; senão grava a
-        config e sobe o container. ``True`` quando a WebUI responde."""
+        config e sobe o container. ``True`` quando a WebUI responde.
+
+        Com ``systemd --user`` disponível, sobe pela **unit** (o systemd é o dono —
+        ver ``montar_unit``); sem systemd, cai no ``podman run -d`` de antes.
+        """
         if self.esta_rodando():
             return self.esperar_webui(_WEBUI_TIMEOUT_S)
         self._gravar_conf()
-        self.runner(self.run_args())
+        if self.tem_systemd:
+            unidade.gravar_e_subir(
+                nome=self.nome,
+                run_args=self.run_args(),
+                unit_dir=self.unit_dir,
+                runner=self.runner,
+            )
+        else:
+            self.runner(self.run_args())
         return self.esperar_webui(_WEBUI_TIMEOUT_S)
 
     def esperar_webui(self, timeout_s: int) -> bool:

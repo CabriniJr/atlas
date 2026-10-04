@@ -50,6 +50,9 @@ def _cliente(tmp_path, runner, http):
         http_get=http.get,
         http_post=http.post,
         max_ativos=2,
+        # nunca escrever no ~/.config/systemd/user real a partir de teste
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=False,
     )
 
 
@@ -163,3 +166,93 @@ def test_limite_default_de_ativos_e_cinco():
     conf = container.montar_conf(porta=8190, max_ativos=c.max_ativos, semear=False)
     assert "Session\\MaxActiveDownloads=5" in conf
     assert "Session\\QueueingSystemEnabled=true" in conf
+
+
+# ── ciclo de vida: systemd dono do container (decisão do PO, 2026-10-03) ─────
+def test_montar_unit_roda_podman_em_foreground_e_para_com_gracia():
+    """A unit precisa rodar o podman em FOREGROUND: é isso que tira o `conmon`
+    do cgroup do atlas.service — a causa de o restart do Atlas matar o download."""
+    unit = container.montar_unit(
+        nome="atlas-qbt", run_args=["podman", "run", "-d", "--name", "atlas-qbt", "img"]
+    )
+    assert "ExecStart=" in unit
+    # sem -d: systemd é quem supervisiona o processo
+    exec_start = [ln for ln in unit.splitlines() if ln.startswith("ExecStart=")][0]
+    assert " -d " not in exec_start and not exec_start.endswith(" -d")
+    # parada graciosa: o qBittorrent precisa salvar resume data
+    assert "ExecStop=" in unit and "stop" in unit
+    assert "TimeoutStopSec=" in unit
+    assert "WantedBy=default.target" in unit
+
+
+def test_montar_unit_e_puro_e_nomeia_o_servico():
+    unit = container.montar_unit(nome="atlas-qbt", run_args=["podman", "run", "-d", "x"])
+    assert "atlas-qbt" in unit
+    assert unit == container.montar_unit(
+        nome="atlas-qbt", run_args=["podman", "run", "-d", "x"]
+    )
+
+
+def test_garantir_no_ar_usa_systemctl_quando_ha_systemd(tmp_path):
+    """Com systemd disponível, sobe pela unit — não por `podman run -d` solto."""
+    chamadas = []
+
+    def runner(args, **kw):
+        chamadas.append(list(args))
+        class R:
+            stdout = ""
+            returncode = 0
+        return R()
+
+    c = container.ClienteContainer(
+        dir_config=str(tmp_path / "cfg"),
+        dir_downloads=str(tmp_path / "dl"),
+        runner=runner,
+        http_get=lambda url: '"v5.2.3"',
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=True,
+    )
+    assert c.garantir_no_ar() is True
+    planas = [" ".join(a) for a in chamadas]
+    assert any("systemctl" in p and "start" in p for p in planas), planas
+    assert not any(p.startswith("podman run") for p in planas), planas
+    # a unit foi escrita em disco
+    assert (tmp_path / "units" / "atlas-qbt.service").is_file()
+
+
+def test_garantir_no_ar_cai_pro_podman_run_sem_systemd(tmp_path):
+    """Sem systemd (outra máquina, CI) o caminho antigo continua funcionando."""
+    chamadas = []
+
+    def runner(args, **kw):
+        chamadas.append(list(args))
+        class R:
+            stdout = ""
+            returncode = 0
+        return R()
+
+    c = container.ClienteContainer(
+        dir_config=str(tmp_path / "cfg"),
+        dir_downloads=str(tmp_path / "dl"),
+        runner=runner,
+        http_get=lambda url: '"v5.2.3"',
+        unit_dir=str(tmp_path / "units"),
+        tem_systemd=False,
+    )
+    assert c.garantir_no_ar() is True
+    planas = [" ".join(a) for a in chamadas]
+    assert any(p.startswith("podman run") for p in planas), planas
+    assert not any("systemctl" in p for p in planas), planas
+
+
+def test_montar_unit_exige_caminho_absoluto_no_exec():
+    """systemd recusa a unit se ExecStart/ExecStop não forem caminho absoluto."""
+    unit = container.montar_unit(
+        nome="atlas-qbt",
+        run_args=["podman", "run", "-d", "--name", "atlas-qbt", "img"],
+        runtime_bin="/usr/bin/podman",
+    )
+    for linha in unit.splitlines():
+        if linha.startswith(("ExecStart=", "ExecStop=")):
+            caminho = linha.split("=", 1)[1].split()[0]
+            assert caminho.startswith("/"), linha

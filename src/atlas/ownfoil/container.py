@@ -21,6 +21,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from atlas.core import unidade
+
 _log = logging.getLogger("atlas.ownfoil")
 
 _RUNTIME = "podman"
@@ -118,6 +120,8 @@ class ClienteOwnfoil:
     env_file: str | None = ENV_FILE_DEFAULT
     nome: str = NOME_CONTAINER
     imagem: str = IMAGEM_DEFAULT
+    unit_dir: str = field(default_factory=unidade.unit_dir_default)
+    tem_systemd: bool = field(default_factory=unidade.tem_systemd_no_ar)
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     http_get: Callable[[str], str | None] = _http_get
 
@@ -149,7 +153,17 @@ class ClienteOwnfoil:
             return self.esperar_http(_HTTP_TIMEOUT_S)
         os.makedirs(self.dir_config, exist_ok=True)
         os.makedirs(self.dir_data, exist_ok=True)
-        self.runner(self.run_args())
+        # O systemd é o dono (ver `core.unidade`): sem isto o container morre
+        # junto com qualquer restart do atlas.service.
+        if self.tem_systemd:
+            unidade.gravar_e_subir(
+                nome=self.nome,
+                run_args=self.run_args(),
+                unit_dir=self.unit_dir,
+                runner=self.runner,
+            )
+        else:
+            self.runner(self.run_args())
         return self.esperar_http(_HTTP_TIMEOUT_S)
 
     def esperar_http(self, timeout_s: int) -> bool:
