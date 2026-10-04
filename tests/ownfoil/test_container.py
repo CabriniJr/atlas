@@ -55,7 +55,10 @@ def test_run_args_monta_volumes_userns_e_publica_local(tmp_path):
     # publica só no loopback (o Funnel expõe publicamente, não o container)
     assert "-p" in args and "127.0.0.1:8465:8465" in args
     # jogos montados read-only (a loja só serve, nunca escreve no acervo)
-    assert "/g:/games:ro,Z" in args
+    # SEM `:Z` no acervo: o relabel recursivo do podman quebra quando há um
+    # rclone mount read-only dentro (ADR-0056). O acervo é rotulado à mão.
+    assert "/g:/games:ro" in args
+    assert "/g:/games:ro,Z" not in args
     # config/data com relabel SELinux
     assert "/cfg:/app/config:Z" in args
     assert "/data:/app/data:Z" in args
@@ -178,3 +181,44 @@ def test_garantir_no_ar_ownfoil_cai_pro_podman_sem_systemd(tmp_path):
     )
     assert c.garantir_no_ar() is True
     assert any(" ".join(a).startswith("podman run") for a in chamadas)
+
+
+def test_unit_do_ownfoil_vem_depois_do_mount_da_nuvem():
+    """`rprivate`: o mount tem de existir ANTES do container, senão ele vê a pasta
+    vazia. `Wants=` (não `Requires=`) para a loja continuar servindo o acervo
+    local se o OneDrive estiver fora do ar."""
+    unit = container.montar_unit_ownfoil(
+        nome="atlas-ownfoil", run_args=["podman", "run", "-d", "x"]
+    )
+    assert "After=atlas-nuvem.service" in unit
+    assert "Wants=atlas-nuvem.service" in unit
+    assert "Requires=atlas-nuvem.service" not in unit
+
+
+def test_garantir_no_ar_rotula_acervo_e_monta_nuvem_antes_do_container(tmp_path, monkeypatch):
+    """Ordem obrigatória (`rprivate`): rótulo + mount ANTES de subir o container."""
+    ordem = []
+
+    def runner(args, **kw):
+        if args and args[0] == "chcon":
+            ordem.append("chcon")
+        elif "systemctl" in args[0] and "start" in args:
+            ordem.append("start-container")
+        class R:
+            stdout = ""
+            returncode = 0
+            stderr = ""
+        return R()
+
+    monkeypatch.setattr(
+        container, "_garantir_nuvem", lambda acervo, runner=None: ordem.append("mount")
+    )
+    games = tmp_path / "games"
+    games.mkdir()
+    c = container.ClienteOwnfoil(
+        dir_games=str(games), dir_config=str(tmp_path / "cfg"), dir_data=str(tmp_path / "d"),
+        env_file=None, runner=runner, http_get=lambda u: "ok",
+        unit_dir=str(tmp_path / "units"), tem_systemd=True,
+    )
+    assert c.garantir_no_ar() is True
+    assert ordem.index("mount") < ordem.index("start-container"), ordem

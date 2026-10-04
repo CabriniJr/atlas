@@ -71,7 +71,12 @@ def montar_run_args(
     """Argumentos do ``podman run`` (puro), afinados para **podman rootless** com
     **SELinux enforcing** (Fedora), como no ADR-0051.
 
-    - **``:Z`` nos volumes** — relabela o SELinux; sem isso o enforcing nega acesso.
+    - **``:Z`` nos volumes de config/data** — relabela o SELinux; sem isso o
+      enforcing nega acesso.
+    - **Acervo SEM ``:Z``** (ADR-0056): o relabel é *recursivo* e falha quando há um
+      ``rclone mount`` read-only dentro do acervo (``lsetxattr: read-only file
+      system`` → o container nem sobe). O acervo é rotulado **fora** do podman
+      (``chcon -t container_file_t`` no host, e ``-o context=`` no mount do rclone).
     - Acervo montado **``ro``** (a loja só serve, nunca escreve nos jogos).
     - **SEM ``--userns=keep-id``** (ao contrário do torrent/ADR-0051): o entrypoint do
       Ownfoil roda **como root** dentro do container e faz ``chown /app``; com
@@ -91,7 +96,7 @@ def montar_run_args(
     if env_file:
         args += ["--env-file", env_file]
     args += [
-        "-v", f"{dir_games}:{GAMES_CONTAINER}:ro,Z",
+        "-v", f"{dir_games}:{GAMES_CONTAINER}:ro",
         "-v", f"{dir_config}:/app/config:Z",
         "-v", f"{dir_data}:/app/data:Z",
         imagem,
@@ -107,6 +112,28 @@ def _http_get(url: str) -> str | None:
             return r.read().decode("utf-8", "replace")
     except Exception:  # noqa: BLE001
         return None
+
+
+# A loja precisa do mount da nuvem JÁ montado (volumes são `rprivate`), mas não
+# deve ficar fora do ar se o OneDrive falhar — daí `Wants=`, não `Requires=`.
+def _garantir_nuvem(acervo: str, runner=None) -> None:
+    """Rótulo SELinux do acervo + mount do OneDrive. Nunca levanta (ADR-0006)."""
+    try:
+        from atlas.nuvem import mount as _mount
+
+        _mount.rotular_acervo(acervo, runner=runner) if runner else _mount.rotular_acervo(acervo)
+        if _mount.disponivel():
+            _mount.ClienteNuvem().garantir_montado()
+    except Exception:  # noqa: BLE001 — a loja local não depende da nuvem
+        _log.exception("nuvem indisponível; a loja serve só o acervo local")
+
+
+_DEP_NUVEM = ("After=atlas-nuvem.service", "Wants=atlas-nuvem.service")
+
+
+def montar_unit_ownfoil(*, nome: str, run_args: list[str]) -> str:
+    """Unit da loja, ordenada **depois** do mount da nuvem (puro)."""
+    return unidade.montar_unit(nome=nome, run_args=run_args, extra_unit=_DEP_NUVEM)
 
 
 @dataclass
@@ -153,6 +180,10 @@ class ClienteOwnfoil:
             return self.esperar_http(_HTTP_TIMEOUT_S)
         os.makedirs(self.dir_config, exist_ok=True)
         os.makedirs(self.dir_data, exist_ok=True)
+        # ORDEM OBRIGATÓRIA (ADR-0056): rotular o acervo e montar a nuvem ANTES de
+        # subir o container. Os volumes são `rprivate` — mount criado depois NÃO
+        # aparece dentro dele. Best-effort: sem nuvem, a loja serve só o local.
+        _garantir_nuvem(self.dir_games, runner=self.runner)
         # O systemd é o dono (ver `core.unidade`): sem isto o container morre
         # junto com qualquer restart do atlas.service.
         if self.tem_systemd:
@@ -161,6 +192,7 @@ class ClienteOwnfoil:
                 run_args=self.run_args(),
                 unit_dir=self.unit_dir,
                 runner=self.runner,
+                extra_unit=_DEP_NUVEM,
             )
         else:
             self.runner(self.run_args())

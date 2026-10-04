@@ -31,6 +31,7 @@ def montar_unit(
     run_args: list[str],
     runtime_bin: str | None = None,
     runtime: str = "podman",
+    extra_unit: tuple[str, ...] = (),
 ) -> str:
     """Conteúdo da unit (puro).
 
@@ -40,11 +41,12 @@ def montar_unit(
     """
     binario = runtime_bin or shutil.which(runtime) or f"/usr/bin/{runtime}"
     args = [binario] + [a for a in run_args[1:] if a != "-d"]
+    extras = "".join(f"{linha}\n" for linha in extra_unit)
     return f"""[Unit]
 Description=Atlas — container {nome} (dono: systemd, não o atlas.service)
 After=network-online.target
 Wants=network-online.target
-
+{extras}
 [Service]
 Type=simple
 ExecStart={" ".join(args)}
@@ -69,6 +71,7 @@ def gravar_e_subir(
     unit_dir: str,
     runner: Callable[..., object],
     runtime: str = "podman",
+    extra_unit: tuple[str, ...] = (),
 ) -> str:
     """Escreve/atualiza a unit, recarrega, habilita e dá ``start``. Devolve o caminho.
 
@@ -77,7 +80,9 @@ def gravar_e_subir(
     os.makedirs(unit_dir, exist_ok=True)
     unit = f"{nome}.service"
     caminho = os.path.join(unit_dir, unit)
-    conteudo = montar_unit(nome=nome, run_args=run_args, runtime=runtime)
+    conteudo = montar_unit(
+        nome=nome, run_args=run_args, runtime=runtime, extra_unit=extra_unit
+    )
     atual = ""
     if os.path.isfile(caminho):
         with open(caminho) as f:
